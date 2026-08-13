@@ -1,0 +1,443 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000011 /* Unit test target proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000001;
+			remoteInfo = RotkiCompanion;
+		};
+		A10000000000000000000012 /* UI test target proxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A10000000000000000000010 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000001;
+			remoteInfo = RotkiCompanion;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A10000000000000000000101 /* RotkiCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RotkiCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000102 /* RotkiCompanionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RotkiCompanionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000103 /* RotkiCompanionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RotkiCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A10000000000000000000201 /* RotkiCompanion */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RotkiCompanion;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000202 /* RotkiCompanionTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RotkiCompanionTests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000203 /* RotkiCompanionUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RotkiCompanionUITests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000204 /* Configuration */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Configuration;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000301 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000302 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000303 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000000000000000000401 = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000204 /* Configuration */,
+				A10000000000000000000201 /* RotkiCompanion */,
+				A10000000000000000000202 /* RotkiCompanionTests */,
+				A10000000000000000000203 /* RotkiCompanionUITests */,
+				A10000000000000000000402 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000000000000000000402 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000101 /* RotkiCompanion.app */,
+				A10000000000000000000102 /* RotkiCompanionTests.xctest */,
+				A10000000000000000000103 /* RotkiCompanionUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000001 /* RotkiCompanion */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000701 /* Build configuration list for PBXNativeTarget "RotkiCompanion" */;
+			buildPhases = (
+				A10000000000000000000501 /* Compile Kotlin framework */,
+				A10000000000000000000411 /* Sources */,
+				A10000000000000000000301 /* Frameworks */,
+				A10000000000000000000421 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000201 /* RotkiCompanion */,
+			);
+			name = RotkiCompanion;
+			packageProductDependencies = (
+			);
+			productName = RotkiCompanion;
+			productReference = A10000000000000000000101 /* RotkiCompanion.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000002 /* RotkiCompanionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000702 /* Build configuration list for PBXNativeTarget "RotkiCompanionTests" */;
+			buildPhases = (
+				A10000000000000000000412 /* Sources */,
+				A10000000000000000000302 /* Frameworks */,
+				A10000000000000000000422 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000601 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000202 /* RotkiCompanionTests */,
+			);
+			name = RotkiCompanionTests;
+			packageProductDependencies = (
+			);
+			productName = RotkiCompanionTests;
+			productReference = A10000000000000000000102 /* RotkiCompanionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A10000000000000000000003 /* RotkiCompanionUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000703 /* Build configuration list for PBXNativeTarget "RotkiCompanionUITests" */;
+			buildPhases = (
+				A10000000000000000000413 /* Sources */,
+				A10000000000000000000303 /* Frameworks */,
+				A10000000000000000000423 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000602 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000203 /* RotkiCompanionUITests */,
+			);
+			name = RotkiCompanionUITests;
+			packageProductDependencies = (
+			);
+			productName = RotkiCompanionUITests;
+			productReference = A10000000000000000000103 /* RotkiCompanionUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000000000000000000010 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					A10000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					A10000000000000000000002 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = A10000000000000000000001;
+					};
+					A10000000000000000000003 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = A10000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = A10000000000000000000700 /* Build configuration list for PBXProject "RotkiCompanion" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000000000000000000401;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A10000000000000000000402 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000001 /* RotkiCompanion */,
+				A10000000000000000000002 /* RotkiCompanionTests */,
+				A10000000000000000000003 /* RotkiCompanionUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000421 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000422 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000423 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000000000000000000501 /* Compile Kotlin framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle invocation because OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED is YES\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew --no-daemon :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000000000000000000411 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000412 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000413 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000601 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000001 /* RotkiCompanion */;
+			targetProxy = A10000000000000000000011 /* Unit test target proxy */;
+		};
+		A10000000000000000000602 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000001 /* RotkiCompanion */;
+			targetProxy = A10000000000000000000012 /* UI test target proxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A10000000000000000000801 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)");
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A10000000000000000000802 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10000000000000000000811 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = A10000000000000000000204 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = rotki;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				PRODUCT_MODULE_NAME = RotkiCompanion;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		A10000000000000000000812 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = A10000000000000000000204 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Config.xcconfig;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = rotki;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				PRODUCT_MODULE_NAME = RotkiCompanion;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		A10000000000000000000821 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = com.rotki.companion.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RotkiCompanion.app/RotkiCompanion";
+				TEST_TARGET_NAME = RotkiCompanion;
+			};
+			name = Debug;
+		};
+		A10000000000000000000822 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks");
+				PRODUCT_BUNDLE_IDENTIFIER = com.rotki.companion.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RotkiCompanion.app/RotkiCompanion";
+				TEST_TARGET_NAME = RotkiCompanion;
+			};
+			name = Release;
+		};
+		A10000000000000000000831 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rotki.companion.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = RotkiCompanion;
+			};
+			name = Debug;
+		};
+		A10000000000000000000832 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rotki.companion.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = RotkiCompanion;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000000000000000000700 /* Build configuration list for PBXProject "RotkiCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A10000000000000000000801 /* Debug */, A10000000000000000000802 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000701 /* Build configuration list for PBXNativeTarget "RotkiCompanion" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A10000000000000000000811 /* Debug */, A10000000000000000000812 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000702 /* Build configuration list for PBXNativeTarget "RotkiCompanionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A10000000000000000000821 /* Debug */, A10000000000000000000822 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000703 /* Build configuration list for PBXNativeTarget "RotkiCompanionUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A10000000000000000000831 /* Debug */, A10000000000000000000832 /* Release */);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000000000000000000010 /* Project object */;
+}
