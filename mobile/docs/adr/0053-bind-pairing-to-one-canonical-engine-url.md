@@ -1,0 +1,3 @@
+# Bind pairing to one canonical engine URL
+
+The Engine-generated versioned JSON Pairing QR supplies the canonical system-trusted HTTPS Engine origin together with only its opaque Pairing ID, 256-bit credential, and expiry. The Client stores that origin with its Device Session and uses it over reachable local Wi-Fi or a private VPN, including a cellular connection through that VPN. REST uses `/api/1` and WebSocket derives `wss` `/ws` from this same origin; the QR and settings carry no separate WebSocket URL, certificate, or pin. The Client performs no local-network discovery or broadcast scanning and does not permit post-Pairing URL edits; changing the Engine address requires Unpairing and a new Pairing so device identity cannot be silently redirected.

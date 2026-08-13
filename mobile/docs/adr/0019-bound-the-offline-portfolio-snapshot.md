@@ -1,0 +1,3 @@
+# Bound the offline portfolio snapshot
+
+The offline Portfolio Snapshot will contain all current in-scope Overview totals and fungible balances, configured blockchain accounts and exchanges, plus a curated recent window of complete History Groups with typed summaries, ordered event legs, and allowlisted details. The window has both a maximum group count and a hard encoded-byte ceiling selected from deterministic golden Profiles and the owner's real Profile; a group is omitted whole rather than truncated. NFTs, staking-specific views, and deep DeFi positions remain outside the initial Companion Scope. Older History remains available from the Engine only and is held in Client memory rather than appended to offline storage.

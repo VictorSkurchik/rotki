@@ -1,0 +1,3 @@
+# Gate expansion on a real Android tracer bullet
+
+Before implementing the remaining Companion destinations or starting the iOS Client, a real Engine and Android Client must complete QR Pairing, Device Key registration, Access Session acquisition, live net-worth Fetch, authenticated-encrypted Portfolio Snapshot persistence, and offline reopening after device authentication. Shared state-machine tests, a live Engine Protocol contract test, and an automated critical Android UI flow are required gates; a mock-only or manual demonstration does not complete the milestone. Once this gate passes, iOS is the next target and must consume the same shared behavior.

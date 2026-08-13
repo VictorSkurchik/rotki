@@ -1,0 +1,3 @@
+# Require the full client to unlock the engine
+
+After an Engine restart, the encrypted Profile remains locked until its password is supplied through the Full Client. A paired Client may prove its Device Key and receive `423 locked_engine` with the stable `unlock_full_client` action, but the Engine creates no Access Session and reveals no Profile data until the Profile is open. This status is reachable only after valid Device Key proof. The Client explains that the Full Client must unlock it and continues to expose the authenticated offline Portfolio Snapshot; neither unattended password storage nor mobile password entry is introduced.

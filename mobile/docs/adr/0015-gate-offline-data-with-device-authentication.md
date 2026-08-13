@@ -1,0 +1,3 @@
+# Gate offline data with device authentication
+
+Each installation will encrypt its Portfolio Snapshot through a device-protected native key envelope, and opening that envelope requires biometric authentication. Any transition to background or system lock immediately obscures portfolio content, discards decrypted in-memory state, and requires authentication on return; no additional timeout fires while the Client remains foreground. The Client deletes Device Session material, keys, and snapshot on Unpair or once it observes revocation. Remote revocation cannot erase data from an offline device, so device authentication remains the protection until that device reconnects.

@@ -1,0 +1,3 @@
+# Enhance iOS interoperability with SKIE
+
+The iOS-facing framework will use SKIE on top of local direct integration to expose typed `Flow`/`StateFlow` sequences, cancellable suspending operations, Swift enums, and exhaustive wrappers for sealed state hierarchies. SKIE remains an adapter at the framework boundary: shared domain APIs, persisted data, and native SwiftUI state do not depend on SKIE-generated types. The build pins a verified Kotlin/SKIE pair, disables SKIE analytics and default-argument generation, limits the exported API, and compiles a representative Swift consumer in CI. First-party Swift Export may replace SKIE only after it is sufficiently stable and the same interop characterization tests pass.

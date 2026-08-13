@@ -1,0 +1,3 @@
+# Suspend online access during profile mismatch
+
+A Device Session remains bound to its paired Profile when the Engine opens another one. During Profile Mismatch a paired Client may prove its Device Key and receive `409 profile_mismatch` with the stable `open_bound_profile` action, but the Engine creates no Access Session and reveals no Profile data. This status is reachable only after valid Device Key proof. The Client retains access only to its authenticated offline Portfolio Snapshot, and online access for the existing Device Session resumes when the bound Profile is opened again and a new proof succeeds; data from the other Profile is never exposed and re-Pairing is unnecessary.

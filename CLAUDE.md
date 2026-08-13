@@ -881,15 +881,83 @@ python package.py
 6. For all python backend constants make sure to use the `Final` type specifier.
 7. Never iterate over `cursor.execute(...).fetchall()`. `fetchall()` already walks the cursor and materializes every row into a list, so a following `for` loop iterates the data a second time. When you only need a single pass, iterate the cursor directly: `for row in cursor.execute(...):`. Reserve `fetchall()` for when you genuinely need the materialized list (e.g. to reuse it, get its length, or assert on it in a test). The same applies to a write cursor — prefer a read cursor (`self.conn.read_ctx()`) for plain `SELECT`s.
 
-## Committing
-- Commits should be just to the point, not too long and not too short.
-- Commit titles should not exceed 50 characters.
-- Give a description of what the commit does in a short title. If more information is needed, then add a blank line and afterward elaborate with as much information as needed.
-- Commits should do one thing; if two commits both do the same thing, that's a good sign they should be combined.
-- Do not add Co-Authored-By entries for any AI tool.
+## Git
 
-## Opening PRs
-- Do not add Co-Authored-By entries for any AI tool.
+### Commits
+
+**Never add an agent as a commit co-author.** Do not add a `Co-Authored-By` trailer for
+Claude, Codex, ChatGPT, another agent, model, or tool. Commits must use only the configured
+human author's identity.
+
+All commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```text
+<type>(<scope>): <subject>
+```
+
+The type is required. The scope is optional.
+
+| Type | Use for |
+|---|---|
+| `feat` | New functionality |
+| `fix` | Bug fixes |
+| `docs` | Documentation-only changes, including README files, comments, `AGENTS.md`, and `CLAUDE.md` |
+| `style` | Formatting changes that do not alter behavior |
+| `refactor` | Code changes that do not alter behavior |
+| `perf` | Performance improvements |
+| `test` | Adding or changing tests |
+| `build` | Build logic, dependencies, or Gradle configuration |
+| `ci` | CI/CD configuration |
+| `chore` | Everything else, including initialization and repository maintenance |
+| `revert` | Reverting a previous commit |
+
+Keep the subject concise, and keep the commit title at or below 50 characters. Add a body
+after a blank line when more explanation is necessary. Each commit should contain one
+cohesive change.
+
+### Branching
+
+- `main` is the stable branch and represents the released state.
+- `develop` is the primary integration branch. All features merge into `develop`.
+- `feature/<name>` is a feature branch. Create it from `develop` and merge it back into
+  `develop`.
+- During the project's current early stage, feature branches are merged directly into
+  `develop` without a pull request. This is a temporary bootstrap policy, not a permanent
+  project rule.
+
+## Client Versioning
+
+The base `versionName` follows [Semantic Versioning](https://semver.org/) as
+`MAJOR.MINOR.PATCH`, for example `1.0.0`.
+
+Append suffixes in this order:
+
+```text
+<base version><product flavor suffix><build type suffix>
+```
+
+- The `debug` build type adds `-debug`.
+- The `release` build type adds `-release`.
+
+Examples include `1.0.0-dev-debug`, `1.0.0-stage-release`, `1.0.0-debug`, and
+`1.0.0-release`.
+
+## Android Product Flavors
+
+Define one `environment` flavor dimension with three product flavors in
+`mobile/androidApp/build.gradle.kts` (`androidApp/build.gradle.kts` from the mobile build
+root):
+
+| Flavor | `applicationIdSuffix` | `versionNameSuffix` |
+|---|---|---|
+| `dev` | `.dev` | `-dev` |
+| `stage` | `.stage` | `-stage` |
+| `prod` | None | None |
+
+`dev` and `stage` must have distinct application IDs so they can be installed alongside
+`prod`. `prod` uses the target production application ID without a suffix. Configure the
+dimension and flavors with `flavorDimensions` and `productFlavors`; configure the build
+type version suffixes in the same Gradle file.
 
 ## Common Issues & Solutions
 - Frontend build fails: Run `pnpm run clean:modules` then `pnpm install --frozen-lockfile`

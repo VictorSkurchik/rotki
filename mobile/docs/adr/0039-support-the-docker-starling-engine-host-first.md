@@ -1,0 +1,3 @@
+# Support the Docker Starling engine host first
+
+The Portfolio Companion will initially support only the containerized Engine Host in which Starling supervises and routes the Engine services, deployed behind trusted HTTPS. This supported configuration includes a stable `ROTKI_SESSION_KEY`, correct forwarded-scheme handling, and secure browser-cookie behavior so the Full Client can reliably authorize Pairing across container restarts. Direct Python development servers and Electron-managed local processes are not mobile compatibility targets because their binding, lifecycle, and authentication assumptions differ; support for another host mode requires a later explicit decision and contract tests.

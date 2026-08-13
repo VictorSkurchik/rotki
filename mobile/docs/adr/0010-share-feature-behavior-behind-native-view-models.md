@@ -1,0 +1,3 @@
+# Share feature behavior behind native view models
+
+The KMP shared core will own the Engine protocol, transport DTO mapping, domain models, repositories, use cases, encrypted Portfolio Snapshot behavior, refresh and task orchestration, and deterministic feature state machines. Its root state explicitly distinguishes unpaired, device-locked, connecting, online, refreshing, degraded, unreachable, Engine-locked, Profile-mismatch, incompatible, and revoked conditions so recovery and offline access are deterministic. Android and iOS will provide thin lifecycle-aware ViewModel adapters and will own navigation, UI-facing formatting, and rendering, keeping SwiftUI and Jetpack Compose independent of shared Kotlin lifecycle abstractions.
