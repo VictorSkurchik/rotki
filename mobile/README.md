@@ -9,8 +9,9 @@ The production build currently contains:
   `iosArm64`, and `iosSimulatorArm64`;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors;
-- no production iOS app yet; the Xcode project is added in Phase 5 after the real
-  Android tracer gate.
+- `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
+  unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
+  persistence, and native iOS security remain deliberately disabled until their gates.
 
 Run the host-side Android and shared checks from this directory:
 
@@ -34,6 +35,20 @@ On Apple Silicon macOS, add the Kotlin/Native gates:
   :shared:linkDebugFrameworkIosSimulatorArm64 \
   :shared:linkDebugFrameworkIosArm64
 ```
+
+Build and test the SwiftUI host on an installed iOS Simulator:
+
+```bash
+cd iosApp
+xcodebuild -project RotkiCompanion.xcodeproj -scheme RotkiCompanion \
+  -configuration Debug \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO test
+```
+
+This simulator gate checks Swift/KMP interop and native navigation only. It is not evidence
+for Secure Enclave, biometric enrollment, reinstall, or physical-device behavior; those
+checks remain explicitly deferred until a physical iPhone is available.
 
 Android platform-security instrumentation runs on two clean Gradle-managed devices:
 

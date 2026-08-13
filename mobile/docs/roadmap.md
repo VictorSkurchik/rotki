@@ -13,15 +13,15 @@ changed. It does not authorize widening Companion Scope.
 | 1 | Engine identity and authorization control plane | **in progress** |
 | 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
-| 4 | Real Android tracer bullet | **not started** |
-| 5 | Equivalent iOS/SKIE tracer bullet | **not started** |
+| 4 | Real Android tracer bullet | **in progress — local Pairing UX slice** |
+| 5 | Equivalent iOS/SKIE tracer bullet | **host shell only — tracer not started** |
 | 6 | Four complete native destinations | **not started** |
 | 7 | Personal-device hardening and handoff | **not started** |
 
-The isolated KMP foundation and Android shell are under active development; no Portfolio
-feature or Engine data-plane implementation has started. `CONTEXT.md`, the ADRs, this
-roadmap, the production `mobile/` build, and the remaining Phase 0 spikes are the current
-implementation and characterization artifacts.
+The isolated KMP foundation and native Android/iOS shells are under active development; no
+Portfolio feature or Engine data-plane implementation has started. `CONTEXT.md`, the ADRs,
+this roadmap, the production `mobile/` build, and the remaining Phase 0 spikes are the
+current implementation and characterization artifacts.
 
 ## Delivery shape
 
@@ -44,10 +44,11 @@ flowchart LR
 
 Phase 1 and Phase 2 may proceed in parallel after the automated Phase 0 contracts and
 spikes pass. The deferred physical-iPhone portion of P0.3 remains a hard gate before
-production iOS security or tracer work; it is not a blocker for Engine or shared KMP
-foundation slices. The real Android tracer is a hard gate: no remaining destination and
-no iOS UI starts before it passes. The iOS tracer then proves that shared behavior is
-genuinely multiplatform before feature expansion.
+production iOS security or tracer work; it is not a blocker for Engine, shared KMP, or a
+non-data-bearing SwiftUI build/interop shell. The real Android tracer remains a hard gate:
+no iOS Pairing implementation, secure storage, Portfolio data, or remaining destination
+work starts before it passes. The iOS tracer then proves that shared behavior is genuinely
+multiplatform before feature expansion.
 
 ## Working rules
 
@@ -374,7 +375,7 @@ mobile/
 ├── gradle/libs.versions.toml
 ├── shared/
 ├── androidApp/
-└── iosApp/                 # added only in Phase 5
+└── iosApp/                 # build/interop shell; feature tracer remains Phase 5
 ```
 
 `shared` targets Android, `iosArm64`, and `iosSimulatorArm64` and contains no Compose UI
@@ -397,6 +398,11 @@ repository's SemVer suffix order. Local JVM, Android-host, all flavor/build-type
 tests, all debug APKs, dev lint, iOS Simulator tests, device-test linking, and both iOS
 framework links pass. The dedicated workflow keeps these jobs separate from Python,
 pnpm, and Cargo builds.
+
+Shell addendum (2026-08-13): a checked-in iOS 17 SwiftUI host now builds directly against
+`RotkiShared` and exercises fail-closed root-state routing plus native unpaired and four-tab
+placeholder views in Simulator unit/UI tests. This is build and interop scaffolding only;
+it does not weaken Gate G4 or start iOS camera, transport, persistence, or security work.
 
 ### M2.2 — Shared protocol and state seams
 
@@ -918,6 +924,15 @@ ViewModel adapter. Exercise Capability discovery, Device Key registration, proof
 in-memory Access Session acquisition against the real Engine. Process restart must mint a
 new Access Session from the Device Key without Pairing again.
 
+Implementation status (2026-08-13): the mobile-only first half is complete. Android now has
+a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery screens, a thin
+ViewModel over the shared strict QR parser, immediate privacy cover, and a navigable
+Overview/Portfolio/History/Sources placeholder shell. Shared retains accepted QR authority
+only through a one-shot internal handoff and cancels an unregistered attempt on background.
+JVM/Android host checks, lint, and managed-device UI tests pass on API 28 and API 36. The
+live discovery, registration, proof, Access Session, and restart half remains unimplemented;
+therefore A4.1 and Gate G4 are not complete.
+
 ### A4.2 — Minimal Overview and secure offline reopen
 
 Fetch the complete version-1 snapshot but render only exact net worth, capture/freshness,
@@ -939,7 +954,8 @@ One Android instrumentation flow against the real golden Docker/Starling HTTPS h
 
 Gate G4: shared state tests, live contract tests, the instrumentation flow, and an Android
 release build all pass. A mock-only or manually demonstrated path does not pass. Only now
-may iOS UI or the remaining destinations begin.
+may the iOS tracer/security implementation or data-bearing destination work begin; the
+build-only SwiftUI/KMP shell is explicitly outside this gate.
 
 ## Phase 5 — Equivalent iOS/SKIE tracer bullet
 
@@ -954,6 +970,11 @@ SKIE-generated sequence or sealed-wrapper types. SwiftUI views see ordinary Swif
 Compile and run representative tests for typed `StateFlow`, every state case, a
 suspending action, and bidirectional cancellation. Retain a documented build with SKIE
 disabled as the fallback.
+
+Implementation status (2026-08-13): the checked-in Xcode host, direct framework build,
+`@MainActor` state adapter, fail-closed root routing, and Simulator unit/UI smoke tests are
+present. StateFlow is intentionally sampled at actions/scene activation; the SKIE sequence,
+suspending-action, and cancellation boundary remains part of I5.1 after Gate G4.
 
 ### I5.2 — iOS native security and tracer UI
 
@@ -1122,9 +1143,10 @@ cargo test -p starling-proxy
 # ExactDecimal parity source
 uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
 
-# iOS after Phase 5; scheme/destination are fixed by the generated Xcode project
-xcodebuild build test -project iosApp/iosApp.xcodeproj -scheme iosApp \
-  -destination 'platform=iOS Simulator,name=iPhone 16'
+# iOS build/interop shell; run from mobile/
+xcodebuild test -project iosApp/RotkiCompanion.xcodeproj -scheme RotkiCompanion \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+  -derivedDataPath iosApp/build/DerivedData CODE_SIGNING_ALLOWED=NO
 ```
 
 Full repository CI remains the final regression authority. A timeout is not a test result;
