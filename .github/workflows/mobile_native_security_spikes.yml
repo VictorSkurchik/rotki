@@ -153,5 +153,23 @@ jobs:
             -scheme IOSSecurityHost \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
             -derivedDataPath "$RUNNER_TEMP/p03-ios-host-simulator" \
-            CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Launch Swift security host on iOS Simulator
+        run: |
+          host_app="$RUNNER_TEMP/p03-ios-host-simulator/Build/Products/Debug-iphonesimulator/IOSSecurityHost.app"
+          xcrun simctl install booted "$host_app"
+          xcrun simctl launch \
+            --terminate-running-process \
+            booted \
+            org.rotki.p03.iossecurityhost
+          host_container="$(xcrun simctl get_app_container booted org.rotki.p03.iossecurityhost data)"
+          marker="$host_container/Library/Application Support/org.rotki.p03.ios-security/installation.marker"
+          for attempt in {1..20}; do
+            if test -f "$marker"; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          echo '::error::The Simulator host did not initialize installation continuity'
+          exit 1

@@ -95,9 +95,13 @@ xcodebuild \
   -project iosApp/IOSSecurityHost.xcodeproj \
   -scheme IOSSecurityHost \
   -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
-  CODE_SIGNING_ALLOWED=NO \
   build
 ```
+
+Keep the default ad-hoc signing for the Simulator host. Setting
+`CODE_SIGNING_ALLOWED=NO` still compiles the app, but an installed copy then fails its
+Keychain continuity check with `errSecMissingEntitlement` (`-34018`). Signing may remain
+disabled for the generic physical-device compile-only gate.
 
 The host and simulator suites exercise pure behavior only. A simulator does not prove
 Secure Enclave key residency, biometric ACL invalidation, or absence of credential
@@ -109,6 +113,8 @@ Observed locally on 2026-08-13 with Xcode 26.6 (build 17F113) and the iOS 26.5 S
 - generic `arm64-apple-ios17.0` build with signing disabled: succeeded;
 - generic SwiftUI host build for `arm64-apple-ios17.0`: succeeded;
 - SwiftUI host build for iPhone 17 / iOS 26.5 simulator: succeeded;
+- ad-hoc-signed host install/launch on iPhone 17 Pro / iOS 26.4 simulator: fresh
+  installation continuity initialized;
 - physical iPhone / iOS 17.x: not run, and therefore still pending below.
 
 ## Checked-in physical host
