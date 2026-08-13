@@ -7,6 +7,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.rotki.mobile.core.ports.DeviceProofKeyDeleteOutcome
 import org.rotki.mobile.core.ports.DeviceProofSigner
+import org.rotki.mobile.core.ports.PairingCleanupJournal
+import org.rotki.mobile.core.ports.PairingCleanupJournalClearOutcome
+import org.rotki.mobile.core.ports.PairingCleanupJournalWriteOutcome
 import org.rotki.mobile.core.ports.PairingRecordDeleteOutcome
 import org.rotki.mobile.core.ports.PairingRecordStore
 
@@ -20,6 +23,7 @@ internal class AndroidLocalMaterialCleaner(
     private val snapshotKeyStore: SnapshotKeyStore,
     private val pairingRecordStore: PairingRecordStore,
     private val deviceProofSigner: DeviceProofSigner,
+    private val pairingCleanupJournal: PairingCleanupJournal,
 ) : LocalMaterialCleaner {
     private val cleanupMutex: Mutex = Mutex()
 
@@ -27,14 +31,26 @@ internal class AndroidLocalMaterialCleaner(
         withContext(NonCancellable) {
             val snapshotFileDeleted = bestEffortSync { snapshotFile.delete() } ?: false
             val snapshotKeyDeleted = bestEffortSync { snapshotKeyStore.delete() } ?: false
-            val pairingRecordDeleted = bestEffortSuspend { pairingRecordStore.delete() } ==
+            val cleanupJournalStored =
+                bestEffortSuspend { pairingCleanupJournal.markCleanupRequired() } ==
+                    PairingCleanupJournalWriteOutcome.Stored
+            val pairingRecordDeleted = cleanupJournalStored &&
+                bestEffortSuspend { pairingRecordStore.delete() } ==
                 PairingRecordDeleteOutcome.Deleted
-            val signingKeyDeleted = bestEffortSuspend { deviceProofSigner.deleteKey() } ==
+            val signingKeyDeleted = cleanupJournalStored &&
+                bestEffortSuspend { deviceProofSigner.deleteKey() } ==
                 DeviceProofKeyDeleteOutcome.Deleted
+            val cleanupJournalCleared = if (pairingRecordDeleted && signingKeyDeleted) {
+                bestEffortSuspend { pairingCleanupJournal.clear() } ==
+                    PairingCleanupJournalClearOutcome.Cleared
+            } else {
+                false
+            }
             snapshotFileDeleted &&
                 snapshotKeyDeleted &&
                 pairingRecordDeleted &&
-                signingKeyDeleted
+                signingKeyDeleted &&
+                cleanupJournalCleared
         }
     }
 

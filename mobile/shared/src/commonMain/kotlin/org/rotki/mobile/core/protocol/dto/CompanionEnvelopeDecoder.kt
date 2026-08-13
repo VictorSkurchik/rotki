@@ -4,6 +4,7 @@ import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.rotki.mobile.core.network.CompanionJson
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
@@ -79,7 +80,10 @@ private enum class CompanionEnvelopeShape {
 private fun JsonObject.matches(shape: CompanionEnvelopeShape): Boolean {
     if (!containsKey("result")) return false
     return when (shape) {
-        CompanionEnvelopeShape.SUCCESS -> this["result"] != JsonNull && !containsKey("error")
+        CompanionEnvelopeShape.SUCCESS ->
+            this["result"] != JsonNull &&
+                !containsKey("error") &&
+                (this["message"] as? JsonPrimitive)?.takeIf { it.isString }?.content == ""
         CompanionEnvelopeShape.FAILURE -> this["result"] == JsonNull && this["error"] is JsonObject
     }
 }

@@ -5,12 +5,15 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.prepareGet
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecodeOutcome
 import org.rotki.mobile.core.protocol.dto.ProtocolDiscoveryEnvelopeDto
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class CompanionHttpEnvelopeBoundaryTest {
@@ -73,6 +76,33 @@ class CompanionHttpEnvelopeBoundaryTest {
         val outcome = BoundedControlResponseBodyOutcome.Accepted("seeded_access_secret")
 
         assertEquals("Accepted(redacted)", outcome.toString())
+    }
+
+    @Test
+    fun `content type requires one application json value and only utf8 charset`() {
+        assertTrue(hasStrictJsonContentType(listOf("application/json")))
+        assertTrue(hasStrictJsonContentType(listOf("application/json; charset=UTF-8")))
+        assertFalse(hasStrictJsonContentType(null))
+        assertFalse(hasStrictJsonContentType(listOf("text/plain")))
+        assertFalse(hasStrictJsonContentType(listOf("application/json; profile=strict")))
+        assertFalse(hasStrictJsonContentType(listOf("application/json", "application/json")))
+        assertFalse(hasStrictJsonContentType(listOf("application/json; charset=utf-16")))
+        assertFalse(
+            hasStrictJsonContentType(
+                listOf("application/json; charset=utf-8; charset=utf-8"),
+            ),
+        )
+    }
+
+    @Test
+    fun `transport classifier follows bounded io cause chain but rejects unknown failures`() {
+        assertTrue(isTransportFailure(IllegalStateException("wrapper", IOException("io"))))
+        assertFalse(isTransportFailure(IllegalStateException("configuration")))
+        assertFalse(
+            isTransportFailure(
+                kotlinx.serialization.SerializationException("serialization"),
+            ),
+        )
     }
 
     private suspend fun withStatement(

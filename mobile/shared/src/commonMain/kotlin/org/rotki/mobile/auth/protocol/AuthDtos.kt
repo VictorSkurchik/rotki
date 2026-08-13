@@ -91,6 +91,16 @@ internal class DeviceSession(
     internal val revokedAtEpochSeconds: Long?,
 )
 
+internal fun DeviceSession.matchesRegistration(
+    requestedLabel: DeviceLabel,
+    requestedPlatform: CompanionPlatform,
+): Boolean =
+    state == DeviceSessionState.Authorized &&
+        label.value == requestedLabel.value &&
+        platform == requestedPlatform &&
+        lastSeenAtEpochSeconds == null &&
+        revokedAtEpochSeconds == null
+
 internal fun DeviceSessionDto.toDomain(): AuthContractOutcome<DeviceSession> {
     val parsedId = DeviceSessionId.parse(deviceSessionId)
     val parsedLabel = DeviceLabel.parse(deviceLabel)
@@ -219,7 +229,7 @@ internal class DeviceLabel private constructor(internal val value: String) {
             val isInvalid = scalarCount !in 1..64 ||
                 candidate.encodeToByteArray().size > 256 ||
                 candidate != candidate.trim() ||
-                candidate.any { character -> character.isForbiddenLabelCharacter() }
+                candidate.hasForbiddenLabelScalar()
             return if (isInvalid) {
                 DeviceLabelParseOutcome.Rejected
             } else {
@@ -227,6 +237,12 @@ internal class DeviceLabel private constructor(internal val value: String) {
             }
         }
     }
+}
+
+/** Cross-platform scalar-aware validator for native device-label providers. */
+public object DeviceLabelValidator {
+    public fun isValid(candidate: String): Boolean =
+        DeviceLabel.parse(candidate) is DeviceLabelParseOutcome.Accepted
 }
 
 internal sealed interface DeviceLabelParseOutcome {
@@ -250,9 +266,54 @@ private fun String.unicodeScalarCountOrNull(): Int? {
     return count
 }
 
-private fun Char.isForbiddenLabelCharacter(): Boolean = category in setOf(
-    CharCategory.CONTROL,
-    CharCategory.FORMAT,
-    CharCategory.LINE_SEPARATOR,
-    CharCategory.PARAGRAPH_SEPARATOR,
-)
+private fun String.hasForbiddenLabelScalar(): Boolean {
+    var index = 0
+    while (index < length) {
+        val first = this[index]
+        val codePoint = if (first.isHighSurrogate()) {
+            val second = this[index + 1]
+            index += 2
+            SUPPLEMENTARY_PLANE_OFFSET +
+                ((first.code - HIGH_SURROGATE_START) shl SURROGATE_SHIFT) +
+                (second.code - LOW_SURROGATE_START)
+        } else {
+            index += 1
+            first.code
+        }
+        if (codePoint.isForbiddenLabelCodePoint()) return true
+    }
+    return false
+}
+
+private fun Int.isForbiddenLabelCodePoint(): Boolean = when (this) {
+    in 0x0000..0x001F,
+    in 0x007F..0x009F,
+    0x00AD,
+    in 0x0600..0x0605,
+    0x061C,
+    0x06DD,
+    0x070F,
+    in 0x0890..0x0891,
+    0x08E2,
+    0x180E,
+    in 0x200B..0x200F,
+    in 0x2028..0x202E,
+    in 0x2060..0x2064,
+    in 0x2066..0x206F,
+    0xFEFF,
+    in 0xFFF9..0xFFFB,
+    0x110BD,
+    0x110CD,
+    in 0x13430..0x1343F,
+    in 0x1BCA0..0x1BCAF,
+    in 0x1D173..0x1D17A,
+    0xE0001,
+    in 0xE0020..0xE007F,
+    -> true
+    else -> false
+}
+
+private const val HIGH_SURROGATE_START: Int = 0xD800
+private const val LOW_SURROGATE_START: Int = 0xDC00
+private const val SURROGATE_SHIFT: Int = 10
+private const val SUPPLEMENTARY_PLANE_OFFSET: Int = 0x10000

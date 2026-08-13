@@ -73,6 +73,17 @@ class CompanionEnvelopeDecoderTest {
     }
 
     @Test
+    fun `success message must be the empty string`() {
+        assertSuccessContractFailure(
+            SUCCESS_WITH_ADDITIVE_FIELDS.replace("\"message\":\"\"", "\"message\":\"ok\""),
+        )
+        assertSuccessContractFailure(
+            SUCCESS_WITH_ADDITIVE_FIELDS.replace("\"message\":\"\"", "\"message\":null"),
+        )
+        assertSuccessContractFailure(SUCCESS_WITH_ADDITIVE_FIELDS.replace(",\"message\":\"\"", ""))
+    }
+
+    @Test
     fun `null result is rejected for success and non-null result for failure`() {
         assertSuccessContractFailure("""{"result":null,"message":""}""")
         assertIs<CompanionEnvelopeDecodeOutcome.ContractFailure>(

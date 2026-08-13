@@ -2,6 +2,7 @@ package org.rotki.mobile.android.ui
 
 import androidx.compose.runtime.Composable
 import org.rotki.mobile.android.ui.pairing.PairingScreen
+import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.android.ui.privacy.PrivacyCover
 import org.rotki.mobile.android.ui.shell.CompanionHome
 import org.rotki.mobile.android.ui.state.RecoveryScreen
@@ -16,11 +17,14 @@ import org.rotki.mobile.core.state.SnapshotCoverage
 internal fun RotkiCompanionApp(
     status: CompanionStatus,
     pairing: PairingPresentation,
+    pairingConnectionState: PairingConnectionUiState,
     privacyCovered: Boolean,
     onStartScanning: () -> Unit,
     onRetryScanning: () -> Unit,
     onCancelScanning: () -> Unit,
     onOpenCameraSettings: () -> Unit,
+    onRequestLocalNetworkPermission: () -> Unit,
+    onRetryCleanup: () -> Unit,
     onRetryConnection: () -> Unit,
     scanner: @Composable () -> Unit,
 ): Unit {
@@ -31,10 +35,13 @@ internal fun RotkiCompanionApp(
             CompanionContent(
                 status = status,
                 pairing = pairing,
+                pairingConnectionState = pairingConnectionState,
                 onStartScanning = onStartScanning,
                 onRetryScanning = onRetryScanning,
                 onCancelScanning = onCancelScanning,
                 onOpenCameraSettings = onOpenCameraSettings,
+                onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+                onRetryCleanup = onRetryCleanup,
                 onRetryConnection = onRetryConnection,
                 scanner = scanner,
             )
@@ -46,31 +53,58 @@ internal fun RotkiCompanionApp(
 private fun CompanionContent(
     status: CompanionStatus,
     pairing: PairingPresentation,
+    pairingConnectionState: PairingConnectionUiState,
     onStartScanning: () -> Unit,
     onRetryScanning: () -> Unit,
     onCancelScanning: () -> Unit,
     onOpenCameraSettings: () -> Unit,
+    onRequestLocalNetworkPermission: () -> Unit,
+    onRetryCleanup: () -> Unit,
     onRetryConnection: () -> Unit,
     scanner: @Composable () -> Unit,
 ): Unit {
     val hasSnapshot = status.snapshotCoverage != SnapshotCoverage.Absent
-    when (status.rootState) {
-        CompanionRootState.Unpaired -> PairingScreen(
+    if (pairingConnectionState == PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE ||
+        pairingConnectionState == PairingConnectionUiState.CLEANING_UP
+    ) {
+        PairingScreen(
             presentation = pairing,
+            connectionState = pairingConnectionState,
             onStartScanning = onStartScanning,
             onRetryScanning = onRetryScanning,
             onCancelScanning = onCancelScanning,
             onOpenSettings = onOpenCameraSettings,
+            onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+            onRetryCleanup = onRetryCleanup,
+            scanner = scanner,
+        )
+        return
+    }
+    when (status.rootState) {
+        CompanionRootState.Unpaired -> PairingScreen(
+            presentation = pairing,
+            connectionState = pairingConnectionState,
+            onStartScanning = onStartScanning,
+            onRetryScanning = onRetryScanning,
+            onCancelScanning = onCancelScanning,
+            onOpenSettings = onOpenCameraSettings,
+            onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+            onRetryCleanup = onRetryCleanup,
             scanner = scanner,
         )
         CompanionRootState.Connecting -> {
-            if (pairing.state == PairingUiState.CONNECTING) {
+            if (pairing.state == PairingUiState.CONNECTING ||
+                pairingConnectionState != PairingConnectionUiState.IDLE
+            ) {
                 PairingScreen(
                     presentation = pairing,
+                    connectionState = pairingConnectionState,
                     onStartScanning = onStartScanning,
                     onRetryScanning = onRetryScanning,
                     onCancelScanning = onCancelScanning,
                     onOpenSettings = onOpenCameraSettings,
+                    onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+                    onRetryCleanup = onRetryCleanup,
                     scanner = scanner,
                 )
             } else {

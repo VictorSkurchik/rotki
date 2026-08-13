@@ -10,7 +10,9 @@ import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class PairingQrParserTest {
     @OptIn(ExperimentalEncodingApi::class)
@@ -83,7 +85,10 @@ class PairingQrParserTest {
     fun `device labels reject lone UTF-16 surrogates`() {
         assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uD800label"))
         assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uDC00label"))
+        assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uDB40\uDC01label"))
         assertIs<DeviceLabelParseOutcome.Accepted>(DeviceLabel.parse("valid 😀 label"))
+        assertFalse(DeviceLabelValidator.isValid("bad\uDB40\uDC01label"))
+        assertTrue(DeviceLabelValidator.isValid("valid 😀 label"))
     }
 
     @Test

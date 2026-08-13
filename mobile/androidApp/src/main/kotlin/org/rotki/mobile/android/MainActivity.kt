@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.WindowManager
@@ -18,6 +19,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.rotki.mobile.android.pairing.AndroidEpochClock
+import org.rotki.mobile.android.pairing.AndroidLocalNetworkPermissionPolicy
 import org.rotki.mobile.android.pairing.PairingViewModel
 import org.rotki.mobile.android.pairing.scanner.PairingCodeScanner
 import org.rotki.mobile.android.pairing.scanner.PairingCodeScannerFailure
@@ -41,6 +43,16 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private val localNetworkPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            pairingViewModel.localNetworkPermissionGranted()
+        } else {
+            pairingViewModel.localNetworkPermissionRequired()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?): Unit {
         super.onCreate(savedInstanceState)
         securityComposition = AndroidSecurityComposition.get(applicationContext)
@@ -49,6 +61,10 @@ class MainActivity : FragmentActivity() {
             PairingViewModel.Factory(
                 facade = securityComposition.facade,
                 clock = AndroidEpochClock,
+                pairingConnection = securityComposition.pairingConnection,
+                cleanupConnector = securityComposition::retryIncompletePairingCleanup,
+                initialConnectionState =
+                    securityComposition.initialPairingConnectionState,
             ),
         )[PairingViewModel::class.java]
         securityComposition.attachActivity(
@@ -63,6 +79,10 @@ class MainActivity : FragmentActivity() {
             val status by securityComposition.facade.status.collectAsStateWithLifecycle()
             val visibility by securityComposition.visibility.state.collectAsStateWithLifecycle()
             val pairing by pairingViewModel.presentation.collectAsStateWithLifecycle()
+            val pairingConnectionState by
+                pairingViewModel.connectionState.collectAsStateWithLifecycle()
+            val scannerRestartGeneration by
+                pairingViewModel.scannerRestartGeneration.collectAsStateWithLifecycle()
             val scannerController = rememberPairingCodeScannerController()
 
             LaunchedEffect(pairing.state) {
@@ -70,20 +90,28 @@ class MainActivity : FragmentActivity() {
                     scannerController.restart()
                 }
             }
+            LaunchedEffect(scannerRestartGeneration) {
+                if (scannerRestartGeneration > 0L) {
+                    scannerController.restart()
+                }
+            }
 
             RotkiCompanionApp(
                 status = status,
                 pairing = pairing,
+                pairingConnectionState = pairingConnectionState,
                 privacyCovered =
                     visibility != ApplicationVisibilityState.ACTIVE_FOREGROUND,
                 onStartScanning = ::requestCameraAndScan,
                 onRetryScanning = ::requestCameraAndScan,
                 onCancelScanning = pairingViewModel::reset,
                 onOpenCameraSettings = ::openApplicationSettings,
-                onRetryConnection = securityComposition.facade::retryResolvedEngineState,
+                onRequestLocalNetworkPermission = ::requestLocalNetworkPermission,
+                onRetryCleanup = pairingViewModel::retryIncompleteCleanup,
+                onRetryConnection = pairingViewModel::retryConnection,
                 scanner = {
                     PairingCodeScanner(
-                        onPairingCode = pairingViewModel::submitQr,
+                        onPairingCode = ::submitQrWithLocalNetworkPermission,
                         modifier = Modifier.fillMaxSize(),
                         controller = scannerController,
                         onFailure = { failure ->
@@ -103,18 +131,20 @@ class MainActivity : FragmentActivity() {
         super.onResume()
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         securityComposition.lifecycleController.onResume()
+        pairingViewModel.onForeground()
     }
 
     override fun onPause(): Unit {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         securityComposition.lifecycleController.onPause()
+        pairingViewModel.onInactive()
         super.onPause()
     }
 
     override fun onStop(): Unit {
         if (!isChangingConfigurations) {
             securityComposition.lifecycleController.onBackgroundOrSystemLock()
-            pairingViewModel.reset()
+            pairingViewModel.onBackground()
         }
         super.onStop()
     }
@@ -136,6 +166,32 @@ class MainActivity : FragmentActivity() {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
+
+    private fun submitQrWithLocalNetworkPermission(rawPayload: String): Unit {
+        if (requiresLocalNetworkPermission()) {
+            pairingViewModel.localNetworkPermissionRequired()
+            localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        } else {
+            pairingViewModel.submitQr(rawPayload)
+        }
+    }
+
+    private fun requestLocalNetworkPermission(): Unit {
+        if (requiresLocalNetworkPermission()) {
+            localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+        } else {
+            pairingViewModel.localNetworkPermissionGranted()
+        }
+    }
+
+    private fun requiresLocalNetworkPermission(): Boolean =
+        AndroidLocalNetworkPermissionPolicy.requiresRuntimePermission(
+            sdkInt = Build.VERSION.SDK_INT,
+            permissionGranted = ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_LOCAL_NETWORK,
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
 
     private fun openApplicationSettings(): Unit {
         startActivity(

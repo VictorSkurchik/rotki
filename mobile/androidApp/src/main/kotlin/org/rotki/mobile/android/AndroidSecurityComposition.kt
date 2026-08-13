@@ -12,18 +12,29 @@ import kotlinx.coroutines.runBlocking
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.android.lifecycle.AndroidApplicationVisibility
 import org.rotki.mobile.android.lifecycle.CompanionLifecycleController
+import org.rotki.mobile.android.pairing.AndroidDeviceLabelProvider
+import org.rotki.mobile.android.pairing.AndroidEpochClock
+import org.rotki.mobile.android.pairing.AndroidPairingStartupReconciler
+import org.rotki.mobile.android.pairing.AndroidPairingStartupState
+import org.rotki.mobile.android.pairing.applyRetryTo
+import org.rotki.mobile.android.pairing.createStartupFacade
+import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.android.security.AndroidBiometricCryptoBroker
 import org.rotki.mobile.android.security.AndroidBiometricCryptoOutcome
 import org.rotki.mobile.android.security.AndroidBiometricPromptCopy
 import org.rotki.mobile.android.security.AndroidDeviceProofSigner
+import org.rotki.mobile.android.security.AndroidIdempotencyKeyGenerator
 import org.rotki.mobile.android.security.AndroidLocalMaterialCleaner
 import org.rotki.mobile.android.security.AndroidSecureSnapshotStore
 import org.rotki.mobile.android.security.AndroidSnapshotKeyStore
 import org.rotki.mobile.android.security.AtomicSnapshotFile
 import org.rotki.mobile.android.security.BiometricCryptoBroker
 import org.rotki.mobile.android.storage.AndroidPairingRecordStore
-import org.rotki.mobile.core.ports.PairingRecordReadOutcome
-import org.rotki.mobile.core.state.SnapshotCoverage
+import org.rotki.mobile.android.storage.AndroidPairingCleanupJournal
+import org.rotki.mobile.auth.PairingConnection
+import org.rotki.mobile.auth.PairingConnectionConfiguration
+import org.rotki.mobile.auth.PairingConnectionOutcome
+import org.rotki.mobile.auth.PairingDevicePlatform
 
 /** One retained security graph for the lifetime of the Android application process. */
 internal class AndroidSecurityComposition private constructor(
@@ -33,7 +44,42 @@ internal class AndroidSecurityComposition private constructor(
     val pairingRecordStore: AndroidPairingRecordStore =
         AndroidPairingRecordStore(applicationContext)
     val deviceProofSigner: AndroidDeviceProofSigner = AndroidDeviceProofSigner()
-    val facade: CompanionFacade = restoreCompanionFacade(pairingRecordStore)
+    val pairingCleanupJournal: AndroidPairingCleanupJournal =
+        AndroidPairingCleanupJournal(applicationContext)
+    private val startupReconciler: AndroidPairingStartupReconciler =
+        AndroidPairingStartupReconciler(
+            readJournal = pairingCleanupJournal::read,
+            readRecord = pairingRecordStore::read,
+            readCurrentKey = deviceProofSigner::currentPublicKeyX963,
+            markCleanupRequired = pairingCleanupJournal::markCleanupRequired,
+        )
+    private val startupState: AndroidPairingStartupState = runBlocking(Dispatchers.IO) {
+        startupReconciler.reconcile()
+    }
+    val facade: CompanionFacade = startupState.createStartupFacade()
+    val pairingConnection: PairingConnection = facade.pairingConnection(
+        PairingConnectionConfiguration(
+            deviceLabel = AndroidDeviceLabelProvider().label(),
+            platform = PairingDevicePlatform.ANDROID,
+            deviceProofSigner = deviceProofSigner,
+            pairingRecordStore = pairingRecordStore,
+            pairingCleanupJournal = pairingCleanupJournal,
+            idempotencyKeyGenerator = AndroidIdempotencyKeyGenerator(),
+            applicationVisibility = visibility,
+            clock = AndroidEpochClock,
+        ),
+    )
+    val initialPairingConnectionState: PairingConnectionUiState =
+        when (startupState) {
+            AndroidPairingStartupState.PAIRED,
+            AndroidPairingStartupState.UNPAIRED,
+            -> PairingConnectionUiState.IDLE
+            AndroidPairingStartupState.CLEANUP_REQUIRED -> runBlocking(Dispatchers.IO) {
+                pairingConnection.retryIncompleteCleanup().toStartupUiState()
+            }
+            AndroidPairingStartupState.FAIL_CLOSED ->
+                PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
+        }
 
     private val biometricBroker: ActivityBoundBiometricCryptoBroker =
         ActivityBoundBiometricCryptoBroker()
@@ -45,6 +91,7 @@ internal class AndroidSecurityComposition private constructor(
         snapshotKeyStore = snapshotKeyStore,
         pairingRecordStore = pairingRecordStore,
         deviceProofSigner = deviceProofSigner,
+        pairingCleanupJournal = pairingCleanupJournal,
     )
     val snapshotStore: AndroidSecureSnapshotStore = AndroidSecureSnapshotStore(
         context = applicationContext,
@@ -89,6 +136,12 @@ internal class AndroidSecurityComposition private constructor(
         biometricBroker.detach(activity)
     }
 
+    suspend fun retryIncompletePairingCleanup(): PairingConnectionOutcome =
+        startupReconciler.reconcile().applyRetryTo(
+            facade = facade,
+            retryCleanup = pairingConnection::retryIncompleteCleanup,
+        )
+
     companion object {
         @Volatile
         private var retained: AndroidSecurityComposition? = null
@@ -102,18 +155,9 @@ internal class AndroidSecurityComposition private constructor(
     }
 }
 
-private fun restoreCompanionFacade(
-    pairingRecordStore: AndroidPairingRecordStore,
-): CompanionFacade = runBlocking(Dispatchers.IO) {
-    when (pairingRecordStore.read()) {
-        is PairingRecordReadOutcome.Present ->
-            CompanionFacade.restorePaired(SnapshotCoverage.Absent)
-        PairingRecordReadOutcome.Missing -> CompanionFacade()
-        // The current shared state model has no local-storage-error state; fail closed.
-        PairingRecordReadOutcome.Corrupt,
-        PairingRecordReadOutcome.Unavailable,
-        -> CompanionFacade.restorePaired(SnapshotCoverage.Absent)
-    }
+private fun PairingConnectionOutcome.toStartupUiState(): PairingConnectionUiState = when (this) {
+    PairingConnectionOutcome.NO_PENDING_PAIRING -> PairingConnectionUiState.IDLE
+    else -> PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
 }
 
 /** Keeps process-scoped crypto state while holding only the currently attached Activity. */

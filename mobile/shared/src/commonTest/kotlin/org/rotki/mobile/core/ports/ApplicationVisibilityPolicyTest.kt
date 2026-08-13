@@ -9,6 +9,21 @@ import kotlin.test.assertEquals
 
 class ApplicationVisibilityPolicyTest {
     @Test
+    fun `shared controller is fail closed and ignores inactive outside active`() {
+        val controller = ApplicationVisibilityController()
+        assertEquals(ApplicationVisibilityState.BACKGROUND_OR_LOCKED, controller.state.value)
+        controller.onInactive()
+        assertEquals(ApplicationVisibilityState.BACKGROUND_OR_LOCKED, controller.state.value)
+        controller.onActiveForeground()
+        assertEquals(ApplicationVisibilityState.ACTIVE_FOREGROUND, controller.state.value)
+        controller.onInactive()
+        assertEquals(ApplicationVisibilityState.INACTIVE, controller.state.value)
+        controller.onBackgroundOrLocked()
+        assertEquals(ApplicationVisibilityState.BACKGROUND_OR_LOCKED, controller.state.value)
+        assertEquals("ApplicationVisibilityController(redacted)", controller.toString())
+    }
+
+    @Test
     fun allAuthoredLifecycleCasesExecuteUnchanged(): Unit {
         val cases = ProtocolFixtureData.clientPolicy
             .getValue("lifecycle_policy")

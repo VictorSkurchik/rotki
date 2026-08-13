@@ -13,7 +13,7 @@ changed. It does not authorize widening Companion Scope.
 | 1 | Engine identity and authorization control plane | **in progress** |
 | 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
-| 4 | Real Android tracer bullet | **in progress — local Pairing UX slice** |
+| 4 | Real Android tracer bullet | **in progress — Device registration slice** |
 | 5 | Equivalent iOS/SKIE tracer bullet | **host shell only — tracer not started** |
 | 6 | Four complete native destinations | **not started** |
 | 7 | Personal-device hardening and handoff | **not started** |
@@ -924,14 +924,20 @@ ViewModel adapter. Exercise Capability discovery, Device Key registration, proof
 in-memory Access Session acquisition against the real Engine. Process restart must mint a
 new Access Session from the Device Key without Pairing again.
 
-Implementation status (2026-08-13): the mobile-only first half is complete. Android now has
-a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery screens, a thin
-ViewModel over the shared strict QR parser, immediate privacy cover, and a navigable
-Overview/Portfolio/History/Sources placeholder shell. Shared retains accepted QR authority
-only through a one-shot internal handoff and cancels an unregistered attempt on background.
-JVM/Android host checks, lint, and managed-device UI tests pass on API 28 and API 36. The
-live discovery, registration, proof, Access Session, and restart half remains unimplemented;
-therefore A4.1 and Gate G4 are not complete.
+Implementation status (2026-08-13): the mobile Client now reaches durable Device Session
+registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and
+recovery screens, a thin ViewModel, immediate privacy cover, and a navigable
+Overview/Portfolio/History/Sources placeholder shell. Shared strictly parses the QR,
+discovers protocol Capability over Ktor, creates a Device Key, submits an idempotent
+registration request, validates the bound response, and persists the Pairing record before
+committing UI state. Accepted QR authority is one-shot; transient inactivity suspends and
+resumes the same request identity, while background or expiry triggers fail-closed cleanup.
+A secret-free durable cleanup journal and Android startup reconciliation prevent interrupted
+registration from becoming a false Pairing. Android also handles API 37 local-network
+permission and trusts system or user-installed HTTPS roots without allowing cleartext.
+Shared/JVM and Android host checks, lint, and managed-device tests pass on API 28 and API 36.
+Challenge, proof, Access Session acquisition, restart re-authentication, and the real
+Docker/Starling host flow remain unimplemented; therefore A4.1 and Gate G4 are not complete.
 
 ### A4.2 — Minimal Overview and secure offline reopen
 

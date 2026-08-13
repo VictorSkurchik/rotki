@@ -14,6 +14,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.rotki.mobile.auth.PairingPresentation
 import org.rotki.mobile.auth.PairingUiState
+import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionStatus
 import org.rotki.mobile.core.state.SnapshotCoverage
@@ -103,6 +104,120 @@ class RotkiCompanionAppTest {
         composeRule.onNodeWithText("Portfolio overview").assertIsNotDisplayed()
         composeRule.onNodeWithText("Sources").assertIsNotDisplayed()
     }
+
+    @Test
+    fun pairingConnectionShowsProgressWithoutClaimingSuccess(): Unit {
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.Connecting),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState = PairingConnectionUiState.CONNECTING,
+            )
+        }
+
+        composeRule.onNodeWithTag(UiTags.PAIRING_CONNECTING).assertIsDisplayed()
+        composeRule.onNodeWithText("Registering this device").assertIsDisplayed()
+        composeRule.onNodeWithText("Pairing code accepted").assertIsNotDisplayed()
+    }
+
+    @Test
+    fun registeredDeviceKeepsProofAndSyncAsTheNextStep(): Unit {
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.Connecting),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState = PairingConnectionUiState.REGISTERED,
+            )
+        }
+
+        composeRule.onNodeWithTag(UiTags.PAIRING_REGISTERED).assertIsDisplayed()
+        composeRule.onNodeWithText("Device registered").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "The device key and Engine registration are saved. Device proof and portfolio sync are the next development step.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertIsNotDisplayed()
+    }
+
+    @Test
+    fun networkFailureOffersARescanWithoutEngineMessage(): Unit {
+        var scanRequested = false
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.Unpaired),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState = PairingConnectionUiState.NETWORK_UNAVAILABLE,
+                onStartScanning = { scanRequested = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Rotki Engine is out of reach").assertIsDisplayed()
+        composeRule.onNodeWithText("Scan again").performClick()
+        composeRule.runOnIdle { assertTrue(scanRequested) }
+    }
+
+    @Test
+    fun rateLimitIsPresentedAsBusyAndRequiresAFreshCode(): Unit {
+        var scanRequested = false
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.Unpaired),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState = PairingConnectionUiState.RATE_LIMITED,
+                onStartScanning = { scanRequested = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Rotki Engine is busy").assertIsDisplayed()
+        composeRule.onNodeWithText("Rotki Engine is out of reach").assertIsNotDisplayed()
+        composeRule.onNodeWithText("Scan a new code").performClick()
+        composeRule.runOnIdle { assertTrue(scanRequested) }
+    }
+
+    @Test
+    fun incompleteLocalCleanupOverridesDeviceLockedAndOffersOnlyCleanupRetry(): Unit {
+        var cleanupRequested = false
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.DeviceLocked),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
+                onRetryCleanup = { cleanupRequested = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Local cleanup could not be verified").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Rotki Companion remains locked because removal of the local device key " +
+                "and registration record could not be confirmed. Do not pair again yet.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Scan again").assertIsNotDisplayed()
+        composeRule.onNodeWithText("Scan a new code").assertIsNotDisplayed()
+        composeRule.onNodeWithText("Back").assertIsNotDisplayed()
+        composeRule.onNodeWithText("Portfolio locked").assertIsNotDisplayed()
+        composeRule.onNodeWithText("Retry cleanup").performClick()
+        composeRule.runOnIdle { assertTrue(cleanupRequested) }
+    }
+
+    @Test
+    fun localNetworkPermissionExplainsThatTheCodeWasNotSaved(): Unit {
+        var permissionRequested = false
+        composeRule.setContent {
+            TestApp(
+                status = status(CompanionRootState.Unpaired),
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+                pairingConnectionState =
+                    PairingConnectionUiState.LOCAL_NETWORK_PERMISSION_REQUIRED,
+                onRequestLocalNetworkPermission = { permissionRequested = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Local network access needed").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Allow nearby device access, then scan the pairing code again. The code was not saved.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("Allow access").performClick()
+        composeRule.runOnIdle { assertTrue(permissionRequested) }
+    }
 }
 
 @Suppress("LongParameterList")
@@ -110,16 +225,22 @@ class RotkiCompanionAppTest {
 private fun TestApp(
     status: CompanionStatus,
     pairing: PairingPresentation,
+    pairingConnectionState: PairingConnectionUiState = PairingConnectionUiState.IDLE,
     privacyCovered: Boolean = false,
     onStartScanning: () -> Unit = {},
+    onRequestLocalNetworkPermission: () -> Unit = {},
+    onRetryCleanup: () -> Unit = {},
 ): Unit = RotkiCompanionApp(
     status = status,
     pairing = pairing,
+    pairingConnectionState = pairingConnectionState,
     privacyCovered = privacyCovered,
     onStartScanning = onStartScanning,
-    onRetryScanning = {},
+    onRetryScanning = onStartScanning,
     onCancelScanning = {},
     onOpenCameraSettings = {},
+    onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+    onRetryCleanup = onRetryCleanup,
     onRetryConnection = {},
     scanner = { Box(modifier = Modifier) },
 )

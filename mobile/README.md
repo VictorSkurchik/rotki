@@ -6,9 +6,11 @@ Python, pnpm, or Cargo builds.
 The production build currently contains:
 
 - `shared`: project-owned domain and behavior for Android, JVM test execution,
-  `iosArm64`, and `iosSimulatorArm64`;
+  `iosArm64`, and `iosSimulatorArm64`, including strict Pairing QR parsing, Capability
+  discovery, lifecycle-aware Device Key registration, and durable cleanup recovery;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
-  `prod` environment flavors;
+  `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
+  Keys, atomic Pairing records, and Android 17 local-network permission recovery;
 - `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
   unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
   persistence, and native iOS security remain deliberately disabled until their gates.
@@ -64,8 +66,11 @@ Android platform-security instrumentation runs on two clean Gradle-managed devic
 
 The first device covers the Android 9 / API 28 compatibility floor. The second covers
 Android 16 / API 36, the current stable Android runtime. Android 17 / API 37 remains a
-preview and is not used as the current-device acceptance gate. CI installs each Google APIs
-system image in a separate KVM-enabled matrix job and retains the managed-device reports.
+preview and is not used as the current-device acceptance gate. The API 37 build still
+declares and requests `ACCESS_LOCAL_NETWORK` before contacting a private/LAN Engine; denial
+is a recoverable Pairing state. HTTPS remains mandatory, with both system and user-installed
+CA roots accepted for self-hosted Engines. CI installs each Google APIs system image in a
+separate KVM-enabled matrix job and retains the managed-device reports.
 
 Clean managed devices intentionally do not claim enrolled-biometric, TEE/StrongBox, OEM
 fallback, or physical secure-deletion evidence. On an enrolled physical Android device, run
