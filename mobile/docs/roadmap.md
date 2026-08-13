@@ -10,7 +10,7 @@ changed. It does not authorize widening Companion Scope.
 | Phase | Outcome | Status |
 |---|---|---|
 | 0 | Protocol specifications and risk spikes | **in progress** |
-| 1 | Engine identity and authorization control plane | **not started** |
+| 1 | Engine identity and authorization control plane | **in progress** |
 | 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
 | 4 | Real Android tracer bullet | **not started** |
@@ -200,16 +200,33 @@ the device and its evidence is recorded here.
 
 ### E1.1 — Stable Profile identity
 
-Add a random opaque Profile ID to the encrypted user DB using the next normal user-DB
-migration (currently v53 to v54). Touchpoints include:
+Add a cryptographically random opaque Profile ID to the encrypted user DB by extending the
+current unreleased user-DB migration from v52 to v53; do not create a v53-to-v54 upgrade or
+bump the database version for this slice. Touchpoints include:
 
-- `rotkehlchen/db/schema.py`, `rotkehlchen/db/upgrade_manager.py`, and a new upgrade under
-  `rotkehlchen/db/upgrades/`;
-- internal Profile metadata access in `rotkehlchen/db/`;
+- `rotkehlchen/db/schema.py` and the existing
+  `rotkehlchen/db/upgrades/v52_v53.py` upgrade;
+- the singleton encrypted `profile_metadata` record and internal
+  `DBHandler.get_profile_id()` accessor in `rotkehlchen/db/`;
 - upgrade, backup/restore, collision, and non-exposure API tests.
 
-The value is created once, is not derived from the username, is never returned by normal
-Profile-list APIs, and remains stable through restarts and ordinary DB backups.
+The value is generated once by a cryptographically secure random source and stored as
+exactly 32 raw bytes. It is not derived from the username or Profile contents, is never
+returned by normal Profile-list, settings, database-info, login, or diagnostic APIs, and
+remains stable through restarts and ordinary DB backups. Distinct Profiles must receive
+distinct values in collision-regression tests; the identifier itself grants no authority.
+
+Implementation status (2026-08-13): complete locally; hosted validation pending. Fresh
+Profiles and the existing unreleased v52-to-v53 upgrade now create one constrained
+`profile_metadata` row backed by `secrets.token_bytes(32)`. Fresh schema, Profile ID, and
+database version creation share one SQLite transaction. Internal reads validate exactly one
+32-byte BLOB and fail closed instead of silently rotating identity. The full 38-test DB
+upgrade suite and the focused identity, schema, backup, atomic-rollback, and API privacy
+tests pass, including stable reopen/backup bytes, distinct independently created Profiles,
+deterministic migration generation, malformed or missing metadata, and non-exposure through
+the ordinary users, login, settings, info, and database-info responses. Ruff and Pyright
+pass for the affected backend files. E1.2 owns cross-Profile collision rejection when copied
+IDs first share the Control Store.
 
 ### E1.2 — Migrated `control.db`
 

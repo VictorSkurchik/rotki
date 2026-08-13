@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
@@ -92,6 +93,22 @@ def _merge_onto_canonical_identifier(
 @enter_exit_debug_log(name='UserDB v52->v53 upgrade')
 def upgrade_v52_to_v53(db: DBHandler, progress_handler: DBUpgradeProgressHandler) -> None:
     """Upgrades the DB from v52 to v53. This happened in 1.44."""
+
+    @progress_step(description='Create stable Profile identity.')
+    def _create_profile_metadata(write_cursor: DBCursor) -> None:
+        # Hardcoded schema to prevent future schema changes from affecting this upgrade.
+        write_cursor.execute("""
+CREATE TABLE IF NOT EXISTS profile_metadata (
+    singleton INTEGER NOT NULL PRIMARY KEY CHECK(singleton = 1),
+    profile_id BLOB NOT NULL UNIQUE
+        CHECK(typeof(profile_id) = 'blob' AND length(profile_id) = 32)
+) WITHOUT ROWID;
+""")
+        # Keep the historical upgrade independent from the mutable current Profile helper.
+        write_cursor.execute(
+            'INSERT INTO profile_metadata(singleton, profile_id) VALUES(1, ?)',
+            (secrets.token_bytes(32),),
+        )
 
     @progress_step(description='Create event metrics table and indexes.')
     def _create_event_metrics_table(write_cursor: DBCursor) -> None:

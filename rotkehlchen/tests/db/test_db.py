@@ -169,6 +169,7 @@ TABLES_AT_INIT = [
     'manually_tracked_balances',
     'location',
     'settings',
+    'profile_metadata',
     'used_query_ranges',
     'margin_positions',
     'tag_mappings',

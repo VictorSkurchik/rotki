@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 import random
 import shutil
@@ -74,6 +75,100 @@ def check_user_status(api_server: APIServer) -> dict[str, str]:
         api_url_for(api_server, 'usersresource'),
     )
     return assert_proper_sync_response_with_result(response)
+
+
+def assert_profile_id_not_exposed(payload: Any, profile_id: bytes) -> None:
+    """Walk a JSON payload without relying on its formatting or member order."""
+    hexadecimal = profile_id.hex()
+    forbidden_case_sensitive_values = {
+        base64.b64encode(profile_id).decode(),
+        base64.urlsafe_b64encode(profile_id).decode(),
+        base64.urlsafe_b64encode(profile_id).decode().rstrip('='),
+    }
+
+    def assert_text_is_safe(value: str) -> None:
+        assert hexadecimal not in value.lower()
+        assert all(forbidden not in value for forbidden in forbidden_case_sensitive_values)
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                normalized_key = ''.join(
+                    character for character in key.lower() if character.isalnum()
+                )
+                assert 'profileid' not in normalized_key
+                assert_text_is_safe(key)
+                visit(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                visit(nested)
+        elif isinstance(value, str):
+            assert_text_is_safe(value)
+
+    visit(payload)
+
+
+def test_profile_id_non_exposure_assertion_rejects_common_encodings() -> None:
+    profile_id = bytes(range(32))
+    standard_base64 = base64.b64encode(profile_id).decode()
+    for exposed_payload in (
+        {'internal_profile_id': 'redacted'},
+        {'profile_identifier': 'redacted'},
+        {'value': f'prefix:{profile_id.hex().upper()}:suffix'},
+        {f'prefix-{profile_id.hex()}-suffix': None},
+        {'value': f'prefix:{standard_base64}:suffix'},
+    ):
+        with pytest.raises(AssertionError):
+            assert_profile_id_not_exposed(exposed_payload, profile_id)
+
+    # Base64 is case-sensitive: changing its case represents different bytes.
+    assert_profile_id_not_exposed({'value': standard_base64.swapcase()}, profile_id)
+
+
+def test_profile_id_not_exposed_by_public_profile_apis(
+        rotkehlchen_api_server: APIServer,
+) -> None:
+    db = rotkehlchen_api_server.rest_api.rotkehlchen.data.db
+    with db.conn.read_ctx() as cursor:
+        profile_id = db.get_profile_id(cursor)
+
+    for resource in (
+        'usersresource',
+        'settingsresource',
+        'databaseinforesource',
+        'inforesource',
+    ):
+        response = requests.get(api_url_for(rotkehlchen_api_server, resource))
+        assert response.status_code == HTTPStatus.OK
+        assert_profile_id_not_exposed(response.json(), profile_id)
+
+
+def test_profile_id_not_exposed_by_login(
+        rotkehlchen_api_server: APIServer,
+        username: str,
+        db_password: str,
+) -> None:
+    rotki = rotkehlchen_api_server.rest_api.rotkehlchen
+    with rotki.data.db.conn.read_ctx() as cursor:
+        profile_id = rotki.data.db.get_profile_id(cursor)
+
+    assert_simple_ok_response(requests.patch(
+        api_url_for(rotkehlchen_api_server, 'usersbynameresource', name=username),
+        json={'action': 'logout'},
+    ))
+    with ExitStack() as stack:
+        patch_no_op_unlock(rotki, stack)
+        task_id = assert_ok_async_response(requests.post(
+            api_url_for(rotkehlchen_api_server, 'usersbynameresource', name=username),
+            json={
+                'password': db_password,
+                'sync_approval': 'unknown',
+                'async_query': True,
+            },
+        ))
+        result = wait_for_async_task_with_result(rotkehlchen_api_server, task_id)
+
+    assert_profile_id_not_exposed(result, profile_id)
 
 
 def test_loggedin_user_querying(

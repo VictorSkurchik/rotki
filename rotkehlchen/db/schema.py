@@ -1,3 +1,5 @@
+from typing import Final
+
 # Custom enum table for locations
 DB_CREATE_LOCATION = """
 CREATE TABLE IF NOT EXISTS location (
@@ -516,6 +518,14 @@ CREATE TABLE IF NOT EXISTS settings (
     name VARCHAR[24] NOT NULL PRIMARY KEY,
     value TEXT
 );
+"""
+
+DB_CREATE_PROFILE_METADATA: Final = """
+CREATE TABLE IF NOT EXISTS profile_metadata (
+    singleton INTEGER NOT NULL PRIMARY KEY CHECK(singleton = 1),
+    profile_id BLOB NOT NULL UNIQUE
+        CHECK(typeof(profile_id) = 'blob' AND length(profile_id) = 32)
+) WITHOUT ROWID;
 """
 
 DB_CREATE_ETH2_VALIDATORS = """
@@ -1147,6 +1157,7 @@ BEGIN TRANSACTION;
 {DB_CREATE_EVM_TX_MAPPINGS}
 {DB_CREATE_EVM_INTERNAL_TX_CONFLICTS}
 {DB_CREATE_SETTINGS}
+{DB_CREATE_PROFILE_METADATA}
 {DB_CREATE_TAGS_TABLE}
 {DB_CREATE_TAG_MAPPINGS}
 {DB_CREATE_XPUBS}
@@ -1199,3 +1210,40 @@ BEGIN TRANSACTION;
 COMMIT;
 PRAGMA foreign_keys=on;
 """
+
+_FRESH_DB_COMMIT_SUFFIX: Final = """COMMIT;
+PRAGMA foreign_keys=on;
+"""
+
+
+def build_fresh_db_script(
+        profile_id: bytes,
+        version: int,
+) -> str:
+    """Add the initial Profile identity and version to the schema transaction.
+
+    ``executescript()`` commits any transaction that precedes the script. Keeping
+    these two rows before the schema script's sole COMMIT makes fresh Profile
+    creation atomic: a crash cannot leave a current-looking schema without its
+    durable identity.
+    """
+    if not isinstance(profile_id, bytes) or len(profile_id) != 32:
+        raise ValueError('A Profile ID must contain exactly 32 bytes')
+    if not isinstance(version, int) or version < 0:
+        raise ValueError('A database version must be a non-negative integer')
+    if (
+            not DB_SCRIPT_CREATE_TABLES.endswith(_FRESH_DB_COMMIT_SUFFIX) or
+            DB_SCRIPT_CREATE_TABLES.count('BEGIN TRANSACTION;') != 1 or
+            DB_SCRIPT_CREATE_TABLES.count('COMMIT;') != 1
+    ):
+        raise ValueError('The user database schema script has unexpected transaction boundaries')
+
+    initial_rows = f"""
+INSERT INTO profile_metadata(singleton, profile_id) VALUES(1, X'{profile_id.hex()}');
+INSERT INTO settings(name, value) VALUES('version', '{version}');
+    """
+    return (
+        DB_SCRIPT_CREATE_TABLES.removesuffix(_FRESH_DB_COMMIT_SUFFIX) +
+        initial_rows +
+        _FRESH_DB_COMMIT_SUFFIX
+    )

@@ -37,7 +37,10 @@ An encrypted collection of one user's portfolio data, credentials, preferences, 
 _Avoid_: Account, database
 
 **Profile ID**:
-A random stable identifier for a Profile that reveals neither its display name nor its contents and binds Device Sessions to the correct Profile.
+A cryptographically random stable 256-bit identifier stored as 32 raw bytes in a Profile's
+encrypted metadata. It reveals neither the Profile name nor its contents, binds Device
+Sessions to the correct Profile, and is never part of the ordinary public API. It is an
+internal identity, not an authentication secret.
 _Avoid_: Username, Profile name
 
 **Profile Mismatch**:

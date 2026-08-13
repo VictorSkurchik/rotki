@@ -69,7 +69,8 @@ from rotkehlchen.db.evmtx import DBEvmTx
 from rotkehlchen.db.history_events import DBHistoryEvents
 from rotkehlchen.db.misc import detect_sqlcipher_version, evaluate_integrity_check_rows
 from rotkehlchen.db.pending_transactions import PendingTransactionsTracker
-from rotkehlchen.db.schema import DB_SCRIPT_CREATE_TABLES
+from rotkehlchen.db.profile import ProfileID, generate_profile_id, read_profile_id
+from rotkehlchen.db.schema import build_fresh_db_script
 from rotkehlchen.db.schema_transient import DB_SCRIPT_CREATE_TRANSIENT_TABLES
 from rotkehlchen.db.settings import (
     DEFAULT_ASK_USER_UPON_SIZE_DISCREPANCY,
@@ -394,12 +395,12 @@ class DBHandler:
         # Run upgrades if needed -- only for user DB
         fresh_db = DBUpgradeManager(self).run_upgrades()
         if fresh_db:  # create tables during the first run and add the DB version
+            profile_id = generate_profile_id()
             with self.conn.write_ctx() as write_cursor:
-                write_cursor.executescript(DB_SCRIPT_CREATE_TABLES)
-                write_cursor.execute(
-                    'INSERT OR REPLACE INTO settings(name, value) VALUES(?, ?)',
-                    ('version', str(ROTKEHLCHEN_DB_VERSION)),
-                )
+                write_cursor.executescript(build_fresh_db_script(
+                    profile_id=profile_id,
+                    version=ROTKEHLCHEN_DB_VERSION,
+                ))
 
         # run checks on the database
         self.conn.schema_sanity_check()
@@ -453,6 +454,11 @@ class DBHandler:
         if transient:  # type: ignore
             return file_md5(self.user_data_dir / TRANSIENT_DB_NAME)
         return file_md5(self.user_data_dir / USERDB_NAME)
+
+    @staticmethod
+    def get_profile_id(cursor: DBCursor) -> ProfileID:
+        """Return the stable internal Profile ID without creating or rotating it."""
+        return read_profile_id(cursor)
 
     @overload
     def get_setting(self, cursor: DBCursor, name: Literal['version']) -> int:

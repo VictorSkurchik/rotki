@@ -148,8 +148,8 @@ def _init_db_with_target_version(
         resume_from_backup: bool,
 ) -> DBHandler:
     no_tables_created_after_init = patch(
-        'rotkehlchen.db.dbhandler.DB_SCRIPT_CREATE_TABLES',
-        new='',
+        'rotkehlchen.db.dbhandler.build_fresh_db_script',
+        return_value='',
     )
     with ExitStack() as stack:
         stack.enter_context(target_patch(target_version=target_version))
@@ -3370,6 +3370,7 @@ def test_latest_upgrade_correctness(user_data_dir):
         'bitcointx_address_mappings',
         'data_issues',
         'event_metrics',
+        'profile_metadata',
     }
     new_views = views_after_upgrade - views_before
     assert new_views == set()
@@ -4188,6 +4189,7 @@ def test_upgrade_db_52_to_53(
         resume_from_backup=False,
     )
     with db_v52.conn.write_ctx() as write_cursor:
+        assert not table_exists(cursor=write_cursor, name='profile_metadata')
         assert not table_exists(cursor=write_cursor, name='event_metrics')
         assert not table_exists(cursor=write_cursor, name='data_issues')
         assert index_exists(
@@ -4537,13 +4539,24 @@ def test_upgrade_db_52_to_53(
     (airdrop_csv_path := airdrops_dir / 'current.csv.gz').touch()
 
     db_v52.logout()
-    db = _init_db_with_target_version(
-        target_version=53,
-        user_data_dir=user_data_dir,
-        msg_aggregator=messages_aggregator,
-        resume_from_backup=False,
-    )
+    expected_profile_id = bytes(range(32))
+    with patch(
+        'rotkehlchen.db.upgrades.v52_v53.secrets.token_bytes',
+        return_value=expected_profile_id,
+    ) as mock_token_bytes:
+        db = _init_db_with_target_version(
+            target_version=53,
+            user_data_dir=user_data_dir,
+            msg_aggregator=messages_aggregator,
+            resume_from_backup=False,
+        )
+    mock_token_bytes.assert_called_once_with(32)
     with db.conn.write_ctx() as cursor:
+        assert cursor.execute(
+            'SELECT singleton, typeof(profile_id), length(profile_id), profile_id '
+            'FROM profile_metadata',
+        ).fetchall() == [(1, 'blob', 32, expected_profile_id)]
+        assert db.get_profile_id(cursor) == expected_profile_id
         assert json.loads(cursor.execute(  # blockscout prepended for gnosis, other chains as is
             "SELECT value FROM settings WHERE name='evm_indexers_order'",
         ).fetchone()[0]) == {
