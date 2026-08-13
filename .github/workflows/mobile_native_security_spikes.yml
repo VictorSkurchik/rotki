@@ -1,0 +1,157 @@
+name: Mobile native-security and SKIE spikes
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile_native_security_spikes.yml'
+      - 'mobile/spikes/android-security/**'
+      - 'mobile/spikes/ios-security/**'
+      - 'mobile/spikes/skie-interop/**'
+      - 'mobile/protocol/v1/**'
+      - 'mobile/docs/protocol.md'
+      - 'mobile/docs/roadmap.md'
+      - 'mobile/docs/adr/**'
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - bugfixes
+      - 'feature/**'
+    paths:
+      - '.github/workflows/mobile_native_security_spikes.yml'
+      - 'mobile/spikes/android-security/**'
+      - 'mobile/spikes/ios-security/**'
+      - 'mobile/spikes/skie-interop/**'
+      - 'mobile/protocol/v1/**'
+      - 'mobile/docs/protocol.md'
+      - 'mobile/docs/roadmap.md'
+      - 'mobile/docs/adr/**'
+  workflow_dispatch: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: { }
+
+jobs:
+  android:
+    name: 'Android host and API 28'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Install Android API 28 image and compile SDK
+        run: |
+          sdkmanager \
+            'platforms;android-37.0' \
+            'build-tools;36.0.0' \
+            'system-images;android-28;google_apis;x86_64'
+
+      - name: Enable emulator acceleration
+        run: |
+          test -e /dev/kvm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run host and API 28 gates
+        working-directory: mobile/spikes/android-security
+        run: |
+          ./gradlew --no-daemon p03AndroidBuild
+          ./gradlew --no-daemon \
+            p03AndroidApi28Check \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+
+  apple:
+    name: 'Swift security and SKIE interop'
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Select supported Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.4.app/Contents/Developer
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Run clean SKIE enabled and disabled gates
+        working-directory: mobile/spikes/skie-interop
+        run: ./verify.sh
+
+      - name: Run Swift security tests
+        working-directory: mobile/spikes/ios-security
+        run: swift test
+
+      - name: Build Swift security package for an iOS device
+        working-directory: mobile/spikes/ios-security
+        run: |
+          xcodebuild -quiet \
+            -scheme IOSSecuritySpike \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/p03-ios-device" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Run Swift security tests on iOS Simulator
+        working-directory: mobile/spikes/ios-security
+        run: |
+          xcodebuild -quiet \
+            -scheme IOSSecuritySpike \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/p03-ios-simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Build physical-acceptance host for iOS device and Simulator
+        working-directory: mobile/spikes/ios-security
+        run: |
+          xcodebuild -quiet \
+            -project iosApp/IOSSecurityHost.xcodeproj \
+            -scheme IOSSecurityHost \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/p03-ios-host-device" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+          xcodebuild -quiet \
+            -project iosApp/IOSSecurityHost.xcodeproj \
+            -scheme IOSSecurityHost \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath "$RUNNER_TEMP/p03-ios-host-simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
