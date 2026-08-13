@@ -14,6 +14,16 @@ from webargs.flaskparser import parser
 from werkzeug.exceptions import NotFound
 
 from rotkehlchen.api.asgi import create_asgi_app
+from rotkehlchen.api.companion.authorization import (
+    COMPANION_PATH_PREFIX,
+    InvalidProtocolHeader,
+    extract_asgi_header_values,
+    match_route_policy,
+    validate_protocol_header,
+)
+from rotkehlchen.api.companion.codec import InvalidCompanionInput
+from rotkehlchen.api.companion.errors import companion_error_response
+from rotkehlchen.api.companion.generated_protocol import PROTOCOL_HEADER, HttpErrorCode
 from rotkehlchen.api.rest import RestAPI, api_response, wrap_in_fail_result
 from rotkehlchen.api.session_token import (
     MCP_BACKEND_PROOF_HEADER,
@@ -25,6 +35,10 @@ from rotkehlchen.api.session_token import (
     session_cookie_is_secure,
     set_session_cookie,
     verify_mcp_backend_proof,
+)
+from rotkehlchen.api.v1.companion_resources import (
+    CompanionProtocolResource,
+    CompanionUnavailableResource,
 )
 from rotkehlchen.api.v1.parser import ignore_kwarg_parser, resource_parser
 from rotkehlchen.api.v1.resources import (
@@ -224,6 +238,13 @@ URLS = list[
 # buffering, so a single global ceiling (`--max-body-mb`, default 50) covers every
 # proxied API route instead of nginx's per-`location` list of exceptions.
 URLS_V1: URLS = [
+    ('/companion/protocol', CompanionProtocolResource),
+    ('/companion', CompanionUnavailableResource, 'companion_unavailable_root'),
+    (
+        '/companion/<path:companion_path>',
+        CompanionUnavailableResource,
+        'companion_unavailable_path',
+    ),
     ('/users', UsersResource),
     ('/watchers', WatchersResource),
     ('/users/<string:name>', UsersByNameResource),
@@ -440,6 +461,84 @@ def _read_internal_mcp_token(session_key: bytes) -> SessionClaims | None:
     return read_mcp_token(key=session_key, token=token)
 
 
+def _raw_request_path() -> str | None:
+    """Return the undecoded request path, or fail closed when it is unavailable.
+
+    Flask's ``request.path`` is already percent-decoded. Companion route selection
+    is security-sensitive and deliberately rejects encoded separators/identifiers,
+    so it must use uvicorn's original ASGI bytes instead. ``RAW_URI`` is retained
+    only for the Werkzeug development/test boundary.
+    """
+    scope = request.environ.get('asgi.scope')
+    if type(scope) is dict and type(raw_path := scope.get('raw_path')) is bytes:
+        try:
+            return raw_path.decode('ascii', errors='strict')
+        except UnicodeDecodeError:
+            return None
+    if type(raw_uri := request.environ.get('RAW_URI')) is str:
+        return raw_uri.partition('?')[0]
+    return None
+
+
+def _companion_detection_path(path: object) -> str | None:
+    """Conservatively normalize a path only for privacy and namespace classification.
+
+    This deliberately mirrors Starling's access-log boundary: decode ASCII percent
+    triplets once, lowercase ASCII, and collapse repeated slashes. The result never
+    feeds routing; ``match_route_policy`` still receives the untouched raw path.
+    """
+    if type(path) is not str:
+        return None
+
+    source = path.encode('utf-8', errors='surrogatepass')
+    decoded = bytearray()
+    index = 0
+    while index < len(source):
+        if source[index] == ord('%') and index + 2 < len(source):
+            high, low = source[index + 1:index + 3]
+            if high in b'0123456789abcdefABCDEF' and low in b'0123456789abcdefABCDEF':
+                decoded.append(int(bytes((high, low)), 16))
+                index += 3
+                continue
+        decoded.append(source[index])
+        index += 1
+
+    normalized: list[str] = []
+    previous_slash = False
+    for byte in decoded:
+        normalized_byte = byte
+        if ord('A') <= normalized_byte <= ord('Z'):
+            normalized_byte += ord('a') - ord('A')
+        if normalized_byte == ord('/'):
+            if previous_slash is False:
+                normalized.append('/')
+            previous_slash = True
+        else:
+            previous_slash = False
+            if normalized_byte <= 0x7F:
+                normalized.append(chr(normalized_byte))
+    return ''.join(normalized)
+
+
+def _is_companion_request_path(decoded_path: object, raw_path: str | None) -> bool:
+    """Recognize exact and malformed namespace candidates without widening routing."""
+    for path in (raw_path, decoded_path):
+        if (detection_path := _companion_detection_path(path)) is None:
+            continue
+        if detection_path == COMPANION_PATH_PREFIX or detection_path.startswith(tuple(
+            f'{COMPANION_PATH_PREFIX}{delimiter}' for delimiter in ('/', '%', ';', '.')
+        )):
+            return True
+    return False
+
+
+def _companion_log_method(method: object) -> str:
+    """Return only a closed method token so attacker extensions never reach logs."""
+    if method in {'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT'}:
+        return str(method)
+    return 'UNLISTED'
+
+
 def setup_urls(
         rest_api: RestAPI,
         blueprint: Blueprint,
@@ -453,13 +552,16 @@ def setup_urls(
             route, resource_cls, endpoint = url_tuple
         else:
             raise ValueError(f'Invalid URL format: {url_tuple!r}')
-        blueprint.add_url_rule(
-            route,
-            view_func=resource_cls.as_view(endpoint, rest_api_object=rest_api),
-        )
+        view_func = resource_cls.as_view(endpoint, rest_api_object=rest_api)
+        if route.startswith('/companion'):
+            blueprint.add_url_rule(route, view_func=view_func, merge_slashes=False)
+        else:
+            blueprint.add_url_rule(route, view_func=view_func)
 
 
 def endpoint_not_found(e: NotFound) -> Response:
+    if _is_companion_request_path(request.path, _raw_request_path()):
+        return companion_error_response(HttpErrorCode.RESOURCE_NOT_FOUND)
     msg = 'invalid endpoint'
     # The isinstance check is because I am not sure if `e` is always going to
     # be a "NotFound" error here
@@ -549,6 +651,15 @@ class APIServer:
     @staticmethod
     def unhandled_exception(exception: Exception) -> Response:
         """ Flask.errorhandler when an exception wasn't correctly handled """
+        if getattr(g, 'rotki_companion_request', False):
+            log.critical(
+                'Unhandled exception when processing Companion request',
+                method=request.method,
+                route=getattr(g, 'rotki_companion_route', 'unlisted'),
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+            return companion_error_response(HttpErrorCode.UNEXPECTED_ENGINE_ERROR)
+
         is_rotki_exception = exception.__class__.__module__.startswith('rotkehlchen.')
         if __debug__:
             logger.exception(exception)  # noqa: LOG004  -- this is an error handler
@@ -566,12 +677,38 @@ class APIServer:
         Returning a Response short-circuits the request (the session-cookie gate
         rejecting with 401); returning None lets it proceed as normal.
         """
+        raw_path = _raw_request_path()
+        companion_request = _is_companion_request_path(request.path, raw_path)
+        g.rotki_companion_request = companion_request
+        if companion_request:
+            policy = match_route_policy(request.method, raw_path)
+            g.rotki_companion_route = policy.path if policy is not None else 'unlisted'
+            log.debug(
+                'start rotki Companion api',
+                method=_companion_log_method(request.method),
+                route=g.rotki_companion_route,
+            )
+            if policy is None:
+                return companion_error_response(HttpErrorCode.RESOURCE_NOT_FOUND)
+            if policy.route_id != 'get_protocol':
+                if policy.requires_protocol_header:
+                    try:
+                        validate_protocol_header(extract_asgi_header_values(
+                            request.environ.get('asgi.scope'),
+                            PROTOCOL_HEADER,
+                        ))
+                    except (InvalidCompanionInput, InvalidProtocolHeader):
+                        return companion_error_response(HttpErrorCode.INCOMPATIBLE_PROTOCOL)
+                return companion_error_response(HttpErrorCode.INCOMPATIBLE_PROTOCOL)
+
         # Session-cookie gate (Docker). Inert without a key; otherwise deny-by-default
         # against `_cookie_less_rules`, rejecting with a plain 401 so the frontend
         # routes to login. The cookie's `sid` must be the user's active session, so a
         # newer login kicks old windows out (#3156). `/ws` is gated in the ASGI app.
+        # Exact Companion paths bypass this legacy gate only to enter their own
+        # route-selected dispatcher; no cookie or MCP bearer is accepted implicitly.
         session_key = self.rest_api.session_key
-        if session_key is not None:
+        if companion_request is False and session_key is not None:
             assert self.rest_api.session_store is not None  # built together with session_key
             rule = request.url_rule.rule if request.url_rule is not None else None
             if (rule, request.method) not in self._cookie_less_rules:
@@ -634,12 +771,13 @@ class APIServer:
                 if cookie_is_active:
                     g.rotki_session_exp = claims.exp
 
-        log.debug(
-            f'start rotki api {request.method} {request.path}',
-            view_args=request.view_args,
-            query_string=request.query_string,
-            json_data=request.json if request.is_json else None,
-        )
+        if companion_request is False:
+            log.debug(
+                f'start rotki api {request.method} {request.path}',
+                view_args=request.view_args,
+                query_string=request.query_string,
+                json_data=request.json if request.is_json else None,
+            )
         return None
 
     def after_request_callback(self, response: Response) -> Response:
@@ -676,7 +814,14 @@ class APIServer:
         # when the debug log that consumes it is actually enabled. In packaged
         # builds the backend runs at CRITICAL, so otherwise we'd parse and discard
         # the whole response body on every single request.
-        if log.isEnabledFor(logging.DEBUG):
+        if log.isEnabledFor(logging.DEBUG) and getattr(g, 'rotki_companion_request', False):
+            log.debug(
+                'end rotki Companion api',
+                method=_companion_log_method(request.method),
+                route=getattr(g, 'rotki_companion_route', 'unlisted'),
+                status_code=response.status_code,
+            )
+        elif log.isEnabledFor(logging.DEBUG):
             log.debug(
                 'end rotki api',
                 method=request.method,

@@ -73,7 +73,8 @@ requires Pairing again. The complete transition table is executable in
 ## Protocol and Capability negotiation
 
 `GET /api/1/companion/protocol` requires no credential or version header and returns the
-Engine's supported Companion Protocol versions plus independently versioned Capabilities:
+Engine's supported Companion Protocol versions plus the independently versioned Capabilities
+implemented and currently available in that running Engine. The complete v1 example is:
 
 ```json
 {
@@ -121,6 +122,12 @@ are ignored. A missing or too-old Capability disables only its dependent functio
 `device_sessions` prevents Pairing/online authorization, while an authenticated offline
 Snapshot remains available whenever already stored. A breaking contract requires a new
 protocol version or Capability name rather than redefining an existing version.
+
+The registry above is not a promise that a partially implemented or degraded Engine advertises
+every entry. The discovery response is a runtime subset: a staged Engine may return an empty
+`capabilities` object, and the Engine must omit a Capability whenever its complete route surface
+or required authority is unavailable. It must never advertise future endpoints from vocabulary
+alone.
 
 No shared Protocol version, a legacy 404 for `/companion/protocol`, or missing/too-old
 `device_sessions` enters the root `incompatible` state. Missing another Capability is not a

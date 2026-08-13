@@ -8,6 +8,7 @@ on:
       - '!mobile/spikes/**'
       - 'rotkehlchen/errors/serialization.py'
       - 'rotkehlchen/fval.py'
+      - 'rotkehlchen/api/companion/generated_protocol.py'
       - 'tools/scripts/generate_companion_protocol_vocabulary.py'
   push:
     branches:
@@ -22,6 +23,7 @@ on:
       - '!mobile/spikes/**'
       - 'rotkehlchen/errors/serialization.py'
       - 'rotkehlchen/fval.py'
+      - 'rotkehlchen/api/companion/generated_protocol.py'
       - 'tools/scripts/generate_companion_protocol_vocabulary.py'
   workflow_dispatch: { }
 

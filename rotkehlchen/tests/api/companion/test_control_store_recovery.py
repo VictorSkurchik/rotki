@@ -394,7 +394,7 @@ def test_rest_api_disables_companion_when_control_store_is_unavailable(
     ):
         rest_api = RestAPI(rotkehlchen=rotki)
 
-    assert rest_api.control_store is None
+    assert rest_api.companion_service.health_snapshot().available is False
     rotki.start.assert_called_once_with()
     assert 'Companion Control Store is unavailable; Companion is disabled' in caplog.text
     assert str(tmp_path) not in caplog.text
@@ -418,7 +418,7 @@ def test_rest_api_closes_control_store_before_global_cleanup(tmp_path: Path) -> 
         rest_api = RestAPI(rotkehlchen=rotki)
         rest_api.stop()
 
-    assert rest_api.control_store is None
+    assert rest_api.companion_service.health_snapshot().available is False
     assert events.call_args_list == [
         (('control_store_closed',), {}),
         (('global_db_cleaned',), {}),
