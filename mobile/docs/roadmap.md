@@ -208,13 +208,15 @@ bump the database version for this slice. Touchpoints include:
   `rotkehlchen/db/upgrades/v52_v53.py` upgrade;
 - the singleton encrypted `profile_metadata` record and internal
   `DBHandler.get_profile_id()` accessor in `rotkehlchen/db/`;
-- upgrade, backup/restore, collision, and non-exposure API tests.
+- upgrade, backup/restore, independent-generation, lineage, and non-exposure API tests.
 
 The value is generated once by a cryptographically secure random source and stored as
 exactly 32 raw bytes. It is not derived from the username or Profile contents, is never
 returned by normal Profile-list, settings, database-info, login, or diagnostic APIs, and
 remains stable through restarts and ordinary DB backups. Distinct Profiles must receive
-distinct values in collision-regression tests; the identifier itself grants no authority.
+distinct values when independently created; a restored or cloned Profile that preserves
+the value intentionally remains in the same authorization lineage. The identifier itself
+grants no authority.
 
 Implementation status (2026-08-13): complete locally; hosted validation pending. Fresh
 Profiles and the existing unreleased v52-to-v53 upgrade now create one constrained
@@ -225,8 +227,9 @@ upgrade suite and the focused identity, schema, backup, atomic-rollback, and API
 tests pass, including stable reopen/backup bytes, distinct independently created Profiles,
 deterministic migration generation, malformed or missing metadata, and non-exposure through
 the ordinary users, login, settings, info, and database-info responses. Ruff and Pyright
-pass for the affected backend files. E1.2 owns cross-Profile collision rejection when copied
-IDs first share the Control Store.
+pass for the affected backend files. A restore or concurrent clone retains the same Profile
+ID and therefore the same Device Session authorization lineage; Profile ID alone cannot
+distinguish those copies, so E1.2 must neither reject them as collisions nor rotate identity.
 
 ### E1.2 — Migrated `control.db`
 
@@ -241,12 +244,41 @@ The store must:
 - be readable while the user DB is locked;
 - contain no Profile name, password, private key, bearer token, or portfolio data;
 - serialize writes and recover cleanly after interruption;
-- preserve a harmless revoked/tombstone identity only as needed for audit and generic
-  unauthorized responses.
+- atomically delete a revoked Device Session's public key and algorithm, retain its
+  non-authorizing audit identity and immutable revocation timestamp indefinitely in version
+  1, and never reauthorize or reuse that identity;
+- derive record state from authorization facts, return unknown and revoked lookup outcomes
+  indistinguishably, and order equal-time records by decoded unsigned Device Session ID
+  bytes rather than their Base64URL text;
+- fail closed on corruption, malformed current schema, and unsupported future versions:
+  ordinary Engine use remains available, but Companion authorization is disabled and the
+  `device_sessions` Capability is omitted instead of recreating the database or returning
+  `not_authorized`.
+
+The host-local Control Store is excluded from automatic Profile backup, premium
+synchronization, and development-instance seed copying. Restoring a Profile preserves its
+authorization lineage; restoring an old Control Store is unsupported outside an explicit,
+consistent whole-host recovery because it can resurrect later-revoked authority. Persist no
+trusted Engine origin in this store: disposable Pairing and Challenge state captures the
+canonical origin from the trusted forwarding boundary, and challenge creation re-derives it
+after restart. An Engine restart invalidates every outstanding Pairing without changing
+durable Device Sessions.
 
 Add focused tests under `rotkehlchen/tests/api/companion/`, including migration fixtures,
-concurrent registration/revocation, corruption behavior, and assertions over actual table
-contents.
+concurrent registration/revocation, strict P-256 point and Unicode-label validation,
+byte-ordering fixtures, backup/seed exclusion, corruption behavior, and assertions over
+actual table contents.
+
+Implementation status (2026-08-13): complete locally; hosted validation pending. The
+RestAPI-owned store is created under `global/control.db` before the Engine main loop, stays
+available across Profile locks and switches, and closes after API task cancellation. Its
+strict v1 schema, forward-only transactional upgrade runner, serialized WAL/FULL writes,
+P-256 and Unicode validation, immutable revoked audit rows, runtime fail-closed behavior,
+and redacted value objects are covered by the companion suite. The suite also exercises
+fresh and interrupted creation, synthetic upgrade rollback, corruption and future-schema
+refusal without rewriting, raw-byte ordering, collision retry, concurrency, lifecycle, and
+API integration. Static review and a focused predicate check cover dev-seed exclusion;
+Ruff, MyPy, Pyright, Pylint, compileall, and focused API regressions pass.
 
 ### E1.3 — Capability, Pairing, challenge, and Access Session endpoints
 

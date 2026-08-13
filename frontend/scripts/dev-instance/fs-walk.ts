@@ -6,10 +6,20 @@ import { errorMessage } from './format';
 const logger = createDevLogger('dev-instance:fs-walk');
 
 /**
- * Files we never carry over from a live rotki data dir: SQLite WAL/SHM
- * companion files (carrying them would corrupt the seeded DB) and live logs.
+ * Files we never carry over from a live rotki data dir: the host-local Companion
+ * authorization store, SQLite journal/WAL/SHM companion files (carrying them would
+ * corrupt the seeded DB), and live logs.
  */
-const SEED_HARD_SKIP_PATTERNS = [/\.log$/i, /\.sqlite-wal$/i, /\.sqlite-shm$/i, /\.db-wal$/i, /\.db-shm$/i];
+const SEED_HARD_SKIP_PATTERNS = [
+  /^control\.db(?:$|[-.])/i,
+  /\.log$/i,
+  /\.sqlite-wal$/i,
+  /\.sqlite-shm$/i,
+  /\.sqlite-journal$/i,
+  /\.db-wal$/i,
+  /\.db-shm$/i,
+  /\.db-journal$/i,
+];
 const SEED_HARD_SKIP_DIRS = new Set(['logs']);
 
 /** Soft-skipped: not copied by default; pass `includeBackups: true` to opt in. */

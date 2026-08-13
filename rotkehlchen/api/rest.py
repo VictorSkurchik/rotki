@@ -26,6 +26,8 @@ from rotkehlchen.accounting.export.csv import (
 )
 from rotkehlchen.accounting.structures.balance import Balance, BalanceSheet, BalanceType
 from rotkehlchen.accounting.structures.processed_event import AccountingEventExportType
+from rotkehlchen.api.companion.control_store import ControlStore
+from rotkehlchen.api.companion.types import ControlStoreUnavailable
 from rotkehlchen.api.rest_helpers.downloads import register_post_download_cleanup
 from rotkehlchen.api.rest_helpers.wrap import calculate_wrap_score
 from rotkehlchen.api.services.accounting import AccountingService
@@ -456,6 +458,16 @@ class RestAPI:
         self.transactions_service = TransactionsService(rotkehlchen)
         self.user_data_service = UserDataService(rotkehlchen)
         self.stop_event = threading.Event()
+        try:
+            self.control_store: ControlStore | None = ControlStore.at_data_directory(
+                self.rotkehlchen.data_dir,
+            )
+        except ControlStoreUnavailable:
+            # This authority must never be treated as empty: doing so could authorize a
+            # revoked Device Session or return terminal not_authorized to a valid Client.
+            # E1.3 omits the Companion capability while the store is unavailable.
+            self.control_store = None
+            log.error('Companion Control Store is unavailable; Companion is disabled')
         self.main_loop_task = self.rotkehlchen.start()
         self.main_loop_task.add_done_callback(self._handle_task_death)
         self.task_lock = threading.Semaphore()
@@ -670,6 +682,12 @@ class RestAPI:
         self.main_loop_task.join()
         log.debug('Waited for the main loop. Cancelling api tasks')
         self._cancel_api_tasks(reason='Cancelled due to shutdown')
+        if self.control_store is not None:
+            try:
+                self.control_store.close()
+            except ControlStoreUnavailable:
+                log.error('Failed to close the Companion Control Store cleanly')
+            self.control_store = None
         log.debug('Cleaning up global DB')
         GlobalDBHandler().cleanup()
         log.debug('Shutdown completed')

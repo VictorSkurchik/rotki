@@ -13,9 +13,10 @@ import pytest
 import requests
 
 from rotkehlchen.accounting.accountant import Accountant
+from rotkehlchen.api.companion.schema import CONTROL_DB_NAME
 from rotkehlchen.config import default_data_directory
 from rotkehlchen.constants import ONE
-from rotkehlchen.constants.misc import USERSDIR_NAME
+from rotkehlchen.constants.misc import GLOBALDIR_NAME, USERSDIR_NAME
 from rotkehlchen.db.updates import RotkiDataUpdater
 from rotkehlchen.externalapis.alchemy import Alchemy
 from rotkehlchen.externalapis.coingecko import Coingecko
@@ -71,6 +72,13 @@ def fixture_data_dir(use_clean_caching_directory, tmpdir_factory, worker_id) -> 
         data_directory.mkdir(parents=True, exist_ok=True)
         # But always reset users
         shutil.rmtree(data_directory / USERSDIR_NAME, ignore_errors=True)
+        # API fixtures share this cache only for the expensive global asset DB. Companion
+        # authorization is test-owned state and must not leak between otherwise independent
+        # API tests once E1.3 starts registering Device Sessions.
+        for suffix in ('', '-wal', '-shm'):
+            (data_directory / GLOBALDIR_NAME / f'{CONTROL_DB_NAME}{suffix}').unlink(
+                missing_ok=True,
+            )
 
         yield data_directory
 

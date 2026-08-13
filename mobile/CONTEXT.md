@@ -37,11 +37,14 @@ An encrypted collection of one user's portfolio data, credentials, preferences, 
 _Avoid_: Account, database
 
 **Profile ID**:
-A cryptographically random stable 256-bit identifier stored as 32 raw bytes in a Profile's
-encrypted metadata. It reveals neither the Profile name nor its contents, binds Device
-Sessions to the correct Profile, and is never part of the ordinary public API. It is an
-internal identity, not an authentication secret.
+A stable opaque identity for one Profile Lineage. It reveals neither the Profile name nor
+its contents and is an internal identity rather than an authentication secret.
 _Avoid_: Username, Profile name
+
+**Profile Lineage**:
+A Profile and every restore or clone that preserves its Profile ID. All members share one
+Device Session authorization domain even when more than one copy exists concurrently.
+_Avoid_: Independent Profile copy, username
 
 **Profile Mismatch**:
 A reachable Engine state in which the Profile bound to a Client's Device Session is not the Profile currently open on that Engine.
@@ -50,6 +53,11 @@ _Avoid_: Revocation, Locked Engine
 **Device Session**:
 A durable, independently revocable authorization for one Client installation and Profile, represented by its registered Device Key rather than a reusable bearer credential.
 _Avoid_: Login, global session
+
+**Revoked Device Session**:
+A former Device Session whose registered Device Key authority has been removed while its
+non-authorizing identity remains for the owner's device audit.
+_Avoid_: Logged-out Client, expired Access Session
 
 **Device Session ID**:
 An Engine-generated opaque 256-bit identifier used to look up one Device Session without exposing its public key, Profile binding, or authorization state. It is high entropy but is not an authentication secret.
@@ -71,8 +79,13 @@ _Avoid_: Full API access, hidden UI
 An Engine-local durable store for non-secret authorization metadata needed before a Profile is unlocked, including registered Device Keys and revocation state.
 _Avoid_: User database, global database, session database
 
+**Engine Origin**:
+The canonical, system-trusted HTTPS origin that identifies an Engine relationship during
+Pairing and Device proof. It is not a user-authored Engine label or a separate WebSocket URL.
+_Avoid_: Engine label, API base path, WebSocket origin
+
 **Pairing**:
-A one-time approval flow in which an authorized Client grants a new Client installation its own Device Session.
+A disposable one-time approval flow in which an authorized Client grants a new Client installation its own Device Session.
 _Avoid_: Login, password sharing
 
 **Unpair**:

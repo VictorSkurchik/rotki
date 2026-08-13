@@ -128,6 +128,11 @@ failed discovery response: the Client disables only that feature. If a Client ne
 calls a recognized route whose required Capability was not advertised at the negotiated
 version, the Engine returns `426 incompatible_protocol` without Profile data.
 
+If the Engine cannot open or fully validate its Control Store, it remains available for
+ordinary Full Client operation but omits `device_sessions`. It does not recreate the store,
+rotate registrations, or translate storage failure into `not_authorized`; the Client enters
+`incompatible` and retains any local Device Session relationship and offline Snapshot.
+
 Engine and Client application versions are diagnostic metadata only and never substitute
 for this negotiation. Contract tests cover no shared protocol version, missing each required
 Capability, a higher unknown Capability, and legacy Engine 404 behavior.
@@ -185,10 +190,11 @@ system-trusted HTTPS origin observed through the trusted Starling forwarding bou
 has no userinfo, path, query, fragment, trailing slash, or separate WebSocket address.
 
 The QR contains no Profile ID or name, device label, portfolio data, certificate or pin,
-application version, Access Session, or long-lived secret. The Pairing record binds its
-credential server-side to the open Profile and exact canonical origin. The browser receives
-the plaintext only in the redacted `POST /pairings` response and renders the Engine-provided
-payload without reconstructing fields.
+application version, Access Session, or long-lived secret. The disposable Pairing record
+binds its credential server-side to the open Profile and exact canonical origin. The origin
+is not copied into the durable Control Store. The browser receives the plaintext only in
+the redacted `POST /pairings` response and renders the Engine-provided payload without
+reconstructing fields.
 
 The scanner accepts at most 2,048 UTF-8 bytes and rejects duplicate keys, invalid UTF-8,
 wrong required types, non-canonical identifiers, an unknown `kind` or `format_version`, an
@@ -219,11 +225,13 @@ Content-Type: application/json
 
 `platform` is the closed version-1 enum `android | ios` and is descriptive, never an
 authorization input. `device_label` contains 1 through 64 Unicode scalar values and at most
-256 UTF-8 bytes, has no control characters or leading/trailing whitespace, and is returned
-byte-for-byte without Unicode normalization. The Engine verifies the Pairing ID, credential
-hash, expiry, origin, open Profile binding, idempotency fingerprint, algorithm identifier,
-key encoding, and label constraints before atomically consuming Pairing and committing the
-Device Session. Malformed input does not partially consume or persist a registration.
+256 UTF-8 bytes. It rejects lone surrogates, leading or trailing Unicode whitespace, and
+characters in the Unicode `Control` (`Cc`), `Format` (`Cf`), `Line_Separator` (`Zl`), or
+`Paragraph_Separator` (`Zp`) general categories, and is returned byte-for-byte without
+Unicode normalization. The Engine verifies the Pairing ID, credential hash, expiry, origin,
+open Profile binding, idempotency fingerprint, algorithm identifier, key encoding, and
+label constraints before atomically consuming Pairing and committing the Device Session.
+Malformed input does not partially consume or persist a registration.
 
 Success is `201 Created` with this exact result shape:
 
@@ -255,11 +263,11 @@ The Client keeps the credential only in process memory. The Engine stores only a
 cryptographic hash of the credential together with its Device Session binding, Companion
 Scope, creation time, and expiry in a disposable in-memory store.
 
-An Engine restart invalidates every Access Session without affecting Device Sessions or
-Pairing. There is no refresh token: renewal obtains a new single-use challenge and repeats
-Device Key proof. Every authenticated request checks both the Access Session record and
-the current authorization of its bound Device Session, allowing revocation to take effect
-immediately.
+An Engine restart invalidates every Access Session and every outstanding Pairing without
+affecting Device Sessions. There is no refresh token: renewal obtains a new single-use
+challenge and repeats Device Key proof. Every authenticated request checks both the Access
+Session record and the current authorization of its bound Device Session, allowing
+revocation to take effect immediately.
 
 ### Client lifecycle
 
@@ -290,6 +298,17 @@ Unknown and revoked Device Session IDs produce the same stable `not_authorized` 
 expose no existence or Profile metadata. The 256-bit random namespace prevents practical
 enumeration; implementations must additionally avoid observably different response bodies
 for unknown and revoked records.
+
+The durable Profile binding uses the Profile ID. Backup, restore, and concurrent clones
+that preserve one Profile ID are intentionally one authorization lineage; the Engine cannot
+and does not reject those copies as collisions or silently rotate their identity. On the
+same Engine Host they match the same Device Sessions. Another host has an independent
+Control Store and therefore requires Pairing unless its authority was restored separately.
+
+Automatic Profile backups, premium synchronization, and development-instance seed copies
+exclude the Control Store. Restoring an older copy of this host-level authorization database
+could resurrect a Device Session revoked after the snapshot, so such a restore is unsupported
+except as an explicit, consistent whole-host recovery.
 
 Challenge creation is a pre-session lookup stage, not bearer authentication:
 
@@ -367,8 +386,12 @@ nonce                             // 32 raw random bytes
 expires_at                        // uint64_be Unix epoch seconds
 ```
 
-The origin is the canonical HTTPS origin stored during Pairing, with no path, query, or
-trailing slash. The Client signs the decoded binary identifier and nonce values, not their
+The origin is the canonical HTTPS origin captured from the trusted request and forwarding
+boundary when the Challenge is created, with no path, query, or trailing slash. It is held
+only with disposable Pairing or Challenge state, never accepted from the proof request and
+never read from the Control Store. The Client signs using the canonical origin it retained
+from Pairing; if the trusted Engine origin has changed, proof fails and a new Pairing is
+required. The Client signs the decoded binary identifier and nonce values, not their
 wire-encoded strings. It copies `expires_at` from the challenge response as an integer; the
 Engine remains authoritative for expiry.
 
@@ -2126,10 +2149,20 @@ The canonical Device Session representation is:
 `state` is `authorized | revoked`. Authorized records require `revoked_at: null`; revoked
 records require an immutable integer `revoked_at`. `last_seen_at` is nullable until the first
 successful proof and otherwise records the most recent successful proof, not arbitrary
-traffic. `GET /device-sessions` returns
+traffic. All three timestamps are non-negative signed 64-bit Unix epoch seconds. Neither
+mutable timestamp moves backward; if the Engine wall clock regresses, it clamps the new
+timestamp to the record's durable timeline so that revocation can never be blocked by clock
+skew. The first revocation atomically removes the public key and algorithm and records
+`revoked_at`; version 1 retains the remaining ID, Profile binding, label, platform, and
+timestamps indefinitely for the owner's audit. That record can never be reauthorized,
+renamed, or updated by later proof, and its Device Session ID is never reused. The wire
+`state` is derived from the revocation facts rather than stored as independent state.
+
+`GET /device-sessions` returns
 `{"result":{"device_sessions":[...]},"message":""}` for the open Profile, including
 revoked records retained for the owner's device audit, ordered by `paired_at` descending and
-then `device_session_id` ascending.
+then `device_session_id` ascending by its decoded unsigned 32-byte lexicographic value. The
+Base64URL text is a wire representation and is never the ordering key.
 
 Both rename routes accept exactly `{"device_label":"..."}` and return `200 OK` with
 `{"result":{"device_session":<Device Session>},"message":""}`. Both revoke routes
@@ -2299,10 +2332,10 @@ Refresh operation and its replay record expire together after 15 minutes or earl
 eviction. Reuse after that boundary is outside the replay guarantee; a Client never reuses
 an old key for a new explicit action.
 
-An Engine restart may discard these replay records and never persists Pairing plaintext or
-an Access bearer to recover them. A Client that cannot recover a Pairing result creates a
-new Pairing; the Full Client can revoke any harmless stale Device Session. This exception is
-tested and does not relax credential storage policy.
+An Engine restart discards every outstanding Pairing and replay record and never persists
+Pairing plaintext or an Access bearer to recover them. A Client that cannot recover a
+Pairing result creates a new Pairing; the Full Client can revoke any harmless stale Device
+Session. This exception is tested and does not relax credential storage policy.
 
 `POST /challenges` and `POST /access-sessions` do not use idempotency caching. If a challenge
 response is lost, the Client requests a new challenge. If a proof response is lost, its

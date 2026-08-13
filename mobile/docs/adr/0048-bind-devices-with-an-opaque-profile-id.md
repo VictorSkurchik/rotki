@@ -13,3 +13,10 @@ It is copied into the Control Store only when binding a public Device Key. Autho
 compares the opaque bytes after unlock, while Profile names, portfolio contents, and
 credentials never enter the Control Store; the mobile Client uses a local user-chosen Engine
 label rather than exposing or depending on the Profile name.
+
+Preserving the identifier through backup and restore deliberately defines authorization
+lineage: a restored Profile and any concurrently running clone with the same Profile ID are
+the same authorization domain. The identifier alone cannot distinguish those copies, so the
+Engine neither attempts a cross-copy collision rejection nor silently rotates an identity.
+A future workflow that needs an independent copy must explicitly mint a new Profile ID and
+require new Device Session bindings.
