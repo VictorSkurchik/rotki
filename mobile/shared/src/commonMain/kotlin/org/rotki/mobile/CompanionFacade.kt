@@ -1,6 +1,10 @@
 package org.rotki.mobile
 
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.rotki.mobile.auth.PairingFlow
+import org.rotki.mobile.auth.protocol.PairingQr
+import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.state.CompanionCoordinator
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionStatus
@@ -19,6 +23,8 @@ public class CompanionFacade internal constructor(
     )
 
     private val coordinator: CompanionCoordinator = CompanionCoordinator(initialStatus)
+    private val pendingPairingAttempt: MutableStateFlow<PendingPairingAttempt?> =
+        MutableStateFlow(null)
 
     public val status: StateFlow<CompanionStatus> = coordinator.status
 
@@ -32,30 +38,78 @@ public class CompanionFacade internal constructor(
             )
     }
 
-    public fun beginPairing(): CompanionTransitionOutcome =
+    internal fun beginPairing(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.ACCEPT_PAIRING_QR)
 
-    public fun lock(): CompanionTransitionOutcome =
-        coordinator.transition(CompanionTransitionEvent.BACKGROUND_OR_SYSTEM_LOCK)
+    internal fun acceptPairing(pairingQr: PairingQr): CompanionTransitionOutcome {
+        val attempt = PendingPairingAttempt(pairingQr)
+        if (!pendingPairingAttempt.compareAndSet(expect = null, update = attempt)) {
+            return CompanionTransitionOutcome.Rejected(
+                status = status.value,
+                eventCode = CompanionTransitionEvent.ACCEPT_PAIRING_QR.code,
+            )
+        }
+        val outcome = beginPairing()
+        if (outcome !is CompanionTransitionOutcome.Applied) {
+            clearPendingPairing(attempt.token)
+        }
+        return outcome
+    }
+
+    /** One-shot internal hand-off for shared registration; never exported to native UI. */
+    internal fun takePendingPairingForConnection(): PairingQr? {
+        while (true) {
+            val current = pendingPairingAttempt.value ?: return null
+            val pairingQr = current.pairingQr ?: return null
+            val consumed = PendingPairingAttempt(
+                pairingQr = null,
+                token = current.token,
+            )
+            if (pendingPairingAttempt.compareAndSet(expect = current, update = consumed)) {
+                return pairingQr
+            }
+        }
+    }
+
+    public fun pairingFlow(): PairingFlow = PairingFlow(this)
+
+    public fun pairingFlow(clock: Clock): PairingFlow = PairingFlow(this, clock)
+
+    public fun lock(): CompanionTransitionOutcome {
+        val cancelledUnregisteredPairing = clearPendingPairingAttempt()
+        return coordinator.transition(
+            if (cancelledUnregisteredPairing) {
+                CompanionTransitionEvent.LOCAL_UNPAIR
+            } else {
+                CompanionTransitionEvent.BACKGROUND_OR_SYSTEM_LOCK
+            },
+        )
+    }
 
     public fun deviceAuthenticationSucceeded(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.DEVICE_AUTHENTICATION_SUCCEEDED)
 
-    public fun completeConnectionWithCompleteSnapshot(): CompanionTransitionOutcome =
-        coordinator.transition(
+    public fun completeConnectionWithCompleteSnapshot(): CompanionTransitionOutcome {
+        completePairingRegistration()
+        return coordinator.transition(
             CompanionTransitionEvent.PROOF_AND_COMPLETE_SNAPSHOT_RECONCILED,
         )
+    }
 
-    public fun completeConnectionWithDegradedSnapshot(): CompanionTransitionOutcome =
-        coordinator.transition(
+    public fun completeConnectionWithDegradedSnapshot(): CompanionTransitionOutcome {
+        completePairingRegistration()
+        return coordinator.transition(
             CompanionTransitionEvent.PROOF_AND_DEGRADED_SNAPSHOT_RECONCILED,
         )
+    }
 
     public fun activeRefreshReconciled(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.ACTIVE_REFRESH_RECONCILED)
 
-    public fun completeConnectionWithActiveRefresh(): CompanionTransitionOutcome =
-        coordinator.transition(CompanionTransitionEvent.PROOF_AND_ACTIVE_REFRESH_RECONCILED)
+    public fun completeConnectionWithActiveRefresh(): CompanionTransitionOutcome {
+        completePairingRegistration()
+        return coordinator.transition(CompanionTransitionEvent.PROOF_AND_ACTIVE_REFRESH_RECONCILED)
+    }
 
     public fun finishRefreshWithCompleteSnapshot(): CompanionTransitionOutcome =
         coordinator.transition(
@@ -93,8 +147,10 @@ public class CompanionFacade internal constructor(
             CompanionTransitionEvent.NO_SHARED_PROTOCOL_OR_DEVICE_SESSIONS_CAPABILITY,
         )
 
-    public fun notAuthorized(): CompanionTransitionOutcome =
-        coordinator.transition(CompanionTransitionEvent.NOT_AUTHORIZED)
+    public fun notAuthorized(): CompanionTransitionOutcome {
+        completePairingRegistration()
+        return coordinator.transition(CompanionTransitionEvent.NOT_AUTHORIZED)
+    }
 
     public fun challengeUnavailable(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.CHALLENGE_UNAVAILABLE)
@@ -102,6 +158,36 @@ public class CompanionFacade internal constructor(
     public fun retryResolvedEngineState(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.EXPLICIT_FOREGROUND_RETRY)
 
-    public fun unpair(): CompanionTransitionOutcome =
-        coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+    public fun unpair(): CompanionTransitionOutcome {
+        completePairingRegistration()
+        return coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+    }
+
+    private fun clearPendingPairing(): Unit {
+        pendingPairingAttempt.value = null
+    }
+
+    private fun completePairingRegistration(): Unit {
+        clearPendingPairing()
+    }
+
+    private fun clearPendingPairing(token: Any): Unit {
+        while (true) {
+            val current = pendingPairingAttempt.value ?: return
+            if (current.token !== token) return
+            if (pendingPairingAttempt.compareAndSet(expect = current, update = null)) return
+        }
+    }
+
+    private fun clearPendingPairingAttempt(): Boolean {
+        while (true) {
+            val current = pendingPairingAttempt.value ?: return false
+            if (pendingPairingAttempt.compareAndSet(expect = current, update = null)) return true
+        }
+    }
+
+    private class PendingPairingAttempt(
+        val pairingQr: PairingQr?,
+        val token: Any = Any(),
+    )
 }

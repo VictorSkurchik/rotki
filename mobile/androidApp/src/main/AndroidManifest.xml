@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
+        android:icon="@drawable/ic_rotki_companion"
         android:label="Rotki Companion"
+        android:roundIcon="@drawable/ic_rotki_companion"
         android:supportsRtl="true"
         android:theme="@style/Theme.RotkiCompanion"
         android:usesCleartextTraffic="false">
