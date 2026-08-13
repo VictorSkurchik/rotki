@@ -1,0 +1,269 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		110000000000000000000001 /* IOSSecurityHostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000001 /* IOSSecurityHostApp.swift */; };
+		110000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000002 /* ContentView.swift */; };
+		110000000000000000000003 /* HostModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000003 /* HostModel.swift */; };
+		110000000000000000000004 /* IOSSecuritySpike in Frameworks */ = {isa = PBXBuildFile; productRef = 190000000000000000000001 /* IOSSecuritySpike */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		120000000000000000000001 /* IOSSecurityHostApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSSecurityHostApp.swift; sourceTree = "<group>"; };
+		120000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		120000000000000000000003 /* HostModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostModel.swift; sourceTree = "<group>"; };
+		120000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		120000000000000000000005 /* IOSSecurityHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IOSSecurityHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		130000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				110000000000000000000004 /* IOSSecuritySpike in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		140000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				140000000000000000000002 /* IOSSecurityHost */,
+				140000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		140000000000000000000002 /* IOSSecurityHost */ = {
+			isa = PBXGroup;
+			children = (
+				120000000000000000000001 /* IOSSecurityHostApp.swift */,
+				120000000000000000000002 /* ContentView.swift */,
+				120000000000000000000003 /* HostModel.swift */,
+				120000000000000000000004 /* Info.plist */,
+			);
+			path = IOSSecurityHost;
+			sourceTree = "<group>";
+		};
+		140000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				120000000000000000000005 /* IOSSecurityHost.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		150000000000000000000001 /* IOSSecurityHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 180000000000000000000002 /* Build configuration list for PBXNativeTarget "IOSSecurityHost" */;
+			buildPhases = (
+				160000000000000000000001 /* Sources */,
+				130000000000000000000001 /* Frameworks */,
+				160000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = IOSSecurityHost;
+			packageProductDependencies = (
+				190000000000000000000001 /* IOSSecuritySpike */,
+			);
+			productName = IOSSecurityHost;
+			productReference = 120000000000000000000005 /* IOSSecurityHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		170000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1660;
+				LastUpgradeCheck = 1660;
+				TargetAttributes = {
+					150000000000000000000001 = {
+						CreatedOnToolsVersion = 16.6;
+					};
+				};
+			};
+			buildConfigurationList = 180000000000000000000001 /* Build configuration list for PBXProject "IOSSecurityHost" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 140000000000000000000001;
+			packageReferences = (
+				190000000000000000000002 /* XCLocalSwiftPackageReference ".." */,
+			);
+			productRefGroup = 140000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				150000000000000000000001 /* IOSSecurityHost */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		160000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		160000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				110000000000000000000001 /* IOSSecurityHostApp.swift in Sources */,
+				110000000000000000000002 /* ContentView.swift in Sources */,
+				110000000000000000000003 /* HostModel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		180000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		180000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		180000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = IOSSecurityHost/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.rotki.p03.iossecurityhost;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		180000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = IOSSecurityHost/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = org.rotki.p03.iossecurityhost;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		180000000000000000000001 /* Build configuration list for PBXProject "IOSSecurityHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				180000000000000000000003 /* Debug */,
+				180000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		180000000000000000000002 /* Build configuration list for PBXNativeTarget "IOSSecurityHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				180000000000000000000005 /* Debug */,
+				180000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		190000000000000000000002 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		190000000000000000000001 /* IOSSecuritySpike */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 190000000000000000000002 /* XCLocalSwiftPackageReference ".." */;
+			productName = IOSSecuritySpike;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 170000000000000000000001 /* Project object */;
+}
