@@ -60,7 +60,10 @@ jobs:
           validate-wrappers: true
 
       - name: Install Android compile SDK
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-37.0' \
+            'build-tools;36.0.0'
 
       - name: Verify ExactDecimal vectors
         run: python mobile/shared/tools/generate_exact_decimal_vectors.py
