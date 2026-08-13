@@ -21,7 +21,7 @@
 //! static SPA is gzip/brotli-compressed and served with cache + security headers.
 
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -65,6 +65,21 @@ const COLIBRI_PREFIX: &str = "/colibri";
 /// Internal proof added by the loopback MCP process. External clients must never
 /// be able to relay one through Starling to core.
 const MCP_BACKEND_PROOF_HEADER: &str = "x-rotki-mcp-proof";
+/// Starling-owned request metadata consumed only by rotki-core. Every inbound
+/// copy is removed before either value is derived, so possession of the public
+/// listener never lets a client impersonate the trusted proxy boundary.
+const ENGINE_ORIGIN_HEADER: &str = "x-rotki-engine-origin";
+const CLIENT_IP_HEADER: &str = "x-rotki-client-ip";
+const FORWARDED_PROTO_HEADER: &str = "x-forwarded-proto";
+const FORWARDED_FOR_HEADER: &str = "x-forwarded-for";
+const REAL_IP_HEADER: &str = "x-real-ip";
+
+/// Which upstream is allowed to receive Starling's private trust metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TrustedMetadataTarget {
+    Core,
+    Other,
+}
 
 /// How long a client may take to send a complete request head before the
 /// connection is dropped. This is the slowloris guard nginx provided by default
@@ -339,8 +354,8 @@ fn router(config: &ProxyConfig) -> Router {
     // Per-request access log in NCSA combined format, parity with nginx, whose
     // config set no `access_log` directive and so inherited `combined`. Applied
     // as the outermost layer below, which is what makes it see every request
-    // (proxied *and* static SPA, as nginx did) with its **original** URI, before
-    // the handlers rewrite it for the upstream.
+    // (proxied *and* static SPA, as nginx did) before handlers rewrite the URI.
+    // Companion paths are deliberately redacted by the logging policy.
     let access_log = from_fn_with_state(Arc::new(config.access_log.clone()), access_log_middleware);
 
     // Body-size ceiling on the proxied API routes (replaces nginx's
@@ -450,14 +465,15 @@ fn router(config: &ProxyConfig) -> Router {
 ///
 /// The request line is captured *before* `next.run`, because the proxy handlers
 /// rewrite the URI on the way to the upstream (`/colibri/health` → `/health`)
-/// and the log must record what the client actually asked for.
+/// and the log must see what the client actually asked for before applying its
+/// Companion-path redaction policy.
 async fn access_log_middleware(
     State(policy): State<Arc<access_log::AccessLog>>,
     req: Request,
     next: axum::middleware::Next,
 ) -> Response {
     // Captured before `next.run`, because the handlers rewrite the URI for the
-    // upstream and the log must record what the client actually asked for.
+    // upstream and the log must capture before applying route redaction.
     // `None` = disabled (embedded) or our own health probe: served normally,
     // just not logged.
     let entry = policy.capture(&req);
@@ -566,7 +582,13 @@ async fn proxy_core(State(state): State<ProxyState>, mut req: Request) -> Respon
     req.headers_mut().remove(MCP_BACKEND_PROOF_HEADER);
     let target = format!("http://{}{}", state.core_addr, path_and_query(&req));
     let peer = peer_addr(&req);
-    let req = req_with_target(req, target, peer, &state.trusted_proxies);
+    let req = req_with_target(
+        req,
+        target,
+        peer,
+        &state.trusted_proxies,
+        TrustedMetadataTarget::Core,
+    );
     forward(&state, req).await
 }
 
@@ -575,7 +597,13 @@ async fn proxy_colibri(State(state): State<ProxyState>, req: Request) -> Respons
     let stripped = strip_colibri_prefix(&path_and_query(&req));
     let target = format!("http://{}{}", state.colibri_addr, stripped);
     let peer = peer_addr(&req);
-    let req = req_with_target(req, target, peer, &state.trusted_proxies);
+    let req = req_with_target(
+        req,
+        target,
+        peer,
+        &state.trusted_proxies,
+        TrustedMetadataTarget::Other,
+    );
     forward(&state, req).await
 }
 
@@ -600,7 +628,13 @@ async fn proxy_mcp(State(state): State<ProxyState>, mut req: Request) -> Respons
     req.headers_mut().remove(MCP_BACKEND_PROOF_HEADER);
     let target = format!("http://{}{}", state.mcp_addr, path_and_query(&req));
     let peer = peer_addr(&req);
-    let req = req_with_target(req, target, peer, &state.trusted_proxies);
+    let req = req_with_target(
+        req,
+        target,
+        peer,
+        &state.trusted_proxies,
+        TrustedMetadataTarget::Other,
+    );
     forward(&state, req).await
 }
 
@@ -635,7 +669,16 @@ pub(crate) fn origin_matches_host(headers: &HeaderMap) -> bool {
 async fn proxy_ws(State(state): State<ProxyState>, req: Request) -> Response {
     let target = format!("http://{}{}", state.core_addr, path_and_query(&req));
     let peer = peer_addr(&req);
-    let req = req_with_target(req, target, peer, &state.trusted_proxies);
+    let req = req_with_target(
+        req,
+        target,
+        peer,
+        &state.trusted_proxies,
+        TrustedMetadataTarget::Core,
+    );
+    // WebSocket forwarding intentionally keeps `Connection: Upgrade`, but a
+    // client may also nominate arbitrary headers as hop-by-hop. The private
+    // names were removed from that list before being regenerated above.
     forward_upgrade(&state, req).await
 }
 
@@ -667,18 +710,317 @@ fn strip_colibri_prefix(path_and_query: &str) -> String {
     }
 }
 
+/// Canonicalize the external request's original `Host` into the authority used
+/// by the Companion [`Engine Origin`](../../mobile/CONTEXT.md). The caller adds
+/// the `https://` scheme only after trusted `X-Forwarded-Proto` sanitization.
+///
+/// This is intentionally stricter than an ordinary HTTP Host parser. Pairing
+/// makes the result a durable cryptographic identity, so ambiguous spellings
+/// (Unicode IDNA input, a trailing DNS dot, non-canonical ports, userinfo, or
+/// unbracketed IPv6) fail closed instead of being normalized differently by
+/// Rust, Python, Kotlin, or a reverse proxy. An already-ASCII IDNA A-label is
+/// preserved, matching the shared Client's canonical origin parser.
+fn canonical_external_authority(headers: &HeaderMap) -> Option<String> {
+    let host_value = headers.get(header::HOST)?;
+    // `HeaderMap::get` returns only the first value. Reject comma-folding and
+    // a distinct second value so no intermediary-specific Host selection can
+    // produce a different cryptographic origin.
+    if host_value.as_bytes().contains(&b',')
+        || headers.get_all(header::HOST).iter().nth(1).is_some()
+    {
+        return None;
+    }
+    canonical_authority(host_value.to_str().ok()?)
+}
+
+/// HTTP-to-WSGI adapters commonly map both `-` and `_` to `_`. Consequently
+/// all eight spellings such as `x-rotki-engine-origin`,
+/// `x_rotki-engine_origin`, and `x_rotki_engine_origin` collide in the same
+/// Flask environ key. Compare under that mapping so every attacker-controlled
+/// alias is stripped at the Starling boundary.
+fn is_wsgi_equivalent(name: &str, canonical: &str) -> bool {
+    name.len() == canonical.len()
+        && name.bytes().zip(canonical.bytes()).all(|(left, right)| {
+            let left = if left == b'-' { b'_' } else { left };
+            let right = if right == b'-' { b'_' } else { right };
+            left.eq_ignore_ascii_case(&right)
+        })
+}
+
+fn is_starling_private_header(name: &str) -> bool {
+    [
+        MCP_BACKEND_PROOF_HEADER,
+        ENGINE_ORIGIN_HEADER,
+        CLIENT_IP_HEADER,
+    ]
+    .iter()
+    .any(|canonical| is_wsgi_equivalent(name, canonical))
+}
+
+fn is_forwarding_source_header(name: &str) -> bool {
+    name.eq_ignore_ascii_case(header::HOST.as_str())
+        || [FORWARDED_PROTO_HEADER, FORWARDED_FOR_HEADER, REAL_IP_HEADER]
+            .iter()
+            .any(|canonical| is_wsgi_equivalent(name, canonical))
+}
+
+fn strip_starling_private_headers(headers: &mut HeaderMap) {
+    let aliases: Vec<HeaderName> = headers
+        .keys()
+        .filter(|name| is_starling_private_header(name.as_str()))
+        .cloned()
+        .collect();
+    for alias in aliases {
+        headers.remove(alias);
+    }
+}
+
+/// Remove non-canonical forwarding aliases before the request reaches a WSGI
+/// adapter. Their presence also makes the trusted input ambiguous: Starling
+/// must not choose one spelling while Python later observes another.
+fn strip_forwarding_source_aliases(headers: &mut HeaderMap) {
+    let aliases: Vec<HeaderName> = headers
+        .keys()
+        .filter(|name| {
+            [FORWARDED_PROTO_HEADER, FORWARDED_FOR_HEADER, REAL_IP_HEADER]
+                .iter()
+                .any(|canonical| {
+                    name.as_str() != *canonical && is_wsgi_equivalent(name.as_str(), canonical)
+                })
+        })
+        .cloned()
+        .collect();
+    for alias in aliases {
+        headers.remove(alias);
+    }
+}
+
+fn header_field_is_ambiguous(headers: &HeaderMap, name: &str) -> bool {
+    let mut values = headers.get_all(name).iter();
+    let Some(first) = values.next() else {
+        return false;
+    };
+    first.to_str().is_err() || values.next().is_some()
+}
+
+/// Sanitized replacement for all inbound `Connection` field-lines. Security
+/// inputs named as hop-by-hop cannot be trusted for this request; private names
+/// are always removed so a real WebSocket's surviving `Connection: Upgrade`
+/// cannot make core discard Starling's regenerated metadata.
+struct SanitizedConnection {
+    values: Vec<HeaderValue>,
+    forwarding_source_nominated: bool,
+}
+
+fn sanitized_connection(headers: &HeaderMap) -> SanitizedConnection {
+    let mut forwarding_source_nominated = false;
+    let mut values = Vec::new();
+    for value in headers.get_all(header::CONNECTION).iter() {
+        let Ok(value) = value.to_str() else {
+            forwarding_source_nominated = true;
+            continue;
+        };
+        let mut kept = Vec::new();
+        for token in value.split(',').map(str::trim) {
+            let Ok(name) = HeaderName::from_bytes(token.as_bytes()) else {
+                // An invalid/empty token can hide an intermediary-specific
+                // interpretation. Preserve no such token and fail closed.
+                forwarding_source_nominated = true;
+                continue;
+            };
+            if is_starling_private_header(name.as_str()) {
+                continue;
+            }
+            if is_forwarding_source_header(name.as_str()) {
+                forwarding_source_nominated = true;
+                continue;
+            }
+            kept.push(name.as_str().to_owned());
+        }
+        if !kept.is_empty() {
+            if let Ok(value) = HeaderValue::from_str(&kept.join(", ")) {
+                values.push(value);
+            }
+        }
+    }
+    SanitizedConnection {
+        values,
+        forwarding_source_nominated,
+    }
+}
+
+fn replace_connection(headers: &mut HeaderMap, sanitized: SanitizedConnection) {
+    headers.remove(header::CONNECTION);
+    for value in sanitized.values {
+        headers.append(header::CONNECTION, value);
+    }
+}
+
+fn canonical_authority(authority: &str) -> Option<String> {
+    if authority.is_empty()
+        || authority.len() > 2_040
+        || !authority.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+        || authority
+            .bytes()
+            .any(|byte| matches!(byte, b'/' | b'?' | b'#' | b'@' | b'\\'))
+    {
+        return None;
+    }
+
+    let (host, port) = if let Some(bracketed) = authority.strip_prefix('[') {
+        let close = bracketed.find(']')?;
+        let address = bracketed[..close].parse::<Ipv6Addr>().ok()?;
+        if is_ipv4_mapped_ipv6(address) {
+            return None;
+        }
+        let suffix = &bracketed[close + 1..];
+        let port = match suffix.strip_prefix(':') {
+            Some(source) => canonical_port(source)?,
+            None if suffix.is_empty() => None,
+            None => return None,
+        };
+        (format!("[{address}]"), port)
+    } else {
+        let (host_source, port) = match authority.split_once(':') {
+            Some((host, source)) if !source.contains(':') => (host, canonical_port(source)?),
+            Some(_) => return None, // IPv6 must be bracketed.
+            None => (authority, None),
+        };
+        if host_source.is_empty() || host_source.ends_with('.') {
+            return None;
+        }
+
+        let host = if let Ok(address) = host_source.parse::<Ipv4Addr>() {
+            address.to_string()
+        } else {
+            // A dotted numeric value is an attempted IPv4 spelling, not a DNS
+            // name. Refuse octal/overflow/short forms rather than letting a
+            // later URL parser reinterpret them.
+            if host_source.contains('.')
+                && host_source
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || byte == b'.')
+            {
+                return None;
+            }
+            canonical_dns_name(host_source)?
+        };
+        (host, port)
+    };
+
+    let authority = match port {
+        Some(port) => format!("{host}:{port}"),
+        None => host,
+    };
+    ("https://".len() + authority.len() <= 2_048).then_some(authority)
+}
+
+fn is_ipv4_mapped_ipv6(address: Ipv6Addr) -> bool {
+    let octets = address.octets();
+    octets[..10].iter().all(|byte| *byte == 0) && octets[10..12] == [0xff, 0xff]
+}
+
+fn canonical_companion_ip(ip: IpAddr) -> Option<String> {
+    match ip {
+        IpAddr::V6(address) if is_ipv4_mapped_ipv6(address) => None,
+        _ => Some(ip.to_string()),
+    }
+}
+
+/// Resolve the source used by Companion rate limits from the explicitly trusted chain.
+///
+/// Access logging intentionally treats every private address as infrastructure, but a
+/// mobile Client may itself have a private LAN address. Skipping such an address would
+/// let a caller-supplied public prefix win. Companion therefore skips only loopback and
+/// operator-configured proxy hops while walking the complete X-Forwarded-For chain from
+/// right to left. Any malformed element fails back to the socket peer.
+fn companion_client_ip(
+    peer: Option<SocketAddr>,
+    headers: &HeaderMap,
+    trusted: &[access_log::Cidr],
+) -> Option<IpAddr> {
+    let peer_ip = peer?.ip();
+    if !is_companion_trusted_hop(peer_ip, trusted) {
+        return Some(peer_ip);
+    }
+
+    if let Some(forwarded) = headers.get(FORWARDED_FOR_HEADER) {
+        let Ok(forwarded) = forwarded.to_str() else {
+            return Some(peer_ip);
+        };
+        for candidate in forwarded.rsplit(',') {
+            let Ok(ip) = candidate.trim().parse::<IpAddr>() else {
+                return Some(peer_ip);
+            };
+            if !is_companion_trusted_hop(ip, trusted) {
+                return Some(ip);
+            }
+        }
+    }
+
+    Some(peer_ip)
+}
+
+/// Parse an explicit port into its canonical representation. `:443` is valid
+/// input at the HTTP boundary but disappears from an HTTPS origin; every other
+/// port must already be minimal decimal and fit the URI range.
+fn canonical_port(source: &str) -> Option<Option<u16>> {
+    if source.is_empty()
+        || !source.bytes().all(|byte| byte.is_ascii_digit())
+        || (source.len() > 1 && source.starts_with('0'))
+    {
+        return None;
+    }
+    let value = source.parse::<u16>().ok().filter(|value| *value != 0)?;
+    Some((value != 443).then_some(value))
+}
+
+fn canonical_dns_name(source: &str) -> Option<String> {
+    if source.len() > 253 {
+        return None;
+    }
+    let canonical = source.to_ascii_lowercase();
+    for label in canonical.split('.') {
+        let starts_alphanumeric = label
+            .as_bytes()
+            .first()
+            .map(|byte| byte.is_ascii_alphanumeric())
+            .unwrap_or(false);
+        let ends_alphanumeric = label
+            .as_bytes()
+            .last()
+            .map(|byte| byte.is_ascii_alphanumeric())
+            .unwrap_or(false);
+        if label.is_empty()
+            || label.len() > 63
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+            || !starts_alphanumeric
+            || !ends_alphanumeric
+        {
+            return None;
+        }
+    }
+    Some(canonical)
+}
+
 /// Rewrite the request URI to `target` and add the forwarding headers nginx set.
 fn req_with_target(
     mut req: Request,
     target: String,
     peer: Option<SocketAddr>,
     trusted: &[access_log::Cidr],
+    metadata_target: TrustedMetadataTarget,
 ) -> Request {
+    // Trust metadata must be derived from the external request head. In
+    // particular, capture the original Host before replacing the URI authority
+    // with core's loopback address.
+    add_forwarding_headers(&mut req, peer, trusted, metadata_target);
     match Uri::try_from(&target) {
         Ok(uri) => *req.uri_mut() = uri,
         Err(err) => warn!(%target, %err, "invalid upstream uri; forwarding original"),
     }
-    add_forwarding_headers(&mut req, peer, trusted);
     req
 }
 
@@ -690,20 +1032,126 @@ fn add_forwarding_headers(
     req: &mut Request,
     peer: Option<SocketAddr>,
     trusted: &[access_log::Cidr],
+    metadata_target: TrustedMetadataTarget,
 ) {
+    // Parse *every* Connection field-line before deriving anything. A client
+    // naming Host/X-Forwarded-* as hop-by-hop creates an ambiguous request: an
+    // intermediary may remove it at a different point than Starling does.
+    let connection = sanitized_connection(req.headers());
+    let forwarding_alias_seen = req.headers().keys().any(|name| {
+        [FORWARDED_PROTO_HEADER, FORWARDED_FOR_HEADER, REAL_IP_HEADER]
+            .iter()
+            .any(|canonical| {
+                name.as_str() != *canonical && is_wsgi_equivalent(name.as_str(), canonical)
+            })
+    });
+    let forwarding_ambiguous = connection.forwarding_source_nominated
+        || forwarding_alias_seen
+        || header_field_is_ambiguous(req.headers(), header::HOST.as_str())
+        || req
+            .headers()
+            .get(header::HOST)
+            .is_some_and(|value| value.as_bytes().contains(&b','))
+        || [FORWARDED_PROTO_HEADER, FORWARDED_FOR_HEADER, REAL_IP_HEADER]
+            .iter()
+            .any(|name| header_field_is_ambiguous(req.headers(), name));
+
+    // These names form a private Starling -> core boundary. Removal includes
+    // every '-'/'_' spelling that aliases to the same WSGI key, and happens
+    // before either trusted value is derived. It applies to colibri/MCP too, so
+    // an inbound copy can neither spoof core nor leak sideways. Forwarding
+    // aliases are likewise removed before Python can collapse them onto
+    // Starling's canonical fields.
+    strip_starling_private_headers(req.headers_mut());
+    strip_forwarding_source_aliases(req.headers_mut());
+    replace_connection(req.headers_mut(), connection);
+
+    if forwarding_ambiguous {
+        // Do not pick a preferred field-line or alias. Normalize the ordinary
+        // forwarding view to this direct hop, while Companion uses the same
+        // socket peer as its rate-limit source and omits Engine Origin.
+        req.headers_mut().remove(FORWARDED_PROTO_HEADER);
+        req.headers_mut().remove(FORWARDED_FOR_HEADER);
+        req.headers_mut().remove(REAL_IP_HEADER);
+    }
+
+    // Resolve before mutating X-Forwarded-For / X-Real-IP. Calling the resolver
+    // afterwards would see Starling's own appended hop and could silently
+    // change which address backs the source limiter. Ambiguous results are
+    // intentionally discarded below, but the one established resolver remains
+    // the source of truth for every well-formed forwarded chain.
+    let resolved_client_ip = companion_client_ip(peer, req.headers(), trusted);
+    let trusted_companion_hop = peer
+        .map(|addr| is_companion_trusted_hop(addr.ip(), trusted))
+        .unwrap_or(false);
+    // Access logging deliberately treats all private ranges as infrastructure.
+    // That is too broad for an authorization boundary: port publishing can make
+    // a direct connection appear to come from a private bridge gateway. Unless
+    // that hop was explicitly configured (or is loopback), ignore its claimed
+    // chain and rate-limit the socket peer itself.
+    let forwarded_client_ip = if trusted_companion_hop && !forwarding_ambiguous {
+        resolved_client_ip
+    } else {
+        None
+    };
+    let client_ip = forwarded_client_ip
+        .and_then(canonical_companion_ip)
+        .or_else(|| peer.map(|addr| addr.ip()).and_then(canonical_companion_ip));
+    let external_authority = (metadata_target == TrustedMetadataTarget::Core
+        && !forwarding_ambiguous)
+        .then(|| canonical_external_authority(req.headers()))
+        .flatten();
+
     sanitize_forwarded_proto(req, peer, trusted);
-    let Some(peer) = peer else { return };
+
+    if metadata_target == TrustedMetadataTarget::Core {
+        if let Some(client_ip) = client_ip {
+            if let Ok(value) = HeaderValue::from_str(&client_ip) {
+                req.headers_mut().insert(CLIENT_IP_HEADER, value);
+            }
+        }
+        // Missing/untrusted HTTP scheme or an invalid Host omits the origin.
+        // Core treats absence as Companion-unavailable; there is deliberately
+        // no attacker-controllable "invalid" sentinel and no HTTP fallback.
+        if trusted_companion_hop
+            && !forwarding_ambiguous
+            && req
+                .headers()
+                .get(FORWARDED_PROTO_HEADER)
+                .is_some_and(|value| value.as_bytes() == b"https")
+        {
+            if let Some(authority) = external_authority {
+                if let Ok(value) = HeaderValue::from_str(&format!("https://{authority}")) {
+                    req.headers_mut().insert(ENGINE_ORIGIN_HEADER, value);
+                }
+            }
+        }
+    }
+
+    let Some(peer) = peer else {
+        return;
+    };
     let ip = peer.ip().to_string();
     if let Ok(value) = HeaderValue::from_str(&ip) {
-        req.headers_mut().insert("x-real-ip", value);
+        req.headers_mut().insert(REAL_IP_HEADER, value);
     }
-    let forwarded = match req.headers().get("x-forwarded-for") {
+    let forwarded = match req.headers().get(FORWARDED_FOR_HEADER) {
         Some(existing) => format!("{}, {}", existing.to_str().unwrap_or(""), ip),
         None => ip,
     };
     if let Ok(value) = HeaderValue::from_str(&forwarded) {
-        req.headers_mut().insert("x-forwarded-for", value);
+        req.headers_mut().insert(FORWARDED_FOR_HEADER, value);
     }
+}
+
+/// Companion authorization metadata has a narrower trust root than the access
+/// log. Loopback is an unambiguous local hop; every non-loopback terminator must
+/// be explicitly named with `--trusted-proxy`, including private Docker bridge
+/// addresses. This avoids treating a port-publishing gateway as proof that a
+/// request traversed the operator's HTTPS terminator.
+fn is_companion_trusted_hop(ip: IpAddr, trusted: &[access_log::Cidr]) -> bool {
+    canonical_companion_ip(ip).is_some()
+        && (ip.is_loopback() || trusted.iter().any(|cidr| cidr.contains(ip)))
 }
 
 /// Replace `X-Forwarded-Proto` with a value the backends may believe.
@@ -726,19 +1174,21 @@ fn sanitize_forwarded_proto(
     peer: Option<SocketAddr>,
     trusted: &[access_log::Cidr],
 ) {
-    const HEADER: &str = "x-forwarded-proto";
     let from_trusted_hop = peer
         .map(|addr| access_log::is_trusted_hop(addr.ip(), trusted))
         .unwrap_or(false);
 
     // A trusted hop's claim is kept, but only when it is one of the two schemes
-    // that mean anything here; anything else is treated as no claim at all.
+    // that mean anything here. Multiple field-lines are ambiguous and fail
+    // closed rather than relying on HeaderMap's first-value selection.
     let claimed = from_trusted_hop
         .then(|| {
-            req.headers()
-                .get(HEADER)
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
+            let mut values = req.headers().get_all(FORWARDED_PROTO_HEADER).iter();
+            let value = values.next()?.to_str().ok()?;
+            if values.next().is_some() {
+                return None;
+            }
+            Some(value.trim())
                 // A chain appends, so the leftmost entry is the original scheme.
                 .and_then(|value| value.split(',').next())
                 .map(str::trim)
@@ -748,7 +1198,7 @@ fn sanitize_forwarded_proto(
 
     let scheme = if claimed.is_some() { "https" } else { "http" };
     req.headers_mut()
-        .insert(HEADER, HeaderValue::from_static(scheme));
+        .insert(FORWARDED_PROTO_HEADER, HeaderValue::from_static(scheme));
 }
 
 /// A small built-in HTML error page for proxy-generated gateway failures -
@@ -943,6 +1393,491 @@ mod tests {
             .map(|value| value.to_str().unwrap().to_string())
     }
 
+    #[test]
+    fn companion_engine_authorities_are_canonicalized() {
+        for (source, expected) in [
+            ("rotki.example", "rotki.example"),
+            ("ROTKI.Example", "rotki.example"),
+            ("rotki.example:443", "rotki.example"),
+            ("Rotki.Example:8443", "rotki.example:8443"),
+            ("192.0.2.1", "192.0.2.1"),
+            ("192.0.2.1:4443", "192.0.2.1:4443"),
+            ("[2001:0DB8:0:0:0:0:0:1]", "[2001:db8::1]"),
+            ("[2001:db8::1]:443", "[2001:db8::1]"),
+            ("[2001:db8::1]:8443", "[2001:db8::1]:8443"),
+            ("localhost", "localhost"),
+            ("intranet", "intranet"),
+            ("xn--rtki-5qa.example", "xn--rtki-5qa.example"),
+        ] {
+            assert_eq!(
+                canonical_authority(source).as_deref(),
+                Some(expected),
+                "unexpected canonical authority for {source}",
+            );
+        }
+    }
+
+    #[test]
+    fn ambiguous_or_noncanonical_engine_authorities_are_rejected() {
+        for source in [
+            "",
+            "rotki.example.",
+            ".rotki.example",
+            "rotki..example",
+            "-rotki.example",
+            "rotki-.example",
+            "rotki_example",
+            "rötki.example",
+            "user@rotki.example",
+            "rotki.example/path",
+            "rotki.example?query",
+            "rotki.example#fragment",
+            "rotki.example\\path",
+            "rotki.example ",
+            "rotki.example:",
+            "rotki.example:0",
+            "rotki.example:01",
+            "rotki.example:0443",
+            "rotki.example:65536",
+            "rotki.example:not-a-port",
+            "127.0.0.01",
+            "999.0.0.1",
+            "2001:db8::1",
+            "[2001:db8::1",
+            "2001:db8::1]",
+            "[2001:db8::1]suffix",
+            "[fe80::1%25eth0]",
+            "[::ffff:192.0.2.1]",
+            "[::ffff:c000:201]",
+        ] {
+            assert_eq!(
+                canonical_authority(source),
+                None,
+                "ambiguous authority was accepted: {source}",
+            );
+        }
+    }
+
+    #[test]
+    fn duplicate_host_values_cannot_select_an_engine_origin() {
+        let mut headers = HeaderMap::new();
+        headers.append(header::HOST, HeaderValue::from_static("rotki.example"));
+        headers.append(header::HOST, HeaderValue::from_static("evil.example"));
+        assert_eq!(canonical_external_authority(&headers), None);
+
+        let mut folded = HeaderMap::new();
+        folded.insert(
+            header::HOST,
+            HeaderValue::from_static("rotki.example, evil.example"),
+        );
+        assert_eq!(canonical_external_authority(&folded), None);
+    }
+
+    fn wsgi_spellings(canonical: &str) -> Vec<String> {
+        let hyphens: Vec<usize> = canonical
+            .bytes()
+            .enumerate()
+            .filter_map(|(index, byte)| (byte == b'-').then_some(index))
+            .collect();
+        (0..(1usize << hyphens.len()))
+            .map(|mask| {
+                let mut spelling = canonical.as_bytes().to_vec();
+                for (bit, index) in hyphens.iter().enumerate() {
+                    if mask & (1 << bit) != 0 {
+                        spelling[*index] = b'_';
+                    }
+                }
+                String::from_utf8(spelling).unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_wsgi_equivalent_private_header_and_nomination_is_replaced() {
+        let mut req = Request::builder()
+            .uri("/api/1/ping")
+            .header(header::HOST, "rotki.example")
+            .header(FORWARDED_PROTO_HEADER, "https")
+            .body(Body::empty())
+            .unwrap();
+        let private_spellings: Vec<String> = [
+            MCP_BACKEND_PROOF_HEADER,
+            ENGINE_ORIGIN_HEADER,
+            CLIENT_IP_HEADER,
+        ]
+        .iter()
+        .flat_map(|name| wsgi_spellings(name))
+        .collect();
+        for spelling in &private_spellings {
+            req.headers_mut().append(
+                HeaderName::from_bytes(spelling.as_bytes()).unwrap(),
+                HeaderValue::from_static("attacker-controlled"),
+            );
+        }
+        req.headers_mut().insert(
+            header::CONNECTION,
+            HeaderValue::from_str(&format!("upgrade, {}", private_spellings.join(", "))).unwrap(),
+        );
+
+        add_forwarding_headers(
+            &mut req,
+            Some("172.18.0.5:443".parse().unwrap()),
+            &[access_log::Cidr::parse("172.18.0.5").unwrap()],
+            TrustedMetadataTarget::Core,
+        );
+
+        assert_eq!(
+            req.headers().get(ENGINE_ORIGIN_HEADER).unwrap(),
+            "https://rotki.example",
+        );
+        assert_eq!(req.headers().get(CLIENT_IP_HEADER).unwrap(), "172.18.0.5");
+        assert!(!req.headers().contains_key(MCP_BACKEND_PROOF_HEADER));
+        for spelling in private_spellings {
+            if spelling != ENGINE_ORIGIN_HEADER && spelling != CLIENT_IP_HEADER {
+                assert!(
+                    !req.headers().contains_key(spelling.as_str()),
+                    "WSGI-equivalent private header survived: {spelling}",
+                );
+            }
+        }
+        assert_eq!(req.headers().get(header::CONNECTION).unwrap(), "upgrade");
+    }
+
+    fn prepared_forwarding_headers(
+        host: Option<&str>,
+        proto: Option<&str>,
+        peer: Option<&str>,
+        forwarded_for: Option<&str>,
+        trusted: &[&str],
+        target: TrustedMetadataTarget,
+    ) -> HeaderMap {
+        let mut builder = Request::builder().uri("/api/1/ping");
+        for (name, value) in [
+            (header::HOST.as_str(), host),
+            ("x-forwarded-proto", proto),
+            ("x-forwarded-for", forwarded_for),
+        ] {
+            if let Some(value) = value {
+                builder = builder.header(name, value);
+            }
+        }
+        let mut req = builder
+            .header(ENGINE_ORIGIN_HEADER, "https://attacker.example")
+            .header(CLIENT_IP_HEADER, "203.0.113.250")
+            .header(
+                header::CONNECTION,
+                format!("keep-alive, {ENGINE_ORIGIN_HEADER}, {CLIENT_IP_HEADER}"),
+            )
+            .body(Body::empty())
+            .unwrap();
+        let trusted: Vec<_> = trusted
+            .iter()
+            .map(|spec| access_log::Cidr::parse(spec).unwrap())
+            .collect();
+        add_forwarding_headers(
+            &mut req,
+            peer.map(|addr| addr.parse::<SocketAddr>().unwrap()),
+            &trusted,
+            target,
+        );
+        req.into_parts().0.headers
+    }
+
+    #[test]
+    fn core_metadata_uses_only_the_trusted_unmodified_request_head() {
+        // The private peer is an explicitly trusted reverse proxy. Resolve its
+        // original X-Forwarded-For before Starling appends the socket hop.
+        let headers = prepared_forwarding_headers(
+            Some("ROTKI.Example:443"),
+            Some("HTTPS, http"),
+            Some("172.18.0.5:443"),
+            Some("198.51.100.77"),
+            &["172.18.0.5"],
+            TrustedMetadataTarget::Core,
+        );
+        assert_eq!(
+            headers.get(ENGINE_ORIGIN_HEADER).unwrap(),
+            "https://rotki.example",
+        );
+        assert_eq!(headers.get(CLIENT_IP_HEADER).unwrap(), "198.51.100.77");
+        assert_eq!(headers.get("x-real-ip").unwrap(), "172.18.0.5");
+        assert_eq!(headers.get_all(ENGINE_ORIGIN_HEADER).iter().count(), 1,);
+        assert_eq!(headers.get_all(CLIENT_IP_HEADER).iter().count(), 1);
+        assert_eq!(headers.get(header::CONNECTION).unwrap(), "keep-alive");
+    }
+
+    #[test]
+    fn connection_nominated_forwarding_inputs_fail_closed() {
+        let mut req = Request::builder()
+            .uri("/api/1/ping")
+            .header(header::HOST, "rotki.example")
+            .header(FORWARDED_PROTO_HEADER, "https")
+            .header(FORWARDED_FOR_HEADER, "198.51.100.77")
+            .header(REAL_IP_HEADER, "198.51.100.88")
+            .header(header::CONNECTION, "keep-alive")
+            .body(Body::empty())
+            .unwrap();
+        // A distinct field-line proves we parse the complete `get_all` view,
+        // not just whichever Connection value HeaderMap returns first. Mixed
+        // WSGI spellings must not survive a real WebSocket upgrade either.
+        req.headers_mut().append(
+            header::CONNECTION,
+            HeaderValue::from_static("Host, x_forwarded_proto, x-forwarded-for, x_real_ip"),
+        );
+        add_forwarding_headers(
+            &mut req,
+            Some("172.18.0.5:443".parse().unwrap()),
+            &[access_log::Cidr::parse("172.18.0.5").unwrap()],
+            TrustedMetadataTarget::Core,
+        );
+
+        assert!(!req.headers().contains_key(ENGINE_ORIGIN_HEADER));
+        assert_eq!(req.headers().get(CLIENT_IP_HEADER).unwrap(), "172.18.0.5");
+        assert_eq!(req.headers().get(FORWARDED_PROTO_HEADER).unwrap(), "http");
+        assert_eq!(
+            req.headers().get(FORWARDED_FOR_HEADER).unwrap(),
+            "172.18.0.5"
+        );
+        assert_eq!(req.headers().get(REAL_IP_HEADER).unwrap(), "172.18.0.5");
+        assert_eq!(req.headers().get(header::CONNECTION).unwrap(), "keep-alive");
+    }
+
+    #[test]
+    fn wsgi_equivalent_forwarding_aliases_fail_closed_and_are_removed() {
+        let mut req = Request::builder()
+            .uri("/api/1/ping")
+            .header(header::HOST, "rotki.example")
+            .header(FORWARDED_PROTO_HEADER, "https")
+            .header("x_forwarded_proto", "https")
+            .header("x_forwarded_for", "198.51.100.77")
+            .header("x_real_ip", "198.51.100.88")
+            .body(Body::empty())
+            .unwrap();
+        add_forwarding_headers(
+            &mut req,
+            Some("172.18.0.5:443".parse().unwrap()),
+            &[access_log::Cidr::parse("172.18.0.5").unwrap()],
+            TrustedMetadataTarget::Core,
+        );
+
+        assert!(!req.headers().contains_key(ENGINE_ORIGIN_HEADER));
+        assert_eq!(req.headers().get(CLIENT_IP_HEADER).unwrap(), "172.18.0.5");
+        for alias in ["x_forwarded_proto", "x_forwarded_for", "x_real_ip"] {
+            assert!(!req.headers().contains_key(alias));
+        }
+    }
+
+    #[test]
+    fn multiple_forwarding_field_lines_fail_closed() {
+        for duplicated in [
+            header::HOST.as_str(),
+            FORWARDED_PROTO_HEADER,
+            FORWARDED_FOR_HEADER,
+            REAL_IP_HEADER,
+        ] {
+            let mut req = Request::builder()
+                .uri("/api/1/ping")
+                .header(header::HOST, "rotki.example")
+                .header(FORWARDED_PROTO_HEADER, "https")
+                .header(FORWARDED_FOR_HEADER, "198.51.100.77")
+                .header(REAL_IP_HEADER, "198.51.100.88")
+                .body(Body::empty())
+                .unwrap();
+            req.headers_mut().append(
+                HeaderName::from_bytes(duplicated.as_bytes()).unwrap(),
+                HeaderValue::from_static("203.0.113.99"),
+            );
+            add_forwarding_headers(
+                &mut req,
+                Some("172.18.0.5:443".parse().unwrap()),
+                &[access_log::Cidr::parse("172.18.0.5").unwrap()],
+                TrustedMetadataTarget::Core,
+            );
+
+            assert!(
+                !req.headers().contains_key(ENGINE_ORIGIN_HEADER),
+                "origin survived duplicate {duplicated} lines",
+            );
+            assert_eq!(req.headers().get(CLIENT_IP_HEADER).unwrap(), "172.18.0.5");
+            assert_eq!(req.headers().get(FORWARDED_PROTO_HEADER).unwrap(), "http");
+            assert_eq!(
+                req.headers().get_all(FORWARDED_FOR_HEADER).iter().count(),
+                1,
+            );
+        }
+    }
+
+    #[test]
+    fn ipv4_mapped_ipv6_never_crosses_the_private_boundary() {
+        let mut forwarded = Request::builder()
+            .uri("/api/1/ping")
+            .header(header::HOST, "rotki.example")
+            .header(FORWARDED_PROTO_HEADER, "https")
+            .header(FORWARDED_FOR_HEADER, "::ffff:192.0.2.1")
+            .body(Body::empty())
+            .unwrap();
+        add_forwarding_headers(
+            &mut forwarded,
+            Some("172.18.0.5:443".parse().unwrap()),
+            &[access_log::Cidr::parse("172.18.0.5").unwrap()],
+            TrustedMetadataTarget::Core,
+        );
+        // Origin is independent and remains valid; the mapped source falls
+        // back to the explicitly trusted socket peer's canonical address.
+        assert_eq!(
+            forwarded.headers().get(ENGINE_ORIGIN_HEADER).unwrap(),
+            "https://rotki.example",
+        );
+        assert_eq!(
+            forwarded.headers().get(CLIENT_IP_HEADER).unwrap(),
+            "172.18.0.5",
+        );
+
+        let mut mapped_peer = Request::builder()
+            .uri("/api/1/ping")
+            .header(header::HOST, "rotki.example")
+            .header(FORWARDED_PROTO_HEADER, "https")
+            .body(Body::empty())
+            .unwrap();
+        add_forwarding_headers(
+            &mut mapped_peer,
+            Some("[::ffff:192.0.2.1]:443".parse().unwrap()),
+            &[access_log::Cidr::parse("::ffff:192.0.2.1").unwrap()],
+            TrustedMetadataTarget::Core,
+        );
+        assert!(!mapped_peer.headers().contains_key(ENGINE_ORIGIN_HEADER));
+        assert!(!mapped_peer.headers().contains_key(CLIENT_IP_HEADER));
+    }
+
+    #[test]
+    fn companion_source_resolution_does_not_skip_a_private_client() {
+        let peer = Some("172.18.0.5:443".parse().unwrap());
+        let trusted = [access_log::Cidr::parse("172.18.0.5").unwrap()];
+        let mut headers = HeaderMap::new();
+        // The caller controls the left prefix. The TLS terminator appends the
+        // real mobile Client, which can legitimately be on an RFC1918 LAN.
+        headers.insert(
+            FORWARDED_FOR_HEADER,
+            HeaderValue::from_static("203.0.113.66, 192.168.1.42"),
+        );
+        assert_eq!(
+            companion_client_ip(peer, &headers, &trusted),
+            Some("192.168.1.42".parse().unwrap()),
+        );
+
+        // Only a hop explicitly declared by the operator is skipped. A private
+        // address is not implicitly infrastructure for Companion authorization.
+        headers.insert(
+            FORWARDED_FOR_HEADER,
+            HeaderValue::from_static("203.0.113.66, 192.168.1.42, 10.0.0.9"),
+        );
+        let trusted = [
+            access_log::Cidr::parse("172.18.0.5").unwrap(),
+            access_log::Cidr::parse("10.0.0.9").unwrap(),
+        ];
+        assert_eq!(
+            companion_client_ip(peer, &headers, &trusted),
+            Some("192.168.1.42".parse().unwrap()),
+        );
+    }
+
+    #[test]
+    fn malformed_companion_source_chain_falls_back_to_socket_peer() {
+        let peer = Some("172.18.0.5:443".parse().unwrap());
+        let trusted = [
+            access_log::Cidr::parse("172.18.0.5").unwrap(),
+            access_log::Cidr::parse("10.0.0.9").unwrap(),
+        ];
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            FORWARDED_FOR_HEADER,
+            HeaderValue::from_static("192.168.1.42, malformed, 10.0.0.9"),
+        );
+        assert_eq!(
+            companion_client_ip(peer, &headers, &trusted),
+            Some("172.18.0.5".parse().unwrap()),
+        );
+
+        headers.remove(FORWARDED_FOR_HEADER);
+        headers.insert(REAL_IP_HEADER, HeaderValue::from_static("203.0.113.66"));
+        assert_eq!(
+            companion_client_ip(peer, &headers, &trusted),
+            Some("172.18.0.5".parse().unwrap()),
+        );
+    }
+
+    #[test]
+    fn core_origin_is_omitted_when_https_or_host_is_not_trusted() {
+        let untrusted = prepared_forwarding_headers(
+            Some("rotki.example"),
+            Some("https"),
+            Some("203.0.113.9:443"),
+            None,
+            &[],
+            TrustedMetadataTarget::Core,
+        );
+        assert!(!untrusted.contains_key(ENGINE_ORIGIN_HEADER));
+        assert_eq!(untrusted.get(CLIENT_IP_HEADER).unwrap(), "203.0.113.9");
+
+        // A published Docker port may present a direct caller as the private
+        // bridge gateway. The access-log sanitizer intentionally trusts that
+        // range and therefore keeps https, but Companion metadata requires an
+        // explicit proxy entry: neither forged forwarding address is believed
+        // and no Engine Origin is minted.
+        let private_bridge_direct = prepared_forwarding_headers(
+            Some("rotki.example"),
+            Some("https"),
+            Some("172.18.0.1:443"),
+            Some("198.51.100.77"),
+            &[],
+            TrustedMetadataTarget::Core,
+        );
+        assert_eq!(
+            private_bridge_direct.get("x-forwarded-proto").unwrap(),
+            "https",
+        );
+        assert!(!private_bridge_direct.contains_key(ENGINE_ORIGIN_HEADER));
+        assert_eq!(
+            private_bridge_direct.get(CLIENT_IP_HEADER).unwrap(),
+            "172.18.0.1",
+        );
+
+        let malformed_host = prepared_forwarding_headers(
+            Some("user@rotki.example"),
+            Some("https"),
+            Some("172.18.0.5:443"),
+            None,
+            &["172.18.0.5"],
+            TrustedMetadataTarget::Core,
+        );
+        assert!(!malformed_host.contains_key(ENGINE_ORIGIN_HEADER));
+
+        let no_peer = prepared_forwarding_headers(
+            Some("rotki.example"),
+            Some("https"),
+            None,
+            None,
+            &[],
+            TrustedMetadataTarget::Core,
+        );
+        assert!(!no_peer.contains_key(ENGINE_ORIGIN_HEADER));
+        assert!(!no_peer.contains_key(CLIENT_IP_HEADER));
+    }
+
+    #[test]
+    fn non_core_upstreams_receive_no_private_metadata() {
+        let headers = prepared_forwarding_headers(
+            Some("rotki.example"),
+            Some("https"),
+            Some("172.18.0.5:443"),
+            Some("198.51.100.77"),
+            &["172.18.0.5"],
+            TrustedMetadataTarget::Other,
+        );
+        assert!(!headers.contains_key(ENGINE_ORIGIN_HEADER));
+        assert!(!headers.contains_key(CLIENT_IP_HEADER));
+    }
+
     /// The header must never simply be passed through: core decides the session
     /// cookie's `Secure` attribute from it, and core sees every request as
     /// coming from loopback, so it cannot make this judgement itself.
@@ -1010,6 +1945,28 @@ mod tests {
         assert_eq!(
             sanitized_proto(Some("http, https"), Some("172.18.0.5:443"), &[]),
             Some("http".to_string()),
+        );
+    }
+
+    #[test]
+    fn forwarded_proto_rejects_multiple_field_lines() {
+        let mut req = Request::builder()
+            .uri("/api/1/ping")
+            .body(Body::empty())
+            .unwrap();
+        req.headers_mut().append(
+            HeaderName::from_static(FORWARDED_PROTO_HEADER),
+            HeaderValue::from_static("https"),
+        );
+        req.headers_mut().append(
+            HeaderName::from_static(FORWARDED_PROTO_HEADER),
+            HeaderValue::from_static("http"),
+        );
+        sanitize_forwarded_proto(&mut req, Some("172.18.0.5:443".parse().unwrap()), &[]);
+        assert_eq!(req.headers().get(FORWARDED_PROTO_HEADER).unwrap(), "http");
+        assert_eq!(
+            req.headers().get_all(FORWARDED_PROTO_HEADER).iter().count(),
+            1,
         );
     }
 
@@ -1210,6 +2167,83 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         port
+    }
+
+    /// A stub upstream that reports Starling's two private trust headers. It is
+    /// intentionally used through every proxy route so a handler cannot
+    /// accidentally opt colibri or MCP into the core-only boundary.
+    async fn spawn_trusted_metadata_report_upstream() -> u16 {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = Router::new().fallback(any(|req: Request| async move {
+            let value = |name: &str| {
+                req.headers()
+                    .get(name)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("<absent>")
+            };
+            format!(
+                "{}|{}",
+                value(ENGINE_ORIGIN_HEADER),
+                value(CLIENT_IP_HEADER),
+            )
+        }));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn trusted_metadata_reaches_only_core_http_and_websocket_routes() {
+        let upstream = spawn_trusted_metadata_report_upstream().await;
+        let app = router(&ProxyConfig {
+            port: 0,
+            core_port: upstream,
+            colibri_port: upstream,
+            mcp_port: upstream,
+            mcp_enabled: true,
+            frontend_dir: None,
+            max_body_bytes: 50 * 1024 * 1024,
+            access_log: access_log::AccessLog {
+                trusted_proxies: vec![access_log::Cidr::parse("172.18.0.5").unwrap()],
+                ..Default::default()
+            },
+            health: None,
+            control: None,
+        });
+
+        for (path, expected) in [
+            ("/api/1/ping", "https://rotki.example|198.51.100.77"),
+            ("/ws/notifications", "https://rotki.example|198.51.100.77"),
+            ("/colibri/health", "<absent>|<absent>"),
+            ("/mcp", "<absent>|<absent>"),
+        ] {
+            let mut req = Request::builder()
+                .uri(path)
+                .header(header::HOST, "ROTKI.Example:443")
+                .header("x-forwarded-proto", "https")
+                .header("x-forwarded-for", "198.51.100.77")
+                // Neither a spoofed value nor a Connection nomination may
+                // survive/erase Starling's regenerated core metadata.
+                .header(ENGINE_ORIGIN_HEADER, "https://attacker.example")
+                .header(CLIENT_IP_HEADER, "203.0.113.250")
+                .header(
+                    header::CONNECTION,
+                    format!("{ENGINE_ORIGIN_HEADER}, {CLIENT_IP_HEADER}"),
+                )
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(ConnectInfo("172.18.0.5:443".parse::<SocketAddr>().unwrap()));
+            assert_eq!(
+                body_string(app.clone().oneshot(req).await.unwrap()).await,
+                expected,
+                "wrong private metadata on {path}",
+            );
+        }
     }
 
     #[tokio::test]
@@ -1861,19 +2895,75 @@ mod tests {
         assert!(body_string(resp).await.contains("502"));
     }
 
-    /// A WebSocket echo upstream: accepts a connection and echoes every
-    /// text/binary frame back. Returns the ephemeral port it bound.
-    async fn spawn_ws_echo_upstream() -> u16 {
+    #[derive(Debug)]
+    struct CapturedWsMetadata {
+        engine_origin: Option<String>,
+        client_ip: Option<String>,
+        connection: Vec<String>,
+        private_aliases: Vec<String>,
+    }
+
+    /// A WebSocket echo upstream: accepts a connection, captures the real
+    /// Upgrade request head, and echoes every text/binary frame back.
+    // `accept_hdr_async` fixes the callback's large error type; this test callback
+    // only returns `Ok`, so it cannot replace or box that upstream signature.
+    #[allow(clippy::result_large_err)]
+    async fn spawn_ws_echo_upstream() -> (u16, tokio::sync::oneshot::Receiver<CapturedWsMetadata>) {
         use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::handshake::server::{
+            Request as WsRequest, Response as WsResponse,
+        };
 
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
             .unwrap();
         let port = listener.local_addr().unwrap().port();
+        let (capture_sender, capture_receiver) = tokio::sync::oneshot::channel();
+        let capture_sender = Arc::new(Mutex::new(Some(capture_sender)));
         tokio::spawn(async move {
             while let Ok((stream, _)) = listener.accept().await {
+                let capture_sender = capture_sender.clone();
                 tokio::spawn(async move {
-                    let ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+                    let ws = tokio_tungstenite::accept_hdr_async(
+                        stream,
+                        move |request: &WsRequest, response: WsResponse| {
+                            let string_header = |name: &str| {
+                                request
+                                    .headers()
+                                    .get(name)
+                                    .and_then(|value| value.to_str().ok())
+                                    .map(str::to_owned)
+                            };
+                            let metadata = CapturedWsMetadata {
+                                engine_origin: string_header(ENGINE_ORIGIN_HEADER),
+                                client_ip: string_header(CLIENT_IP_HEADER),
+                                connection: request
+                                    .headers()
+                                    .get_all(header::CONNECTION)
+                                    .iter()
+                                    .filter_map(|value| value.to_str().ok().map(str::to_owned))
+                                    .collect(),
+                                private_aliases: request
+                                    .headers()
+                                    .keys()
+                                    .filter(|name| is_starling_private_header(name.as_str()))
+                                    .filter(|name| {
+                                        !matches!(
+                                            name.as_str(),
+                                            ENGINE_ORIGIN_HEADER | CLIENT_IP_HEADER
+                                        )
+                                    })
+                                    .map(|name| name.as_str().to_owned())
+                                    .collect(),
+                            };
+                            if let Some(sender) = capture_sender.lock().unwrap().take() {
+                                let _ = sender.send(metadata);
+                            }
+                            Ok(response)
+                        },
+                    )
+                    .await
+                    .unwrap();
                     let (mut write, mut read) = ws.split();
                     while let Some(Ok(msg)) = read.next().await {
                         if (msg.is_text() || msg.is_binary()) && write.send(msg).await.is_err() {
@@ -1883,7 +2973,7 @@ mod tests {
                 });
             }
         });
-        port
+        (port, capture_receiver)
     }
 
     /// End-to-end WebSocket test: a real client dials `/ws/` on the bound proxy,
@@ -1892,9 +2982,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn websocket_upgrade_is_bridged() {
         use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
         use tokio_tungstenite::tungstenite::Message;
 
-        let upstream_port = spawn_ws_echo_upstream().await;
+        let (upstream_port, captured) = spawn_ws_echo_upstream().await;
 
         // Bind the proxy first (so the port is listening), then serve it.
         let proxy_listener = bind(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
@@ -1920,7 +3011,49 @@ mod tests {
         });
 
         let url = format!("ws://127.0.0.1:{proxy_port}/ws/");
-        let (mut ws, _resp) = tokio_tungstenite::connect_async(url).await.unwrap();
+        let mut request = url.into_client_request().unwrap();
+        request.headers_mut().insert(
+            HeaderName::from_static(FORWARDED_PROTO_HEADER),
+            HeaderValue::from_static("https"),
+        );
+        request.headers_mut().insert(
+            HeaderName::from_static("x_rotki_engine_origin"),
+            HeaderValue::from_static("https://attacker.example"),
+        );
+        request.headers_mut().insert(
+            HeaderName::from_static("x_rotki_client_ip"),
+            HeaderValue::from_static("203.0.113.250"),
+        );
+        request.headers_mut().insert(
+            HeaderName::from_static(FORWARDED_FOR_HEADER),
+            HeaderValue::from_static("198.51.100.77"),
+        );
+        request
+            .headers_mut()
+            .insert(header::CONNECTION, HeaderValue::from_static("Upgrade"));
+        request.headers_mut().append(
+            header::CONNECTION,
+            HeaderValue::from_static("x_rotki_engine_origin, x_rotki_client_ip, x_forwarded_for"),
+        );
+        let (mut ws, _resp) = tokio_tungstenite::connect_async(request).await.unwrap();
+        let captured = captured.await.unwrap();
+        assert_eq!(
+            captured.engine_origin,
+            Some(format!("https://127.0.0.1:{proxy_port}")),
+        );
+        assert_eq!(captured.client_ip.as_deref(), Some("198.51.100.77"));
+        assert!(captured.private_aliases.is_empty());
+        assert!(captured.connection.iter().any(|value| {
+            value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("upgrade"))
+        }));
+        assert!(captured.connection.iter().all(|value| {
+            value.split(',').all(|token| {
+                let token = token.trim();
+                !is_starling_private_header(token) && !is_forwarding_source_header(token)
+            })
+        }));
         ws.send(Message::Binary(b"hello".to_vec())).await.unwrap();
         let reply = ws.next().await.unwrap().unwrap();
         assert_eq!(&reply.into_data()[..], b"hello");

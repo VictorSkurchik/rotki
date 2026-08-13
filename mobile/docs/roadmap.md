@@ -292,6 +292,24 @@ self-management target from its Access Session rather than accepting an ID. Carr
 and Access credentials only as standard Bearer authorization headers, dispatch them to
 separate route-selected stores, and add cross-realm negative tests.
 
+Land this security boundary in reviewable sub-slices. The discovery foundation first generates
+the Engine vocabulary from canonical fixtures, exposes a deny-by-default route matcher, defines
+and validates the Starling-owned canonical origin/client-IP metadata boundary, redacts the whole
+Companion request and response boundary, and advertises no Capability. Enable `device_sessions`
+only after Pairing, registration, challenge/proof, Access Session, lifecycle, and revocation paths
+are all reachable and green; vocabulary membership alone is never advertisement readiness.
+
+Foundation status (2026-08-13): E1.3a is complete locally and deliberately advertises an empty
+Capability set. Canonical fixtures now generate the packaged Engine vocabulary; the exact raw-path
+and raw-header dispatcher, fixed envelopes, runtime Control Store circuit breaker, whole-boundary
+log redaction, and public no-store discovery endpoint pass the 163-test Companion suite and focused
+legacy cookie-gate regressions. Starling strips spoofed and WSGI-equivalent private headers, derives
+origin and source metadata only across its explicit Companion proxy trust boundary, and redacts
+Companion targets and request headers from its access log. Independent static review is complete;
+the local Rust compile, Clippy, and full workspace test gates are green. A bounded disposable Pairing
+store is implemented and tested but not routed; Pairing work continues with `device_sessions` still
+disabled.
+
 Use a purpose-derived signing domain distinct from browser and MCP credentials. Access
 Sessions are short-lived and disposable; every request also verifies the Device Session
 is still authorized and bound to the currently open Profile. Close matching `/ws`
@@ -348,7 +366,8 @@ should require tests and documentation changes, not a second service. Update
 - stable `ROTKI_SESSION_KEY`;
 - system-trusted HTTPS terminated before Starling;
 - `ROTKI_SESSION_COOKIE_SECURE=1` or correctly sanitized `forwarded` mode;
-- explicit `--trusted-proxy` when the terminator is not already trusted;
+- explicit `--trusted-proxy` for every non-loopback terminator, including one on a private
+  Docker/Compose bridge, because Companion trust is narrower than access-log/cookie forwarding;
 - private LAN/VPN reachability and no public direct exposure.
 
 Gate G1: a real Docker/Starling Engine behind HTTPS completes Pairing and Device Key proof;

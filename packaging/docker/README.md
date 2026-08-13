@@ -178,6 +178,12 @@ The container's own periodic health probe is excluded, so it does not bury real
 traffic. The byte count is the number of bytes actually sent, so it stays correct
 for compressed responses.
 
+Companion access logs do not contain Pairing IDs, Device Session IDs, operation
+IDs, query strings, Referer values, or User-Agent values. The public protocol
+route is logged as `/api/1/companion/protocol` only for the exact queryless
+request; every other path in that subtree, including malformed/encoded and
+unknown future routes, is logged as `/api/1/companion/[redacted]`.
+
 ### Client IPs behind a reverse proxy
 
 If you run rotki behind another reverse proxy, which is how an authenticating
@@ -198,6 +204,29 @@ If your proxy reaches rotki from a **public** address, declare it:
 
 Repeatable, and accepts a bare address for a single host. Without it that
 proxy's own address is logged, never the header it sends.
+
+Companion authorization uses a deliberately narrower trust boundary than access
+logging and the cookie mode below. Starling removes inbound copies of its private
+Engine-origin and client-IP headers, then regenerates them for rotki-core only.
+Forwarded values are accepted for that purpose only from loopback or a peer named
+by `--trusted-proxy`; private and link-local ranges are **not** implicitly trusted.
+Therefore every non-loopback TLS terminator, including one on a private Docker or
+Compose bridge, must be configured explicitly, for example:
+
+```
+--trusted-proxy 172.18.0.5
+```
+
+Without that entry ordinary rotki traffic still works, but Starling omits the
+trusted HTTPS Engine origin and Companion Pairing stays unavailable. This avoids
+mistaking a port-publishing bridge gateway for proof that a direct request passed
+through the operator's TLS terminator.
+
+The terminator must preserve the original single `Host` authority, overwrite
+(not append a separate field-line to) `X-Forwarded-Proto`, and supply a valid
+`X-Forwarded-For` chain. Duplicate forwarding fields, `Connection`-nominated
+forwarding inputs, and underscore aliases of those inputs fail closed: Starling
+omits the Engine origin and Pairing is unavailable for that request.
 
 ## Administration
 

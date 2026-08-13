@@ -276,13 +276,14 @@ struct Cli {
     #[arg(long, default_value_t = 50)]
     max_body_mb: usize,
 
-    /// Additional CIDRs to trust as reverse-proxy hops when resolving the client
-    /// IP for the access log (repeatable, e.g. `--trusted-proxy 198.51.100.0/24`).
+    /// Additional CIDRs to trust as reverse-proxy hops (repeatable, e.g.
+    /// `--trusted-proxy 198.51.100.0/24`). Used for the access log, forwarded
+    /// cookie scheme, and Companion's private Engine-origin/client-IP boundary.
     ///
-    /// Private and loopback peers are always trusted, which covers the documented
-    /// deployment (an authenticating proxy on the container network). This is only
-    /// needed when that proxy sits on a *public* address, otherwise its forwarded
-    /// headers are ignored and its own address is logged instead.
+    /// Access logging and cookie handling trust private/link-local peers by
+    /// default. Companion intentionally does not: only loopback and an explicit
+    /// entry are trusted, so every non-loopback TLS terminator must be named here,
+    /// including one on a private Docker/Compose bridge.
     #[arg(long = "trusted-proxy", value_name = "CIDR")]
     trusted_proxies: Vec<String>,
 

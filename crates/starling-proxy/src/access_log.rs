@@ -264,9 +264,95 @@ fn escape_quoted(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+const COMPANION_ROOT: &str = "/api/1/companion";
+const COMPANION_PROTOCOL: &str = "/api/1/companion/protocol";
+const REDACTED_COMPANION_TARGET: &str = "/api/1/companion/[redacted]";
+
+/// Conservative decoding used only to decide whether a path belongs to the
+/// Companion subtree. It never feeds routing. Percent-encoded ASCII and repeated
+/// slashes are normalized so malformed requests rejected later cannot smuggle a
+/// concrete identifier into this earlier access-log capture.
+fn companion_detection_path(path: &str, decode_percent: bool) -> String {
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if decode_percent && bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = |byte: u8| match byte {
+                b'0'..=b'9' => Some(byte - b'0'),
+                b'a'..=b'f' => Some(byte - b'a' + 10),
+                b'A'..=b'F' => Some(byte - b'A' + 10),
+                _ => None,
+            };
+            if let (Some(high), Some(low)) = (hex(bytes[index + 1]), hex(bytes[index + 2])) {
+                decoded.push((high << 4) | low);
+                index += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+
+    let mut normalized = String::with_capacity(decoded.len());
+    let mut previous_slash = false;
+    for byte in decoded {
+        let byte = byte.to_ascii_lowercase();
+        if byte == b'/' {
+            if !previous_slash {
+                normalized.push('/');
+            }
+            previous_slash = true;
+        } else {
+            previous_slash = false;
+            if byte.is_ascii() {
+                normalized.push(char::from(byte));
+            }
+        }
+    }
+    normalized
+}
+
+fn is_companion_detection_path(path: &str) -> bool {
+    path == COMPANION_ROOT
+        || path.starts_with("/api/1/companion%")
+        || path.starts_with("/api/1/companion/")
+        || path.starts_with("/api/1/companion;")
+        || path.starts_with("/api/1/companion.")
+}
+
+/// Access logs are operational metadata, not an authorization audit trail.
+/// Companion route parameters are opaque capabilities/identities and queries or
+/// request headers may carry equally sensitive diagnostics, so the private
+/// subtree never logs them. Only the exact, canonical public protocol path
+/// remains recognizable; every other known, malformed, encoded, or unknown
+/// suffix maps to one constant.
+fn log_target(uri: &axum::http::Uri) -> (&str, bool) {
+    let path = uri.path();
+    if path == COMPANION_PROTOCOL {
+        if uri.query().is_none() {
+            return (COMPANION_PROTOCOL, true);
+        }
+        return (REDACTED_COMPANION_TARGET, true);
+    }
+    let raw_detection_path = companion_detection_path(path, false);
+    let decoded_detection_path = companion_detection_path(path, true);
+    if is_companion_detection_path(&raw_detection_path)
+        || is_companion_detection_path(&decoded_detection_path)
+    {
+        return (REDACTED_COMPANION_TARGET, true);
+    }
+    (
+        uri.path_and_query()
+            .map(|path_and_query| path_and_query.as_str())
+            .unwrap_or("/"),
+        false,
+    )
+}
+
 /// Everything read off the request before it is handed downstream, since the
-/// handlers rewrite the URI (`/colibri/health` → `/health`) and we log the
-/// original request line the client actually sent.
+/// handlers rewrite the URI (`/colibri/health` → `/health`). Ordinary routes
+/// retain the original request target; Companion routes are redacted here.
 pub struct RequestLine {
     client: String,
     line: String,
@@ -308,16 +394,30 @@ impl AccessLog {
         let client = client_ip(peer, headers, &self.trusted_proxies)
             .map(|ip| ip.to_string())
             .unwrap_or_else(|| "-".to_string());
-        let path = req
-            .uri()
-            .path_and_query()
-            .map(|pq| pq.as_str())
-            .unwrap_or("/");
+        let (path, companion) = log_target(req.uri());
+        let method = if companion {
+            match req.method().as_str() {
+                "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT" => {
+                    req.method().as_str()
+                }
+                _ => "UNLISTED",
+            }
+        } else {
+            req.method().as_str()
+        };
         Some(RequestLine {
             client,
-            line: format!("{} {} {:?}", req.method(), path, req.version()),
-            referer: escape_quoted(quoted(headers, header::REFERER)),
-            user_agent: escape_quoted(quoted(headers, header::USER_AGENT)),
+            line: format!("{} {} {:?}", method, path, req.version()),
+            referer: if companion {
+                "-".to_string()
+            } else {
+                escape_quoted(quoted(headers, header::REFERER))
+            },
+            user_agent: if companion {
+                "-".to_string()
+            } else {
+                escape_quoted(quoted(headers, header::USER_AGENT))
+            },
         })
     }
 }
@@ -540,15 +640,156 @@ mod tests {
 
     /// A request as the middleware sees it: peer in extensions, headers set.
     fn request(peer_addr: &str, hdrs: &[(&str, &str)]) -> Request<()> {
-        let mut req = Request::builder()
-            .method("GET")
-            .uri("/api/1/ping")
-            .body(())
-            .unwrap();
+        request_at(peer_addr, "/api/1/ping", hdrs)
+    }
+
+    fn request_at(peer_addr: &str, uri: &str, hdrs: &[(&str, &str)]) -> Request<()> {
+        let mut req = Request::builder().method("GET").uri(uri).body(()).unwrap();
         req.extensions_mut()
             .insert(ConnectInfo(peer_addr.parse::<SocketAddr>().unwrap()));
         *req.headers_mut() = headers(hdrs);
         req
+    }
+
+    #[test]
+    fn companion_access_logs_never_contain_ids_queries_or_header_values() {
+        let policy = AccessLog {
+            enabled: true,
+            ..Default::default()
+        };
+        let sensitive_cases = [
+            "/api/1/companion",
+            "/api/1/companion/",
+            "/api/1/companion;opaque-path-parameter=secret",
+            "/api//1/companion/repeated-slash-secret",
+            "/api/1//companion/repeated-middle-secret",
+            "/api/1/companion%2fencoded-separator-secret",
+            "/%61pi/1/companion/encoded-prefix-secret",
+            "/api/1/%63ompanion/encoded-unreserved-secret",
+            "/api/1/companion%2F..%2Fencoded-dot-secret",
+            "/api/1/companion%zzmalformed-percent-secret",
+            "/api/1/companion/device-sessions/dsid_AAECAwQFBgcICQoLDA0ODw",
+            "/api/1/companion/pairings/pairing_secret_0123456789?credential=top-secret",
+            "/api/1/companion/refresh-operations/operation_abcdef?debug=portfolio-name",
+            "/api/1/companion/an-unknown-future-route/raw-identifier?raw_query=secret",
+        ];
+        for target in sensitive_cases {
+            let entry = policy
+                .capture(&request_at(
+                    "203.0.113.7:5555",
+                    target,
+                    &[
+                        (
+                            "referer",
+                            "https://rotki.example/private?token=referer-secret",
+                        ),
+                        (
+                            "user-agent",
+                            "seeded-client pairing_ua_credential operation_ua_identifier",
+                        ),
+                    ],
+                ))
+                .unwrap();
+            assert_eq!(entry.line, "GET /api/1/companion/[redacted] HTTP/1.1");
+            assert_eq!(entry.referer, "-");
+            assert_eq!(entry.user_agent, "-");
+            let finished = entry.finish(200, 0);
+            for secret in [
+                "dsid_AAECAwQFBgcICQoLDA0ODw",
+                "pairing_secret_0123456789",
+                "top-secret",
+                "operation_abcdef",
+                "portfolio-name",
+                "opaque-path-parameter",
+                "repeated-slash-secret",
+                "repeated-middle-secret",
+                "encoded-separator-secret",
+                "encoded-prefix-secret",
+                "encoded-unreserved-secret",
+                "encoded-dot-secret",
+                "malformed-percent-secret",
+                "raw-identifier",
+                "raw_query",
+                "referer-secret",
+                "pairing_ua_credential",
+                "operation_ua_identifier",
+            ] {
+                assert!(
+                    !finished.contains(secret),
+                    "Companion log leaked seeded secret {secret:?} for {target:?}",
+                );
+            }
+        }
+
+        let method_secret = "PAIRING_CREDENTIAL_METHOD_SECRET";
+        let mut req = request_at("203.0.113.7:5555", "/api/1/companion/protocol", &[]);
+        *req.method_mut() = axum::http::Method::from_bytes(method_secret.as_bytes()).unwrap();
+        let finished = policy.capture(&req).unwrap().finish(404, 0);
+        assert!(finished.contains("UNLISTED /api/1/companion/protocol HTTP/1.1"));
+        assert!(!finished.contains(method_secret));
+    }
+
+    #[test]
+    fn public_companion_protocol_is_exact_only_without_a_query() {
+        let policy = AccessLog {
+            enabled: true,
+            ..Default::default()
+        };
+        let exact = policy
+            .capture(&request_at(
+                "203.0.113.7:5555",
+                "/api/1/companion/protocol",
+                &[
+                    ("referer", "https://rotki.example/private"),
+                    ("user-agent", "protocol_ua_secret"),
+                ],
+            ))
+            .unwrap();
+        assert_eq!(exact.line, "GET /api/1/companion/protocol HTTP/1.1");
+        assert_eq!(exact.referer, "-");
+        assert_eq!(exact.user_agent, "-");
+        assert!(!exact.finish(200, 0).contains("protocol_ua_secret"));
+
+        let queried = policy
+            .capture(&request_at(
+                "203.0.113.7:5555",
+                "/api/1/companion/protocol?probe=secret",
+                &[
+                    ("referer", "https://rotki.example/private"),
+                    ("user-agent", "queried_protocol_ua_secret"),
+                ],
+            ))
+            .unwrap();
+        assert_eq!(queried.line, "GET /api/1/companion/[redacted] HTTP/1.1",);
+        assert_eq!(queried.referer, "-");
+        assert_eq!(queried.user_agent, "-");
+        let queried = queried.finish(200, 0);
+        assert!(!queried.contains("secret"));
+        assert!(!queried.contains("queried_protocol_ua_secret"));
+    }
+
+    #[test]
+    fn similarly_prefixed_non_companion_route_keeps_normal_logging() {
+        let policy = AccessLog {
+            enabled: true,
+            ..Default::default()
+        };
+        let entry = policy
+            .capture(&request_at(
+                "203.0.113.7:5555",
+                "/api/1/companionship?value=ordinary",
+                &[
+                    ("referer", "https://rotki.example/page"),
+                    ("user-agent", "ordinary-client"),
+                ],
+            ))
+            .unwrap();
+        assert_eq!(
+            entry.line,
+            "GET /api/1/companionship?value=ordinary HTTP/1.1",
+        );
+        assert_eq!(entry.referer, "https://rotki.example/page");
+        assert_eq!(entry.user_agent, "ordinary-client");
     }
 
     #[test]
