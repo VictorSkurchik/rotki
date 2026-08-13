@@ -366,15 +366,16 @@ No Ktor, SKIE, or third-party decimal type may appear in domain/public facade si
 Unit tests cover URL rejection, REST/WS derivation, unknown/missing JSON fields, retry and
 renewal rules, cancellation, every state transition, and diagnostic redaction.
 
-Implementation status (2026-08-13): locally complete; hosted `Mobile` and repository CI
-remain the final acceptance gate. The shared module now owns canonical Engine-origin and
-opaque protocol values, strict bounded HTTP/WS decoders, OkHttp/Darwin clients without
-redirect retries or Darwin caches, deterministic retry policy, atomic renewal admission,
-auth/control DTOs, Device proof transcript construction, native-security/storage/lifecycle
-ports, and a fixture-driven 11-state coordinator with a Swift-safe facade. The canonical
-JSON assets generate Kotlin vocabulary and tests; focused Python validation, 72 FVal
-vectors, 81 shared tests on each JVM/Android host, `mobileCheck`, the iOS Simulator suite,
-iosArm64 test linking, and both framework links pass locally.
+Implementation status (2026-08-13): complete. Hosted `Mobile` passed on both Ubuntu and
+the pinned Xcode 26.4 runner, and the repository `Rotki CI` passed on the feature branch.
+The shared module now owns canonical Engine-origin and opaque protocol values, strict
+bounded HTTP/WS decoders, OkHttp/Darwin clients without redirect retries or Darwin caches,
+deterministic retry policy, atomic renewal admission, auth/control DTOs, Device proof
+transcript construction, native-security/storage/lifecycle ports, and a fixture-driven
+11-state coordinator with a Swift-safe facade. The canonical JSON assets generate Kotlin
+vocabulary and tests; focused Python validation, 72 FVal vectors, 81 shared tests on each
+JVM/Android host, `mobileCheck`, the iOS Simulator suite, iosArm64 test linking, and both
+framework links pass locally and in the applicable hosted jobs.
 
 ### M2.3 — Android native security adapters
 
