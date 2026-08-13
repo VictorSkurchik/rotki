@@ -140,14 +140,14 @@ Exit: byte-identical canonical output and identical comparison/arithmetic result
 and iOS. If the candidate fails, replace only its private backend. No snapshot schema or
 financial DTO merges before this passes.
 
-Implementation status (2026-08-13): complete. The isolated executable build lives under
-`mobile/spikes/exact-decimal/`; 72 vectors generated from Python `FVal` pass byte-for-byte
-on JVM and `iosSimulatorArm64`, and the `iosArm64` test binary links. BigNum 0.3.10's direct
-division incorrectly truncated `2 / 3`, so the private backend now performs exact
-BigInteger quotient/remainder HALF_EVEN rounding while the public type and serialized
-schema remain candidate-independent. Tool pins, the observed limitation, commands, and
-the M2.1 supersession rule are recorded in the spike README. This completes P0.2 but not
-Gate G0, which still requires P0.3.
+Implementation status (2026-08-13): complete and migrated into `mobile/shared` by M2.1.
+The 72 vectors generated from Python `FVal` pass byte-for-byte on JVM, Android host, and
+`iosSimulatorArm64`, and the `iosArm64` test binary links. BigNum 0.3.10's direct division
+incorrectly truncated `2 / 3`, so the private backend performs exact BigInteger
+quotient/remainder HALF_EVEN rounding while the public type and serialized schema remain
+candidate-independent. Tool pins and the observed limitation are retained in
+`mobile/docs/characterization/exact-decimal.md`. This completes P0.2 but not Gate G0,
+which still requires the deferred physical portion of P0.3.
 
 ### P0.3 — Native-security and SKIE characterization spikes
 
@@ -334,6 +334,20 @@ and `sources`. Add a minimal Material 3 Android shell with minSdk 28.
 Add `.github/workflows/mobile.yml` with path filtering. Linux runs shared/Android tests
 and an Android build; macOS compiles the iOS target from the start. No signing credentials
 or release publication enter CI.
+
+Implementation status (2026-08-13): locally complete; the first hosted workflow run is
+pending publication of the branch. `mobile/` is now the only production Gradle root and
+contains one `shared` module plus the native Material 3 `androidApp`. The shared module
+targets JVM test execution, Android API 28+, `iosArm64`, and `iosSimulatorArm64`; its
+framework bundle ID and iOS 17 minimum are pinned, and CI rejects UI dependencies from
+its dependency report. The P0.2 implementation and 72 FVal vectors moved into `mobile/shared`, and
+the disposable decimal Gradle root/workflow were removed. Android `dev`, `stage`, and
+`prod` flavors use `com.rotki.companion` as the production application ID and follow the
+repository's SemVer suffix order. Local JVM, Android-host, all flavor/build-type unit
+tests, all debug APKs, dev lint, iOS Simulator tests, device-test linking, and both iOS
+framework links pass. The dedicated workflow keeps these jobs separate from Python,
+pnpm, and Cargo builds; it must turn green on Ubuntu and the pinned Xcode 26.4 runner
+before M2.1 is marked fully complete.
 
 ### M2.2 — Shared protocol and state seams
 
@@ -1013,15 +1027,15 @@ pnpm run lint
 cargo test -p starling-proxy
 
 # Shared and Android (run from mobile/)
-./gradlew :shared:testDebugUnitTest
-./gradlew :shared:iosSimulatorArm64Test
-./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug
+./gradlew :shared:jvmTest :shared:testAndroidHostTest
+./gradlew :shared:iosSimulatorArm64Test :shared:linkDebugTestIosArm64 \
+  :shared:linkDebugFrameworkIosArm64 :shared:linkDebugFrameworkIosSimulatorArm64
+./gradlew :androidApp:test :androidApp:lintDevDebug :androidApp:assembleDebug
 ./gradlew :shared:goldenEngineContractTest
 ./gradlew :androidApp:connectedTracerDebugAndroidTest
 
-# P0.2 risk spike, until M2.1 supersedes it
-uv run python mobile/spikes/exact-decimal/python/generate_exact_decimal_vectors.py
-mobile/spikes/exact-decimal/gradlew -p mobile/spikes/exact-decimal p02Check
+# ExactDecimal parity source
+uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
 
 # iOS after Phase 5; scheme/destination are fixed by the generated Xcode project
 xcodebuild build test -project iosApp/iosApp.xcodeproj -scheme iosApp \

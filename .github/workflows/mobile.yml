@@ -1,0 +1,121 @@
+name: Mobile
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile.yml'
+      - 'mobile/**'
+      - '!mobile/spikes/**'
+      - 'rotkehlchen/errors/serialization.py'
+      - 'rotkehlchen/fval.py'
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - bugfixes
+      - 'feature/**'
+    paths:
+      - '.github/workflows/mobile.yml'
+      - 'mobile/**'
+      - '!mobile/spikes/**'
+      - 'rotkehlchen/errors/serialization.py'
+      - 'rotkehlchen/fval.py'
+  workflow_dispatch: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions: { }
+
+jobs:
+  android:
+    name: 'Shared JVM and Android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14.4'
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Install Android compile SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+
+      - name: Verify ExactDecimal vectors
+        run: python mobile/shared/tools/generate_exact_decimal_vectors.py
+
+      - name: Verify shared has no UI dependencies
+        working-directory: mobile
+        run: |
+          ./gradlew --no-daemon :shared:dependencies > "$RUNNER_TEMP/shared-dependencies.txt"
+          if grep -E 'androidx\.compose|org\.jetbrains\.compose' "$RUNNER_TEMP/shared-dependencies.txt"; then
+            echo '::error::UI dependencies are forbidden in the shared module'
+            exit 1
+          fi
+
+      - name: Run shared and Android gates
+        working-directory: mobile
+        run: |
+          ./gradlew --no-daemon \
+            :shared:jvmTest \
+            :shared:testAndroidHostTest \
+            :androidApp:test \
+            :androidApp:lintDevDebug \
+            :androidApp:assembleDebug
+
+  apple:
+    name: 'Shared iOS'
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Select supported Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.4.app/Contents/Developer
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Run iOS gates
+        working-directory: mobile
+        run: |
+          ./gradlew --no-daemon \
+            :shared:iosSimulatorArm64Test \
+            :shared:linkDebugTestIosArm64 \
+            :shared:linkDebugFrameworkIosArm64 \
+            :shared:linkDebugFrameworkIosSimulatorArm64
