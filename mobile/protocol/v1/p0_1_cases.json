@@ -1,0 +1,992 @@
+{
+  "schema_version": 1,
+  "error_cases": [
+    {
+      "status": 400,
+      "code": "invalid_request",
+      "retryable": false,
+      "action": "none",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 401,
+      "code": "access_session_unavailable",
+      "retryable": false,
+      "action": "prove_device",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 401,
+      "code": "full_client_auth_required",
+      "retryable": false,
+      "action": "authenticate_full_client",
+      "device_session_effect": "unchanged",
+      "offline_snapshot_effect": "unchanged"
+    },
+    {
+      "status": 401,
+      "code": "not_authorized",
+      "retryable": false,
+      "action": "pair_again",
+      "device_session_effect": "delete",
+      "offline_snapshot_effect": "delete"
+    },
+    {
+      "status": 403,
+      "code": "scope_denied",
+      "retryable": false,
+      "action": "use_full_client",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 404,
+      "code": "resource_not_found",
+      "retryable": false,
+      "action": "none",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "history_changed",
+      "retryable": false,
+      "action": "fetch_snapshot",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "idempotency_conflict",
+      "retryable": false,
+      "action": "new_request",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "no_refreshable_sources",
+      "retryable": false,
+      "action": "use_full_client",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "profile_mismatch",
+      "retryable": false,
+      "action": "open_bound_profile",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "refresh_conflict",
+      "retryable": false,
+      "action": "observe_active",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 409,
+      "code": "source_disabled",
+      "retryable": false,
+      "action": "enable_source_full_client",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 410,
+      "code": "challenge_unavailable",
+      "retryable": false,
+      "action": "request_challenge",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 410,
+      "code": "history_cursor_unavailable",
+      "retryable": false,
+      "action": "restart_history",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 410,
+      "code": "pairing_unavailable",
+      "retryable": false,
+      "action": "pair_again",
+      "device_session_effect": "not_established",
+      "offline_snapshot_effect": "not_established"
+    },
+    {
+      "status": 423,
+      "code": "locked_engine",
+      "retryable": false,
+      "action": "unlock_full_client",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 426,
+      "code": "incompatible_protocol",
+      "retryable": false,
+      "action": "upgrade_engine",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 429,
+      "code": "rate_limited",
+      "retryable": true,
+      "action": "retry_after",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 500,
+      "code": "unexpected_engine_error",
+      "retryable": false,
+      "action": "none",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    },
+    {
+      "status": 503,
+      "code": "snapshot_unavailable",
+      "retryable": true,
+      "action": "retry",
+      "device_session_effect": "keep",
+      "offline_snapshot_effect": "keep"
+    }
+  ],
+  "route_matrix": [
+    {
+      "id": "get_protocol",
+      "method": "GET",
+      "path": "/protocol",
+      "realm": "public",
+      "authority": "none",
+      "requires_protocol_header": false,
+      "scope": null,
+      "success_status": 200
+    },
+    {
+      "id": "create_pairing",
+      "method": "POST",
+      "path": "/pairings",
+      "realm": "full_client",
+      "authority": "browser_cookie",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 201
+    },
+    {
+      "id": "cancel_pairing",
+      "method": "DELETE",
+      "path": "/pairings/{pairing_id}",
+      "realm": "full_client",
+      "authority": "browser_cookie",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 200
+    },
+    {
+      "id": "register_device_session",
+      "method": "POST",
+      "path": "/device-sessions",
+      "realm": "pairing",
+      "authority": "pairing_bearer",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 201
+    },
+    {
+      "id": "list_device_sessions",
+      "method": "GET",
+      "path": "/device-sessions",
+      "realm": "full_client",
+      "authority": "browser_cookie",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 200
+    },
+    {
+      "id": "rename_device_session",
+      "method": "PATCH",
+      "path": "/device-sessions/{device_session_id}",
+      "realm": "full_client",
+      "authority": "browser_cookie",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 200
+    },
+    {
+      "id": "revoke_device_session",
+      "method": "DELETE",
+      "path": "/device-sessions/{device_session_id}",
+      "realm": "full_client",
+      "authority": "browser_cookie",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 200
+    },
+    {
+      "id": "rename_current_device_session",
+      "method": "PATCH",
+      "path": "/device-sessions/current",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "self_manage",
+      "identity_source": "access_session",
+      "success_status": 200
+    },
+    {
+      "id": "revoke_current_device_session",
+      "method": "DELETE",
+      "path": "/device-sessions/current",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "self_manage",
+      "identity_source": "access_session",
+      "success_status": 200
+    },
+    {
+      "id": "create_challenge",
+      "method": "POST",
+      "path": "/challenges",
+      "realm": "device_proof",
+      "authority": "device_session_lookup",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 201
+    },
+    {
+      "id": "create_access_session",
+      "method": "POST",
+      "path": "/access-sessions",
+      "realm": "device_proof",
+      "authority": "challenge_proof",
+      "requires_protocol_header": true,
+      "scope": null,
+      "success_status": 201
+    },
+    {
+      "id": "fetch_snapshot",
+      "method": "GET",
+      "path": "/snapshot",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "snapshot_read",
+      "success_status": 200
+    },
+    {
+      "id": "page_history",
+      "method": "GET",
+      "path": "/history",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "history_read",
+      "success_status": 200
+    },
+    {
+      "id": "create_refresh_operation",
+      "method": "POST",
+      "path": "/refresh-operations",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "refresh_start",
+      "success_status": 202
+    },
+    {
+      "id": "list_refresh_operations",
+      "method": "GET",
+      "path": "/refresh-operations",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "refresh_observe",
+      "success_status": 200
+    },
+    {
+      "id": "get_refresh_operation",
+      "method": "GET",
+      "path": "/refresh-operations/{operation_id}",
+      "realm": "access_session",
+      "authority": "access_bearer",
+      "requires_protocol_header": true,
+      "scope": "refresh_observe",
+      "success_status": 200
+    }
+  ],
+  "realm_policies": [
+    {
+      "realm": "public",
+      "credential_selection": "ignore_all",
+      "missing_or_wrong_authority": null,
+      "foreign_credentials": "ignore_without_parsing"
+    },
+    {
+      "realm": "full_client",
+      "credential_selection": "browser_cookie_only",
+      "missing_or_wrong_authority": "full_client_auth_required",
+      "foreign_credentials": "ignore_without_parsing"
+    },
+    {
+      "realm": "pairing",
+      "credential_selection": "pairing_store_only",
+      "missing_or_wrong_authority": "pairing_unavailable",
+      "foreign_credentials": "collapse_to_route_error"
+    },
+    {
+      "realm": "device_proof",
+      "credential_selection": "request_body_stage_only",
+      "missing_or_wrong_authority": null,
+      "foreign_credentials": "ignore_without_parsing"
+    },
+    {
+      "realm": "access_session",
+      "credential_selection": "access_store_only",
+      "missing_or_wrong_authority": "access_session_unavailable",
+      "foreign_credentials": "collapse_to_route_error"
+    }
+  ],
+  "root_transitions": [
+    {
+      "id": "fresh_install",
+      "from": [
+        "unpaired"
+      ],
+      "stimulus": "start_without_pairing",
+      "to": "unpaired",
+      "device_session_effect": "absent",
+      "snapshot_effect": "absent",
+      "bearer_effect": "absent",
+      "recovery": "scan_pairing"
+    },
+    {
+      "id": "pairing_started",
+      "from": [
+        "revoked",
+        "unpaired"
+      ],
+      "stimulus": "accept_pairing_qr",
+      "to": "connecting",
+      "device_session_effect": "replace",
+      "snapshot_effect": "delete",
+      "bearer_effect": "absent",
+      "recovery": "complete_pairing"
+    },
+    {
+      "id": "privacy_lock",
+      "from": [
+        "connecting",
+        "degraded",
+        "device_locked",
+        "engine_locked",
+        "incompatible",
+        "online",
+        "profile_mismatch",
+        "refreshing",
+        "unreachable"
+      ],
+      "stimulus": "background_or_system_lock",
+      "to": "device_locked",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep_encrypted",
+      "bearer_effect": "delete",
+      "recovery": "authenticate_device"
+    },
+    {
+      "id": "device_auth_succeeded",
+      "from": [
+        "device_locked"
+      ],
+      "stimulus": "device_authentication_succeeded",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "unlock",
+      "bearer_effect": "absent",
+      "recovery": "discover_and_prove"
+    },
+    {
+      "id": "proof_and_complete_snapshot",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "proof_and_complete_snapshot_reconciled",
+      "to": "online",
+      "device_session_effect": "keep",
+      "snapshot_effect": "replace",
+      "bearer_effect": "replace",
+      "recovery": "none"
+    },
+    {
+      "id": "proof_and_degraded_snapshot",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "proof_and_degraded_snapshot_reconciled",
+      "to": "degraded",
+      "device_session_effect": "keep",
+      "snapshot_effect": "replace",
+      "bearer_effect": "replace",
+      "recovery": "refresh_or_use_full_client"
+    },
+    {
+      "id": "active_refresh_reconciled",
+      "from": [
+        "connecting",
+        "degraded",
+        "online"
+      ],
+      "stimulus": "active_refresh_reconciled",
+      "to": "refreshing",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "keep",
+      "recovery": "observe_refresh"
+    },
+    {
+      "id": "refresh_complete_snapshot",
+      "from": [
+        "refreshing"
+      ],
+      "stimulus": "terminal_refresh_and_complete_snapshot",
+      "to": "online",
+      "device_session_effect": "keep",
+      "snapshot_effect": "replace",
+      "bearer_effect": "keep",
+      "recovery": "none"
+    },
+    {
+      "id": "refresh_degraded_snapshot",
+      "from": [
+        "refreshing"
+      ],
+      "stimulus": "terminal_refresh_and_degraded_snapshot",
+      "to": "degraded",
+      "device_session_effect": "keep",
+      "snapshot_effect": "replace",
+      "bearer_effect": "keep",
+      "recovery": "refresh_or_use_full_client"
+    },
+    {
+      "id": "transport_budget_exhausted",
+      "from": [
+        "connecting",
+        "degraded",
+        "online",
+        "refreshing"
+      ],
+      "stimulus": "transport_retry_budget_exhausted",
+      "to": "unreachable",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "keep_until_expiry",
+      "recovery": "retry_transport"
+    },
+    {
+      "id": "transport_restored",
+      "from": [
+        "unreachable"
+      ],
+      "stimulus": "transport_restored",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "keep_until_expiry",
+      "recovery": "discover_prove_and_reconcile"
+    },
+    {
+      "id": "access_session_unavailable",
+      "from": [
+        "degraded",
+        "online",
+        "refreshing"
+      ],
+      "stimulus": "access_session_unavailable",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "delete",
+      "recovery": "prove_device"
+    },
+    {
+      "id": "websocket_policy_close",
+      "from": [
+        "degraded",
+        "online",
+        "refreshing"
+      ],
+      "stimulus": "websocket_close_1008",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "delete",
+      "recovery": "prove_device_to_classify"
+    },
+    {
+      "id": "proof_locked",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "locked_engine",
+      "to": "engine_locked",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "absent",
+      "recovery": "unlock_full_client"
+    },
+    {
+      "id": "proof_profile_mismatch",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "profile_mismatch",
+      "to": "profile_mismatch",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "absent",
+      "recovery": "open_bound_profile"
+    },
+    {
+      "id": "protocol_incompatible",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "no_shared_protocol_or_device_sessions_capability",
+      "to": "incompatible",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "absent",
+      "recovery": "upgrade_engine"
+    },
+    {
+      "id": "proof_not_authorized",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "not_authorized",
+      "to": "revoked",
+      "device_session_effect": "delete",
+      "snapshot_effect": "delete",
+      "bearer_effect": "delete",
+      "recovery": "pair_again"
+    },
+    {
+      "id": "challenge_unavailable",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "challenge_unavailable",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "absent",
+      "recovery": "request_challenge"
+    },
+    {
+      "id": "engine_state_resolved",
+      "from": [
+        "engine_locked",
+        "incompatible",
+        "profile_mismatch"
+      ],
+      "stimulus": "explicit_foreground_retry",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "absent",
+      "recovery": "discover_and_prove"
+    },
+    {
+      "id": "local_unpair",
+      "from": [
+        "connecting",
+        "degraded",
+        "device_locked",
+        "engine_locked",
+        "incompatible",
+        "online",
+        "profile_mismatch",
+        "refreshing",
+        "revoked",
+        "unreachable"
+      ],
+      "stimulus": "local_unpair",
+      "to": "unpaired",
+      "device_session_effect": "delete",
+      "snapshot_effect": "delete",
+      "bearer_effect": "delete",
+      "recovery": "scan_pairing"
+    }
+  ],
+  "threat_cases": [
+    {
+      "id": "reject_non_https_origin",
+      "family": "network_interception",
+      "surface": "pairing_qr",
+      "expected": {
+        "outcome": "local_rejection",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_untrusted_tls",
+      "family": "network_interception",
+      "surface": "transport",
+      "expected": {
+        "outcome": "transport_rejection",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_altered_proof_origin",
+      "family": "proof_transplant",
+      "surface": "access_session",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "not_authorized",
+        "mutation": "consume_challenge",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_expired_pairing",
+      "family": "pairing_replay",
+      "surface": "device_session_registration",
+      "expected": {
+        "outcome": "http_error",
+        "status": 410,
+        "code": "pairing_unavailable",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_replayed_pairing",
+      "family": "pairing_replay",
+      "surface": "device_session_registration",
+      "expected": {
+        "outcome": "http_error",
+        "status": 410,
+        "code": "pairing_unavailable",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "replay_pairing_creation",
+      "family": "idempotency",
+      "surface": "pairing_creation",
+      "expected": {
+        "outcome": "byte_identical_success",
+        "status": 201,
+        "mutation": "exactly_one",
+        "disclosure": "authorized_secret_only"
+      }
+    },
+    {
+      "id": "reject_pairing_idempotency_conflict",
+      "family": "idempotency",
+      "surface": "pairing_creation",
+      "expected": {
+        "outcome": "http_error",
+        "status": 409,
+        "code": "idempotency_conflict",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "replay_consumed_registration",
+      "family": "idempotency",
+      "surface": "device_session_registration",
+      "expected": {
+        "outcome": "byte_identical_success",
+        "status": 201,
+        "mutation": "exactly_one",
+        "disclosure": "non_secret_registration_only"
+      }
+    },
+    {
+      "id": "reject_changed_consumed_registration",
+      "family": "idempotency",
+      "surface": "device_session_registration",
+      "expected": {
+        "outcome": "http_error",
+        "status": 409,
+        "code": "idempotency_conflict",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "challenge_equivalence_class",
+      "family": "challenge_replay",
+      "surface": "access_session",
+      "expected": {
+        "outcome": "http_error",
+        "status": 410,
+        "code": "challenge_unavailable",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "concurrent_proof_single_winner",
+      "family": "challenge_replay",
+      "surface": "access_session",
+      "expected": {
+        "outcome": "one_success_one_challenge_unavailable",
+        "status": 201,
+        "mutation": "exactly_one",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "invalid_signature_consumes_challenge",
+      "family": "challenge_replay",
+      "surface": "access_session",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "not_authorized",
+        "mutation": "consume_challenge",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "unknown_revoked_device_equivalence",
+      "family": "existence_oracle",
+      "surface": "challenge_creation",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "not_authorized",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "expired_access_bearer",
+      "family": "stolen_bearer",
+      "surface": "access_route",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "access_session_unavailable",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "engine_restart_invalidates_access_bearer",
+      "family": "stolen_bearer",
+      "surface": "access_route",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "access_session_unavailable",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "revoked_device_rejects_access_bearer",
+      "family": "stolen_bearer",
+      "surface": "access_route",
+      "expected": {
+        "outcome": "http_error",
+        "status": 401,
+        "code": "not_authorized",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "background_purges_access_bearer",
+      "family": "stolen_phone",
+      "surface": "client_lifecycle",
+      "expected": {
+        "outcome": "local_purge",
+        "mutation": "delete_bearer_and_plaintext",
+        "disclosure": "encrypted_snapshot_only"
+      }
+    },
+    {
+      "id": "rate_limit_before_signature",
+      "family": "resource_exhaustion",
+      "surface": "challenge_and_proof",
+      "expected": {
+        "outcome": "http_error",
+        "status": 429,
+        "code": "rate_limited",
+        "mutation": "none",
+        "disclosure": "retry_after_only"
+      }
+    },
+    {
+      "id": "unknown_device_allocates_no_bucket",
+      "family": "resource_exhaustion",
+      "surface": "challenge_creation",
+      "expected": {
+        "outcome": "invariant",
+        "mutation": "no_per_identifier_state",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "deny_cross_realm_credentials",
+      "family": "authorization_confusion",
+      "surface": "all_non_public_routes",
+      "expected": {
+        "outcome": "route_selected_realm_error",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "ignore_credentials_on_protocol_discovery",
+      "family": "authorization_confusion",
+      "surface": "protocol_discovery",
+      "expected": {
+        "outcome": "byte_equivalent_public_success",
+        "status": 200,
+        "mutation": "none",
+        "disclosure": "public_capabilities_only"
+      }
+    },
+    {
+      "id": "deny_unlisted_companion_route",
+      "family": "scope_escape",
+      "surface": "companion_namespace",
+      "expected": {
+        "outcome": "http_error",
+        "status": 404,
+        "code": "resource_not_found",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "deny_companion_bearer_outside_namespace",
+      "family": "scope_escape",
+      "surface": "general_api",
+      "expected": {
+        "outcome": "legacy_realm_rejection",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "deny_missing_companion_scope",
+      "family": "scope_escape",
+      "surface": "access_route",
+      "expected": {
+        "outcome": "http_error",
+        "status": 403,
+        "code": "scope_denied",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "derive_current_device_from_access_session",
+      "family": "object_confusion",
+      "surface": "current_device_session",
+      "expected": {
+        "outcome": "invariant",
+        "mutation": "caller_only",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "hide_cross_profile_resource",
+      "family": "object_confusion",
+      "surface": "profile_resource",
+      "expected": {
+        "outcome": "http_error",
+        "status": 404,
+        "code": "resource_not_found",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_websocket_cookie_and_bearer",
+      "family": "websocket_authorization",
+      "surface": "websocket_upgrade",
+      "expected": {
+        "outcome": "http_error_before_accept",
+        "status": 400,
+        "code": "invalid_request",
+        "mutation": "no_subscriber",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "reject_websocket_bearer_in_url_or_subprotocol",
+      "family": "websocket_authorization",
+      "surface": "websocket_upgrade",
+      "expected": {
+        "outcome": "http_error_before_accept",
+        "status": 400,
+        "code": "invalid_request",
+        "mutation": "no_subscriber",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "filter_websocket_events_server_side",
+      "family": "websocket_authorization",
+      "surface": "websocket_delivery",
+      "expected": {
+        "outcome": "allowlist_and_owner_check",
+        "mutation": "none",
+        "disclosure": "authorized_hints_only"
+      }
+    },
+    {
+      "id": "websocket_1008_requires_http_proof",
+      "family": "websocket_authorization",
+      "surface": "websocket_close",
+      "expected": {
+        "outcome": "local_transition_to_connecting",
+        "mutation": "delete_bearer",
+        "disclosure": "no_state_reason"
+      }
+    },
+    {
+      "id": "redact_seeded_sensitive_values",
+      "family": "diagnostic_exposure",
+      "surface": "responses_logs_diagnostics",
+      "expected": {
+        "outcome": "absence_assertion",
+        "mutation": "none",
+        "disclosure": "none"
+      }
+    },
+    {
+      "id": "declare_threat_model_exclusions",
+      "family": "threat_boundary",
+      "surface": "security_claim",
+      "expected": {
+        "outcome": "out_of_scope",
+        "mutation": "none",
+        "disclosure": "compromised_host_malicious_os_unlocked_rooted_phone"
+      }
+    }
+  ]
+}

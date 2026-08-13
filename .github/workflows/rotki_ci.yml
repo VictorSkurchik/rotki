@@ -57,6 +57,8 @@ jobs:
               - name: backend
                 paths:
                   - rotkehlchen
+                  - mobile/docs/protocol.md
+                  - mobile/protocol
                   - pyproject.toml
                   - .github/workflows/task_backend_tests.yml
                 run_tag: run backend

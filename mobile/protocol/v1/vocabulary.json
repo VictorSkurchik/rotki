@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "protocol_versions": [
+    1
+  ],
+  "headers": {
+    "idempotency_key": "Idempotency-Key",
+    "protocol": "Rotki-Companion-Protocol"
+  },
+  "capabilities": {
+    "device_sessions": 1,
+    "history_pagination": 1,
+    "portfolio_snapshot": 1,
+    "refresh_operations": 1,
+    "websocket_notifications": 1
+  },
+  "auth_realms": [
+    "access_session",
+    "device_proof",
+    "full_client",
+    "pairing",
+    "public"
+  ],
+  "authorities": [
+    "access_bearer",
+    "browser_cookie",
+    "challenge_proof",
+    "device_session_lookup",
+    "none",
+    "pairing_bearer"
+  ],
+  "platforms": [
+    "android",
+    "ios"
+  ],
+  "public_key_algorithms": [
+    "ecdsa-p256-sha256-p1363"
+  ],
+  "root_states": [
+    "connecting",
+    "degraded",
+    "device_locked",
+    "engine_locked",
+    "incompatible",
+    "online",
+    "profile_mismatch",
+    "refreshing",
+    "revoked",
+    "unpaired",
+    "unreachable"
+  ],
+  "http_error_codes": [
+    "access_session_unavailable",
+    "challenge_unavailable",
+    "full_client_auth_required",
+    "history_changed",
+    "history_cursor_unavailable",
+    "idempotency_conflict",
+    "incompatible_protocol",
+    "invalid_request",
+    "locked_engine",
+    "no_refreshable_sources",
+    "not_authorized",
+    "pairing_unavailable",
+    "profile_mismatch",
+    "rate_limited",
+    "refresh_conflict",
+    "resource_not_found",
+    "scope_denied",
+    "snapshot_unavailable",
+    "source_disabled",
+    "unexpected_engine_error"
+  ],
+  "source_error_codes": [
+    "source_authentication_failed",
+    "source_configuration_changed",
+    "source_rate_limited",
+    "source_unexpected_error",
+    "source_unreachable"
+  ],
+  "operation_error_codes": [
+    "operation_interrupted",
+    "source_refresh_failed"
+  ],
+  "error_actions": [
+    "authenticate_full_client",
+    "enable_source_full_client",
+    "fetch_snapshot",
+    "new_request",
+    "none",
+    "observe_active",
+    "open_bound_profile",
+    "pair_again",
+    "prove_device",
+    "request_challenge",
+    "restart_history",
+    "retry",
+    "retry_after",
+    "unlock_full_client",
+    "upgrade_engine",
+    "use_full_client"
+  ],
+  "websocket_event_types": [
+    "companion_refresh_operation",
+    "companion_snapshot_revision"
+  ],
+  "websocket_close_codes": [
+    1000,
+    1006,
+    1008,
+    1012
+  ],
+  "device_session_states": [
+    "authorized",
+    "revoked"
+  ],
+  "lifetimes_seconds": {
+    "access_session": 900,
+    "challenge": 60,
+    "pairing": 120,
+    "proactive_renewal_window": 300,
+    "registration_replay": 300
+  },
+  "encoded_lengths": {
+    "access_session_credential": 43,
+    "challenge_id": 22,
+    "device_session_id": 43,
+    "idempotency_key": 22,
+    "nonce": 43,
+    "pairing_credential": 43,
+    "pairing_id": 22,
+    "p1363_signature": 86,
+    "p256_public_key": 87
+  }
+}

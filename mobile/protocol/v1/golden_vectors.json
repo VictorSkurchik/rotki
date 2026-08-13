@@ -1,0 +1,374 @@
+{
+  "schema_version": 1,
+  "success_examples": [
+    {
+      "id": "get_protocol",
+      "status": 200,
+      "request": {
+        "headers": {},
+        "body": null
+      },
+      "response": {
+        "result": {
+          "supported_protocol_versions": [
+            1
+          ],
+          "capabilities": {
+            "device_sessions": 1,
+            "history_pagination": 1,
+            "portfolio_snapshot": 1,
+            "refresh_operations": 1,
+            "websocket_notifications": 1
+          }
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "create_pairing",
+      "status": 201,
+      "request": {
+        "headers": {
+          "Cookie": "session=fixture-full-client-session",
+          "Idempotency-Key": "cHFyc3R1dnd4eXp7fH1-fw",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {}
+      },
+      "response": {
+        "result": {
+          "pairing_id": "AAECAwQFBgcICQoLDA0ODw",
+          "expires_at": 1786550400,
+          "qr_payload": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}"
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "cancel_pairing",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Cookie": "session=fixture-full-client-session",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": null
+      },
+      "response": {
+        "result": {
+          "cancelled": true
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "register_device_session",
+      "status": 201,
+      "request": {
+        "headers": {
+          "Authorization": "Bearer EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8",
+          "Idempotency-Key": "cHFyc3R1dnd4eXp7fH1-fw",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {
+          "pairing_id": "AAECAwQFBgcICQoLDA0ODw",
+          "device_label": "Victor's iPhone",
+          "platform": "ios",
+          "public_key_algorithm": "ecdsa-p256-sha256-p1363",
+          "public_key": "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+        }
+      },
+      "response": {
+        "result": {
+          "device_session": {
+            "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "device_label": "Victor's iPhone",
+            "platform": "ios",
+            "state": "authorized",
+            "paired_at": 1786550300,
+            "last_seen_at": null,
+            "revoked_at": null
+          }
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "list_device_sessions",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Cookie": "session=fixture-full-client-session",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": null
+      },
+      "response": {
+        "result": {
+          "device_sessions": [
+            {
+              "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+              "device_label": "Victor's iPhone",
+              "platform": "ios",
+              "state": "authorized",
+              "paired_at": 1786550300,
+              "last_seen_at": 1786550400,
+              "revoked_at": null
+            },
+            {
+              "device_session_id": "gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8",
+              "device_label": "Old Android",
+              "platform": "android",
+              "state": "revoked",
+              "paired_at": 1786500000,
+              "last_seen_at": 1786500300,
+              "revoked_at": 1786500400
+            }
+          ]
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "rename_device_session",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Cookie": "session=fixture-full-client-session",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {
+          "device_label": "Personal iPhone"
+        }
+      },
+      "response": {
+        "result": {
+          "device_session": {
+            "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "device_label": "Personal iPhone",
+            "platform": "ios",
+            "state": "authorized",
+            "paired_at": 1786550300,
+            "last_seen_at": 1786550400,
+            "revoked_at": null
+          }
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "revoke_device_session",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Cookie": "session=fixture-full-client-session",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": null
+      },
+      "response": {
+        "result": {
+          "revoked": true
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "rename_current_device_session",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Authorization": "Bearer UFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm8",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {
+          "device_label": "Personal iPhone"
+        }
+      },
+      "response": {
+        "result": {
+          "device_session": {
+            "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+            "device_label": "Personal iPhone",
+            "platform": "ios",
+            "state": "authorized",
+            "paired_at": 1786550300,
+            "last_seen_at": 1786550400,
+            "revoked_at": null
+          }
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "revoke_current_device_session",
+      "status": 200,
+      "request": {
+        "headers": {
+          "Authorization": "Bearer UFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm8",
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": null
+      },
+      "response": {
+        "result": {
+          "revoked": true
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "create_challenge",
+      "status": 201,
+      "request": {
+        "headers": {
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {
+          "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        }
+      },
+      "response": {
+        "result": {
+          "challenge_id": "ICEiIyQlJicoKSorLC0uLw",
+          "nonce": "MDEyMzQ1Njc4OTo7PD0-P0BBQkNERUZHSElKS0xNTk8",
+          "expires_at": 1786550400
+        },
+        "message": ""
+      }
+    },
+    {
+      "id": "create_access_session",
+      "status": 201,
+      "request": {
+        "headers": {
+          "Rotki-Companion-Protocol": "1"
+        },
+        "body": {
+          "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+          "challenge_id": "ICEiIyQlJicoKSorLC0uLw",
+          "signature": "zKnDT8nsSEMoIxqZIzUybLt-QJJr6mtaaXm6SJMRmK7kJLpg-BP20iAJBHwLqXstAHFxaHwb_vs_jb4hSU6N8A"
+        }
+      },
+      "response": {
+        "result": {
+          "access_session_credential": "UFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm8",
+          "expires_at": 1786551300
+        },
+        "message": ""
+      }
+    }
+  ],
+  "pairing_qr_cases": [
+    {
+      "id": "valid",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": true
+    },
+    {
+      "id": "additive_unknown_member",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400,\"future_hint\":true}",
+      "now": 1786550399,
+      "accepted": true
+    },
+    {
+      "id": "missing_required_member",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "duplicate_member",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"kind\":\"other\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "invalid_utf8",
+      "wire_base64": "eyJraW5kIjoicm90a2lfY29tcGFuaW9uX3BhaXJpbmciLCJsYWJlbCI6/30=",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "wrong_required_type",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":\"1\",\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "noncanonical_identifier",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw==\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "insecure_origin",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"http://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550399,
+      "accepted": false
+    },
+    {
+      "id": "expired",
+      "wire_utf8": "{\"kind\":\"rotki_companion_pairing\",\"format_version\":1,\"engine_origin\":\"https://rotki.example\",\"pairing_id\":\"AAECAwQFBgcICQoLDA0ODw\",\"pairing_credential\":\"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8\",\"expires_at\":1786550400}",
+      "now": 1786550400,
+      "accepted": false
+    },
+    {
+      "id": "over_size_limit",
+      "wire_builder": {
+        "prefix": "{\"kind\":\"rotki_companion_pairing\",\"padding\":\"",
+        "repeat_ascii": "a",
+        "repeat_count": 2048,
+        "suffix": "\"}"
+      },
+      "now": 1786550399,
+      "accepted": false
+    }
+  ],
+  "device_proof": {
+    "canonical_engine_origin": "https://rotki.example",
+    "device_session_id": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "challenge_id": "ICEiIyQlJicoKSorLC0uLw",
+    "nonce": "MDEyMzQ1Njc4OTo7PD0-P0BBQkNERUZHSElKS0xNTk8",
+    "expires_at": 1786550400,
+    "transcript_hex": "726f746b692d636f6d70616e696f6e2d6465766963652d70726f6f662f763100001568747470733a2f2f726f746b692e6578616d706c65000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f000000006a7c9880",
+    "transcript_sha256": "f58760e2c57f148ba4b715d689f5648688c9d74f1e3d5d357fd81a64591cf4e0",
+    "public_key": "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "signature": "zKnDT8nsSEMoIxqZIzUybLt-QJJr6mtaaXm6SJMRmK7kJLpg-BP20iAJBHwLqXstAHFxaHwb_vs_jb4hSU6N8A"
+  },
+  "websocket_examples": [
+    {
+      "id": "companion_snapshot_revision",
+      "payload": {
+        "type": "companion_snapshot_revision",
+        "data": {
+          "revision": "sLGys7S1tre4ubq7vL2-v8DBwsPExcbHyMnKy8zNzs8"
+        }
+      }
+    },
+    {
+      "id": "companion_refresh_operation",
+      "payload": {
+        "type": "companion_refresh_operation",
+        "data": {
+          "operation_id": "oKGio6SlpqeoqaqrrK2urw",
+          "version": 3,
+          "created_at": 1786550400,
+          "started_at": 1786550401,
+          "finished_at": null,
+          "target": {
+            "kind": "global"
+          },
+          "state": "running",
+          "progress": {
+            "completed": 1,
+            "total": 2
+          },
+          "result_snapshot_revision": null,
+          "error": null
+        }
+      }
+    }
+  ]
+}

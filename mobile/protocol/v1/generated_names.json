@@ -1,0 +1,407 @@
+{
+  "schema_version": 1,
+  "domains": {
+    "auth_realms": {
+      "access_session": {
+        "python": "ACCESS_SESSION",
+        "kotlin": "AccessSession",
+        "swift": "accessSession"
+      },
+      "device_proof": {
+        "python": "DEVICE_PROOF",
+        "kotlin": "DeviceProof",
+        "swift": "deviceProof"
+      },
+      "full_client": {
+        "python": "FULL_CLIENT",
+        "kotlin": "FullClient",
+        "swift": "fullClient"
+      },
+      "pairing": {
+        "python": "PAIRING",
+        "kotlin": "Pairing",
+        "swift": "pairing"
+      },
+      "public": {
+        "python": "PUBLIC",
+        "kotlin": "Public",
+        "swift": "public"
+      }
+    },
+    "authorities": {
+      "access_bearer": {
+        "python": "ACCESS_BEARER",
+        "kotlin": "AccessBearer",
+        "swift": "accessBearer"
+      },
+      "browser_cookie": {
+        "python": "BROWSER_COOKIE",
+        "kotlin": "BrowserCookie",
+        "swift": "browserCookie"
+      },
+      "challenge_proof": {
+        "python": "CHALLENGE_PROOF",
+        "kotlin": "ChallengeProof",
+        "swift": "challengeProof"
+      },
+      "device_session_lookup": {
+        "python": "DEVICE_SESSION_LOOKUP",
+        "kotlin": "DeviceSessionLookup",
+        "swift": "deviceSessionLookup"
+      },
+      "none": {
+        "python": "NONE",
+        "kotlin": "None",
+        "swift": "none"
+      },
+      "pairing_bearer": {
+        "python": "PAIRING_BEARER",
+        "kotlin": "PairingBearer",
+        "swift": "pairingBearer"
+      }
+    },
+    "capabilities": {
+      "device_sessions": {
+        "python": "DEVICE_SESSIONS",
+        "kotlin": "DeviceSessions",
+        "swift": "deviceSessions"
+      },
+      "history_pagination": {
+        "python": "HISTORY_PAGINATION",
+        "kotlin": "HistoryPagination",
+        "swift": "historyPagination"
+      },
+      "portfolio_snapshot": {
+        "python": "PORTFOLIO_SNAPSHOT",
+        "kotlin": "PortfolioSnapshot",
+        "swift": "portfolioSnapshot"
+      },
+      "refresh_operations": {
+        "python": "REFRESH_OPERATIONS",
+        "kotlin": "RefreshOperations",
+        "swift": "refreshOperations"
+      },
+      "websocket_notifications": {
+        "python": "WEBSOCKET_NOTIFICATIONS",
+        "kotlin": "WebsocketNotifications",
+        "swift": "websocketNotifications"
+      }
+    },
+    "device_session_states": {
+      "authorized": {
+        "python": "AUTHORIZED",
+        "kotlin": "Authorized",
+        "swift": "authorized"
+      },
+      "revoked": {
+        "python": "REVOKED",
+        "kotlin": "Revoked",
+        "swift": "revoked"
+      }
+    },
+    "error_actions": {
+      "authenticate_full_client": {
+        "python": "AUTHENTICATE_FULL_CLIENT",
+        "kotlin": "AuthenticateFullClient",
+        "swift": "authenticateFullClient"
+      },
+      "enable_source_full_client": {
+        "python": "ENABLE_SOURCE_FULL_CLIENT",
+        "kotlin": "EnableSourceFullClient",
+        "swift": "enableSourceFullClient"
+      },
+      "fetch_snapshot": {
+        "python": "FETCH_SNAPSHOT",
+        "kotlin": "FetchSnapshot",
+        "swift": "fetchSnapshot"
+      },
+      "new_request": {
+        "python": "NEW_REQUEST",
+        "kotlin": "NewRequest",
+        "swift": "newRequest"
+      },
+      "none": {
+        "python": "NONE",
+        "kotlin": "None",
+        "swift": "none"
+      },
+      "observe_active": {
+        "python": "OBSERVE_ACTIVE",
+        "kotlin": "ObserveActive",
+        "swift": "observeActive"
+      },
+      "open_bound_profile": {
+        "python": "OPEN_BOUND_PROFILE",
+        "kotlin": "OpenBoundProfile",
+        "swift": "openBoundProfile"
+      },
+      "pair_again": {
+        "python": "PAIR_AGAIN",
+        "kotlin": "PairAgain",
+        "swift": "pairAgain"
+      },
+      "prove_device": {
+        "python": "PROVE_DEVICE",
+        "kotlin": "ProveDevice",
+        "swift": "proveDevice"
+      },
+      "request_challenge": {
+        "python": "REQUEST_CHALLENGE",
+        "kotlin": "RequestChallenge",
+        "swift": "requestChallenge"
+      },
+      "restart_history": {
+        "python": "RESTART_HISTORY",
+        "kotlin": "RestartHistory",
+        "swift": "restartHistory"
+      },
+      "retry": {
+        "python": "RETRY",
+        "kotlin": "Retry",
+        "swift": "retry"
+      },
+      "retry_after": {
+        "python": "RETRY_AFTER",
+        "kotlin": "RetryAfter",
+        "swift": "retryAfter"
+      },
+      "unlock_full_client": {
+        "python": "UNLOCK_FULL_CLIENT",
+        "kotlin": "UnlockFullClient",
+        "swift": "unlockFullClient"
+      },
+      "upgrade_engine": {
+        "python": "UPGRADE_ENGINE",
+        "kotlin": "UpgradeEngine",
+        "swift": "upgradeEngine"
+      },
+      "use_full_client": {
+        "python": "USE_FULL_CLIENT",
+        "kotlin": "UseFullClient",
+        "swift": "useFullClient"
+      }
+    },
+    "http_error_codes": {
+      "access_session_unavailable": {
+        "python": "ACCESS_SESSION_UNAVAILABLE",
+        "kotlin": "AccessSessionUnavailable",
+        "swift": "accessSessionUnavailable"
+      },
+      "challenge_unavailable": {
+        "python": "CHALLENGE_UNAVAILABLE",
+        "kotlin": "ChallengeUnavailable",
+        "swift": "challengeUnavailable"
+      },
+      "full_client_auth_required": {
+        "python": "FULL_CLIENT_AUTH_REQUIRED",
+        "kotlin": "FullClientAuthRequired",
+        "swift": "fullClientAuthRequired"
+      },
+      "history_changed": {
+        "python": "HISTORY_CHANGED",
+        "kotlin": "HistoryChanged",
+        "swift": "historyChanged"
+      },
+      "history_cursor_unavailable": {
+        "python": "HISTORY_CURSOR_UNAVAILABLE",
+        "kotlin": "HistoryCursorUnavailable",
+        "swift": "historyCursorUnavailable"
+      },
+      "idempotency_conflict": {
+        "python": "IDEMPOTENCY_CONFLICT",
+        "kotlin": "IdempotencyConflict",
+        "swift": "idempotencyConflict"
+      },
+      "incompatible_protocol": {
+        "python": "INCOMPATIBLE_PROTOCOL",
+        "kotlin": "IncompatibleProtocol",
+        "swift": "incompatibleProtocol"
+      },
+      "invalid_request": {
+        "python": "INVALID_REQUEST",
+        "kotlin": "InvalidRequest",
+        "swift": "invalidRequest"
+      },
+      "locked_engine": {
+        "python": "LOCKED_ENGINE",
+        "kotlin": "LockedEngine",
+        "swift": "lockedEngine"
+      },
+      "no_refreshable_sources": {
+        "python": "NO_REFRESHABLE_SOURCES",
+        "kotlin": "NoRefreshableSources",
+        "swift": "noRefreshableSources"
+      },
+      "not_authorized": {
+        "python": "NOT_AUTHORIZED",
+        "kotlin": "NotAuthorized",
+        "swift": "notAuthorized"
+      },
+      "pairing_unavailable": {
+        "python": "PAIRING_UNAVAILABLE",
+        "kotlin": "PairingUnavailable",
+        "swift": "pairingUnavailable"
+      },
+      "profile_mismatch": {
+        "python": "PROFILE_MISMATCH",
+        "kotlin": "ProfileMismatch",
+        "swift": "profileMismatch"
+      },
+      "rate_limited": {
+        "python": "RATE_LIMITED",
+        "kotlin": "RateLimited",
+        "swift": "rateLimited"
+      },
+      "refresh_conflict": {
+        "python": "REFRESH_CONFLICT",
+        "kotlin": "RefreshConflict",
+        "swift": "refreshConflict"
+      },
+      "resource_not_found": {
+        "python": "RESOURCE_NOT_FOUND",
+        "kotlin": "ResourceNotFound",
+        "swift": "resourceNotFound"
+      },
+      "scope_denied": {
+        "python": "SCOPE_DENIED",
+        "kotlin": "ScopeDenied",
+        "swift": "scopeDenied"
+      },
+      "snapshot_unavailable": {
+        "python": "SNAPSHOT_UNAVAILABLE",
+        "kotlin": "SnapshotUnavailable",
+        "swift": "snapshotUnavailable"
+      },
+      "source_disabled": {
+        "python": "SOURCE_DISABLED",
+        "kotlin": "SourceDisabled",
+        "swift": "sourceDisabled"
+      },
+      "unexpected_engine_error": {
+        "python": "UNEXPECTED_ENGINE_ERROR",
+        "kotlin": "UnexpectedEngineError",
+        "swift": "unexpectedEngineError"
+      }
+    },
+    "operation_error_codes": {
+      "operation_interrupted": {
+        "python": "OPERATION_INTERRUPTED",
+        "kotlin": "OperationInterrupted",
+        "swift": "operationInterrupted"
+      },
+      "source_refresh_failed": {
+        "python": "SOURCE_REFRESH_FAILED",
+        "kotlin": "SourceRefreshFailed",
+        "swift": "sourceRefreshFailed"
+      }
+    },
+    "platforms": {
+      "android": {
+        "python": "ANDROID",
+        "kotlin": "Android",
+        "swift": "android"
+      },
+      "ios": {
+        "python": "IOS",
+        "kotlin": "Ios",
+        "swift": "ios"
+      }
+    },
+    "root_states": {
+      "connecting": {
+        "python": "CONNECTING",
+        "kotlin": "Connecting",
+        "swift": "connecting"
+      },
+      "degraded": {
+        "python": "DEGRADED",
+        "kotlin": "Degraded",
+        "swift": "degraded"
+      },
+      "device_locked": {
+        "python": "DEVICE_LOCKED",
+        "kotlin": "DeviceLocked",
+        "swift": "deviceLocked"
+      },
+      "engine_locked": {
+        "python": "ENGINE_LOCKED",
+        "kotlin": "EngineLocked",
+        "swift": "engineLocked"
+      },
+      "incompatible": {
+        "python": "INCOMPATIBLE",
+        "kotlin": "Incompatible",
+        "swift": "incompatible"
+      },
+      "online": {
+        "python": "ONLINE",
+        "kotlin": "Online",
+        "swift": "online"
+      },
+      "profile_mismatch": {
+        "python": "PROFILE_MISMATCH",
+        "kotlin": "ProfileMismatch",
+        "swift": "profileMismatch"
+      },
+      "refreshing": {
+        "python": "REFRESHING",
+        "kotlin": "Refreshing",
+        "swift": "refreshing"
+      },
+      "revoked": {
+        "python": "REVOKED",
+        "kotlin": "Revoked",
+        "swift": "revoked"
+      },
+      "unpaired": {
+        "python": "UNPAIRED",
+        "kotlin": "Unpaired",
+        "swift": "unpaired"
+      },
+      "unreachable": {
+        "python": "UNREACHABLE",
+        "kotlin": "Unreachable",
+        "swift": "unreachable"
+      }
+    },
+    "source_error_codes": {
+      "source_authentication_failed": {
+        "python": "SOURCE_AUTHENTICATION_FAILED",
+        "kotlin": "SourceAuthenticationFailed",
+        "swift": "sourceAuthenticationFailed"
+      },
+      "source_configuration_changed": {
+        "python": "SOURCE_CONFIGURATION_CHANGED",
+        "kotlin": "SourceConfigurationChanged",
+        "swift": "sourceConfigurationChanged"
+      },
+      "source_rate_limited": {
+        "python": "SOURCE_RATE_LIMITED",
+        "kotlin": "SourceRateLimited",
+        "swift": "sourceRateLimited"
+      },
+      "source_unexpected_error": {
+        "python": "SOURCE_UNEXPECTED_ERROR",
+        "kotlin": "SourceUnexpectedError",
+        "swift": "sourceUnexpectedError"
+      },
+      "source_unreachable": {
+        "python": "SOURCE_UNREACHABLE",
+        "kotlin": "SourceUnreachable",
+        "swift": "sourceUnreachable"
+      }
+    },
+    "websocket_event_types": {
+      "companion_refresh_operation": {
+        "python": "COMPANION_REFRESH_OPERATION",
+        "kotlin": "CompanionRefreshOperation",
+        "swift": "companionRefreshOperation"
+      },
+      "companion_snapshot_revision": {
+        "python": "COMPANION_SNAPSHOT_REVISION",
+        "kotlin": "CompanionSnapshotRevision",
+        "swift": "companionSnapshotRevision"
+      }
+    }
+  }
+}
