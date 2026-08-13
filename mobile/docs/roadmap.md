@@ -9,7 +9,7 @@ changed. It does not authorize widening Companion Scope.
 
 | Phase | Outcome | Status |
 |---|---|---|
-| 0 | Protocol specifications and risk spikes | **not started** |
+| 0 | Protocol specifications and risk spikes | **in progress** |
 | 1 | Engine identity and authorization control plane | **not started** |
 | 2 | Isolated KMP build and shared foundation | **not started** |
 | 3 | Coherent Engine data plane | **not started** |
@@ -117,7 +117,7 @@ examples, and a cryptographically verified Device Key proof vector are checked i
 `mobile/protocol/v1/`; the focused static validator lives at
 `rotkehlchen/tests/api/companion/test_protocol_spec.py`. The generator drift check, focused
 pytest suite, Ruff, and mypy are green. This slice remains specification and test scaffolding
-only: it adds no production endpoint or UI. P0.2 is the next executable slice.
+only: it adds no production endpoint or UI.
 
 ### P0.2 — `ExactDecimal` characterization spike
 
@@ -135,6 +135,15 @@ Python `FVal`, JVM, and Kotlin/Native for:
 Exit: byte-identical canonical output and identical comparison/arithmetic results on JVM
 and iOS. If the candidate fails, replace only its private backend. No snapshot schema or
 financial DTO merges before this passes.
+
+Implementation status (2026-08-13): complete. The isolated executable build lives under
+`mobile/spikes/exact-decimal/`; 72 vectors generated from Python `FVal` pass byte-for-byte
+on JVM and `iosSimulatorArm64`, and the `iosArm64` test binary links. BigNum 0.3.10's direct
+division incorrectly truncated `2 / 3`, so the private backend now performs exact
+BigInteger quotient/remainder HALF_EVEN rounding while the public type and serialized
+schema remain candidate-independent. Tool pins, the observed limitation, commands, and
+the M2.1 supersession rule are recorded in the spike README. This completes P0.2 but not
+Gate G0, which still requires P0.3.
 
 ### P0.3 — Native-security and SKIE characterization spikes
 
@@ -980,6 +989,10 @@ cargo test -p starling-proxy
 ./gradlew :androidApp:testDebugUnitTest :androidApp:assembleDebug
 ./gradlew :shared:goldenEngineContractTest
 ./gradlew :androidApp:connectedTracerDebugAndroidTest
+
+# P0.2 risk spike, until M2.1 supersedes it
+uv run python mobile/spikes/exact-decimal/python/generate_exact_decimal_vectors.py
+mobile/spikes/exact-decimal/gradlew -p mobile/spikes/exact-decimal p02Check
 
 # iOS after Phase 5; scheme/destination are fixed by the generated Xcode project
 xcodebuild build test -project iosApp/iosApp.xcodeproj -scheme iosApp \

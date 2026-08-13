@@ -34,6 +34,11 @@ frontend/logs
 **/.claude/
 out
 .codexbox-out/
+# Isolated Kotlin Multiplatform build state
+mobile/**/.gradle/
+mobile/**/.kotlin/
+mobile/**/*.iml
+mobile/**/local.properties
 # benchmark harness outputs
 bench-result.json
 bench-compare.json

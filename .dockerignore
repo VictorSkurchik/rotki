@@ -23,6 +23,7 @@ frontend/build
 frontend/logs
 frontend/node_modules
 node_modules
+mobile
 rotkehlchen.egg-info
 tools/find-duplicate-constants/target
 rotkehlchen.log

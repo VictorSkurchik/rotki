@@ -1,0 +1,12 @@
+[versions]
+bignum = "0.3.10"
+kotlin = "2.4.10"
+serialization = "1.11.0"
+
+[libraries]
+ionspin-bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
