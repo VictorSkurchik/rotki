@@ -18,8 +18,9 @@ changed. It does not authorize widening Companion Scope.
 | 6 | Four complete native destinations | **not started** |
 | 7 | Personal-device hardening and handoff | **not started** |
 
-No application implementation has started. `CONTEXT.md`, the ADRs, and this roadmap are
-the current planning artifacts.
+No production application implementation has started. `CONTEXT.md`, the ADRs, this
+roadmap, and the disposable Phase 0 spikes are the current planning and characterization
+artifacts.
 
 ## Delivery shape
 
@@ -165,6 +166,23 @@ replace the physical-device acceptance run.
 Gate G0: protocol and error specifications are reviewed; all three spikes pass; selected
 library/tool versions and observed limitations are recorded. A failed spike changes the
 implementation choice behind an existing boundary, not the product boundary.
+
+Implementation status (2026-08-13): automated characterization complete; physical
+acceptance pending. The isolated `mobile/spikes/android-security/` build proves the
+protocol transcript and P-256 wire formats, non-exportable Android Keystore signing,
+biometric-only per-operation AES-GCM policy, atomic backup-excluded storage, and typed
+invalidation behavior. Its 17 JVM tests and six non-interactive instrumentation tests pass
+on a clean managed API 28 device; three prompt-dependent tests remain explicit opt-in
+physical checks. `mobile/spikes/skie-interop/` passes clean SKIE-enabled and SKIE-disabled
+builds, the representative Swift consumer, both iOS framework type checks, typed
+`StateFlow`, sealed states, and bidirectional cancellation. The checked-in iOS 17 Swift
+package and disposable SwiftUI host under `mobile/spikes/ios-security/` pass 33 Swift package tests,
+iOS Simulator tests, and unsigned arm64 device builds. They characterize separate Secure
+Enclave signing/wrapping keys, `biometryCurrentSet`, AES-GCM storage, lifecycle races,
+typed cleanup, and reinstall continuity. The path-filtered native-spike workflow pins the
+supported Xcode 26.4 toolchain and runs every automated gate. Gate G0 remains incomplete
+until that hosted workflow is green and the README's pending checklist passes on a physical
+iPhone running iOS 17.x; simulator success is not Secure Enclave evidence.
 
 ## Phase 1 — Engine identity and authorization control plane
 
