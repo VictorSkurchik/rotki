@@ -41,9 +41,12 @@ flowchart LR
     S --> Z
 ```
 
-Phase 1 and Phase 2 may proceed in parallel after Phase 0. The real Android tracer is a
-hard gate: no remaining destination and no iOS UI starts before it passes. The iOS tracer
-then proves that shared behavior is genuinely multiplatform before feature expansion.
+Phase 1 and Phase 2 may proceed in parallel after the automated Phase 0 contracts and
+spikes pass. The deferred physical-iPhone portion of P0.3 remains a hard gate before
+production iOS security or tracer work; it is not a blocker for Engine or shared KMP
+foundation slices. The real Android tracer is a hard gate: no remaining destination and
+no iOS UI starts before it passes. The iOS tracer then proves that shared behavior is
+genuinely multiplatform before feature expansion.
 
 ## Working rules
 
@@ -176,13 +179,21 @@ on a clean managed API 28 device; three prompt-dependent tests remain explicit o
 physical checks. `mobile/spikes/skie-interop/` passes clean SKIE-enabled and SKIE-disabled
 builds, the representative Swift consumer, both iOS framework type checks, typed
 `StateFlow`, sealed states, and bidirectional cancellation. The checked-in iOS 17 Swift
-package and disposable SwiftUI host under `mobile/spikes/ios-security/` pass 33 Swift package tests,
-iOS Simulator tests, and unsigned arm64 device builds. They characterize separate Secure
-Enclave signing/wrapping keys, `biometryCurrentSet`, AES-GCM storage, lifecycle races,
-typed cleanup, and reinstall continuity. The path-filtered native-spike workflow pins the
-supported Xcode 26.4 toolchain and runs every automated gate. Gate G0 remains incomplete
-until that hosted workflow is green and the README's pending checklist passes on a physical
-iPhone running iOS 17.x; simulator success is not Secure Enclave evidence.
+package and disposable SwiftUI host under `mobile/spikes/ios-security/` pass 33 Swift
+package tests, iOS Simulator tests, signed Simulator launch/continuity smoke, and unsigned
+arm64 device builds. They characterize separate Secure Enclave signing/wrapping keys,
+`biometryCurrentSet`, AES-GCM storage, lifecycle races, typed cleanup, and reinstall
+continuity. The path-filtered native-spike workflow pins the supported Xcode 26.4
+toolchain and runs every automated gate. Gate G0 remains incomplete until that hosted
+workflow is green and the README's pending checklist passes on a physical iPhone running
+iOS 17.x; simulator success is not Secure Enclave evidence.
+
+Deferral record (2026-08-13): the owner currently has no physical iPhone available, so
+the iOS 17 checklist is deferred, not waived. Engine slices E1.1–E1.5 and shared KMP
+foundation work beginning with M2.1 may proceed while this item remains open. Do not mark
+Phase 0 or Gate G0 complete, start production iOS native-security/tracer work, or claim
+physical Secure Enclave/biometric acceptance until the checked-in checklist has passed on
+the device and its evidence is recorded here.
 
 ## Phase 1 — Engine identity and authorization control plane
 
