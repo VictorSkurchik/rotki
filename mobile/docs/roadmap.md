@@ -11,16 +11,17 @@ changed. It does not authorize widening Companion Scope.
 |---|---|---|
 | 0 | Protocol specifications and risk spikes | **in progress** |
 | 1 | Engine identity and authorization control plane | **not started** |
-| 2 | Isolated KMP build and shared foundation | **not started** |
+| 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
 | 4 | Real Android tracer bullet | **not started** |
 | 5 | Equivalent iOS/SKIE tracer bullet | **not started** |
 | 6 | Four complete native destinations | **not started** |
 | 7 | Personal-device hardening and handoff | **not started** |
 
-No production application implementation has started. `CONTEXT.md`, the ADRs, this
-roadmap, and the disposable Phase 0 spikes are the current planning and characterization
-artifacts.
+The isolated KMP foundation and Android shell are under active development; no Portfolio
+feature or Engine data-plane implementation has started. `CONTEXT.md`, the ADRs, this
+roadmap, the production `mobile/` build, and the remaining Phase 0 spikes are the current
+implementation and characterization artifacts.
 
 ## Delivery shape
 
@@ -184,9 +185,9 @@ package tests, iOS Simulator tests, signed Simulator launch/continuity smoke, an
 arm64 device builds. They characterize separate Secure Enclave signing/wrapping keys,
 `biometryCurrentSet`, AES-GCM storage, lifecycle races, typed cleanup, and reinstall
 continuity. The path-filtered native-spike workflow pins the supported Xcode 26.4
-toolchain and runs every automated gate. Gate G0 remains incomplete until that hosted
-workflow is green and the README's pending checklist passes on a physical iPhone running
-iOS 17.x; simulator success is not Secure Enclave evidence.
+toolchain and now passes every automated gate, including launch of the SwiftUI security host
+on an iOS Simulator. Gate G0 remains incomplete until the README's pending checklist passes
+on a physical iPhone running iOS 17.x; simulator success is not Secure Enclave evidence.
 
 Deferral record (2026-08-13): the owner currently has no physical iPhone available, so
 the iOS 17 checklist is deferred, not waived. Engine slices E1.1–E1.5 and shared KMP
@@ -335,9 +336,9 @@ Add `.github/workflows/mobile.yml` with path filtering. Linux runs shared/Androi
 and an Android build; macOS compiles the iOS target from the start. No signing credentials
 or release publication enter CI.
 
-Implementation status (2026-08-13): locally complete; the first hosted workflow run is
-pending publication of the branch. `mobile/` is now the only production Gradle root and
-contains one `shared` module plus the native Material 3 `androidApp`. The shared module
+Implementation status (2026-08-13): complete. The first hosted `Mobile` workflow passed on
+both Ubuntu and the pinned Xcode 26.4 runner. `mobile/` is now the only production Gradle
+root and contains one `shared` module plus the native Material 3 `androidApp`. The shared module
 targets JVM test execution, Android API 28+, `iosArm64`, and `iosSimulatorArm64`; its
 framework bundle ID and iOS 17 minimum are pinned, and CI rejects UI dependencies from
 its dependency report. The P0.2 implementation and 72 FVal vectors moved into `mobile/shared`, and
@@ -346,8 +347,7 @@ the disposable decimal Gradle root/workflow were removed. Android `dev`, `stage`
 repository's SemVer suffix order. Local JVM, Android-host, all flavor/build-type unit
 tests, all debug APKs, dev lint, iOS Simulator tests, device-test linking, and both iOS
 framework links pass. The dedicated workflow keeps these jobs separate from Python,
-pnpm, and Cargo builds; it must turn green on Ubuntu and the pinned Xcode 26.4 runner
-before M2.1 is marked fully complete.
+pnpm, and Cargo builds.
 
 ### M2.2 — Shared protocol and state seams
 
@@ -365,6 +365,16 @@ Implement project-owned boundaries before feature detail:
 No Ktor, SKIE, or third-party decimal type may appear in domain/public facade signatures.
 Unit tests cover URL rejection, REST/WS derivation, unknown/missing JSON fields, retry and
 renewal rules, cancellation, every state transition, and diagnostic redaction.
+
+Implementation status (2026-08-13): locally complete; hosted `Mobile` and repository CI
+remain the final acceptance gate. The shared module now owns canonical Engine-origin and
+opaque protocol values, strict bounded HTTP/WS decoders, OkHttp/Darwin clients without
+redirect retries or Darwin caches, deterministic retry policy, atomic renewal admission,
+auth/control DTOs, Device proof transcript construction, native-security/storage/lifecycle
+ports, and a fixture-driven 11-state coordinator with a Swift-safe facade. The canonical
+JSON assets generate Kotlin vocabulary and tests; focused Python validation, 72 FVal
+vectors, 81 shared tests on each JVM/Android host, `mobileCheck`, the iOS Simulator suite,
+iosArm64 test linking, and both framework links pass locally.
 
 ### M2.3 — Android native security adapters
 

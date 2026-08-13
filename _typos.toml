@@ -13,6 +13,8 @@ extend-ignore-re = [
     "(?s)(#|//)\\s*spellchecker:off.*?\\n\\s*(#|//)\\s*spellchecker:on",  # spellchecker:<on|off>
     "(?m)^.*MockResponse\\(HTTPStatus\\.OK,\\s*\\\"\\\"\\\".*$",  # Mock responses
     "(?m)^.*mIneR.*$",  # miner misspelling in test to check case-sensitivity
+    "ICEiIyQlJicoKSorLC0uLw",  # canonical Companion Challenge ID fixture
+    "zKnDT8nsSEMoIxqZIzUybLt-QJJr6mtaaXm6SJMRmK7kJLpg-BP20iAJBHwLqXstAHFxaHwb_vs_jb4hSU6N8A",  # canonical Companion proof fixture
     "bitcoincash:.*",  # ignore bitcoincash addresses
 ]
 extend-ignore-identifiers-re = [

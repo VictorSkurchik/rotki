@@ -1251,8 +1251,8 @@ fit but older History exists. No live or expiring cursor is embedded in Snapshot
 its Revision.
 
 A first request may include a bounded `limit` plus the version-1 date, group/event type,
-location, asset-ID, and Source-ID filters. Values inside one filter dimension are ORed and
-different dimensions are ANDed. Date and group-kind predicates evaluate the complete Group.
+location, asset-ID, and Source-ID filters. Values inside one filter dimension use OR and
+different dimensions use AND. Date and group-kind predicates evaluate the complete Group.
 For all active Event-scoped dimensions, there must exist one and the same included Event
 whose `location`, `asset_id`, event type, event subtype, and proven `source_ids` satisfy
 them; an absent dimension is true, and a Source dimension matches by non-empty set

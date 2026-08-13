@@ -8,6 +8,7 @@ on:
       - '!mobile/spikes/**'
       - 'rotkehlchen/errors/serialization.py'
       - 'rotkehlchen/fval.py'
+      - 'tools/scripts/generate_companion_protocol_vocabulary.py'
   push:
     branches:
       - main
@@ -21,6 +22,7 @@ on:
       - '!mobile/spikes/**'
       - 'rotkehlchen/errors/serialization.py'
       - 'rotkehlchen/fval.py'
+      - 'tools/scripts/generate_companion_protocol_vocabulary.py'
   workflow_dispatch: { }
 
 concurrency:
@@ -65,8 +67,11 @@ jobs:
             'platforms;android-37.0' \
             'build-tools;36.0.0'
 
-      - name: Verify ExactDecimal vectors
-        run: python mobile/shared/tools/generate_exact_decimal_vectors.py
+      - name: Verify generated shared contracts
+        run: |
+          python mobile/shared/tools/generate_exact_decimal_vectors.py
+          python tools/scripts/generate_companion_protocol_vocabulary.py --check
+          python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 
       - name: Verify shared has no UI dependencies
         working-directory: mobile

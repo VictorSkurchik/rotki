@@ -1,0 +1,232 @@
+{
+  "schema_version": 1,
+  "input_limits": {
+    "maximum_control_response_bytes": 65536,
+    "maximum_json_nesting_depth": 64,
+    "maximum_websocket_buffered_frames": 16,
+    "maximum_websocket_event_bytes": 65536
+  },
+  "retry_policy": {
+    "attempt_limits": {
+      "safe_get": 3,
+      "idempotent_write": 2,
+      "challenge_or_proof": 1
+    },
+    "retryable_http_statuses": [
+      408,
+      429,
+      502,
+      503,
+      504
+    ],
+    "base_delay_milliseconds": 250,
+    "maximum_delay_milliseconds": 2000,
+    "maximum_retry_after_seconds": 5,
+    "cases": [
+      {
+        "id": "safe_get_first_retry",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "pre_response_transport",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "retry_with_jitter"
+      },
+      {
+        "id": "safe_get_second_retry",
+        "request_kind": "safe_get",
+        "completed_attempts": 2,
+        "failure": "http_503_retryable",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "retry_with_jitter"
+      },
+      {
+        "id": "safe_get_budget_exhausted",
+        "request_kind": "safe_get",
+        "completed_attempts": 3,
+        "failure": "pre_response_transport",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_budget_exhausted"
+      },
+      {
+        "id": "idempotent_write_one_retry",
+        "request_kind": "idempotent_write",
+        "completed_attempts": 1,
+        "failure": "http_502_without_envelope",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "retry_with_jitter"
+      },
+      {
+        "id": "idempotent_write_budget_exhausted",
+        "request_kind": "idempotent_write",
+        "completed_attempts": 2,
+        "failure": "pre_response_transport",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_budget_exhausted"
+      },
+      {
+        "id": "challenge_never_retransmitted",
+        "request_kind": "challenge_or_proof",
+        "completed_attempts": 1,
+        "failure": "pre_response_transport",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_not_replayable"
+      },
+      {
+        "id": "complete_response_transport_failure",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "complete_response_transport",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_failure_not_retryable"
+      },
+      {
+        "id": "contract_failure",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "contract_failure",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_failure_not_retryable"
+      },
+      {
+        "id": "typed_retryable_required",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "http_503_not_retryable",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_failure_not_retryable"
+      },
+      {
+        "id": "user_action_blocks_retry",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "http_503_user_action",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_failure_not_retryable"
+      },
+      {
+        "id": "unexpected_error_blocks_retry",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "http_503_unexpected_engine_error",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_failure_not_retryable"
+      },
+      {
+        "id": "retry_after_boundary",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "http_429_retry_after_5",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "retry_after_5000_milliseconds"
+      },
+      {
+        "id": "retry_after_too_long",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "http_429_retry_after_6",
+        "active_foreground": true,
+        "credential_available": true,
+        "decision": "stop_retry_after_too_long"
+      },
+      {
+        "id": "cancel_outside_foreground",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "pre_response_transport",
+        "active_foreground": false,
+        "credential_available": true,
+        "decision": "stop_outside_active_foreground"
+      },
+      {
+        "id": "cancel_on_credential_loss",
+        "request_kind": "safe_get",
+        "completed_attempts": 1,
+        "failure": "pre_response_transport",
+        "active_foreground": true,
+        "credential_available": false,
+        "decision": "stop_credential_unavailable"
+      }
+    ]
+  },
+  "renewal_policy": {
+    "access_session_lifetime_seconds": 900,
+    "renewal_window_seconds": 300,
+    "cases": [
+      {
+        "id": "outside_renewal_window",
+        "seconds_until_expiry": 301,
+        "active_foreground": true,
+        "renewal_in_flight": false,
+        "decision": "keep_current_session"
+      },
+      {
+        "id": "renewal_window_boundary",
+        "seconds_until_expiry": 300,
+        "active_foreground": true,
+        "renewal_in_flight": false,
+        "decision": "start_single_flight_renewal"
+      },
+      {
+        "id": "renewal_already_in_flight",
+        "seconds_until_expiry": 300,
+        "active_foreground": true,
+        "renewal_in_flight": true,
+        "decision": "renewal_already_in_flight"
+      },
+      {
+        "id": "exact_expiry",
+        "seconds_until_expiry": 0,
+        "active_foreground": true,
+        "renewal_in_flight": false,
+        "decision": "session_expired"
+      },
+      {
+        "id": "outside_foreground",
+        "seconds_until_expiry": 300,
+        "active_foreground": false,
+        "renewal_in_flight": false,
+        "decision": "outside_active_foreground"
+      }
+    ]
+  },
+  "lifecycle_policy": {
+    "cases": [
+      {
+        "id": "inactive_suspends_network",
+        "visibility": "inactive",
+        "network_allowed": false,
+        "destroy_bearer": false,
+        "discard_plaintext": false,
+        "requires_device_authentication_on_return": false
+      },
+      {
+        "id": "background_destroys_secrets",
+        "visibility": "background_or_locked",
+        "network_allowed": false,
+        "destroy_bearer": true,
+        "discard_plaintext": true,
+        "requires_device_authentication_on_return": true
+      },
+      {
+        "id": "active_allows_foreground_pipeline",
+        "visibility": "active_foreground",
+        "network_allowed": true,
+        "destroy_bearer": false,
+        "discard_plaintext": false,
+        "requires_device_authentication_on_return": false
+      }
+    ]
+  }
+}

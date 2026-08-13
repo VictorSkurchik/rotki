@@ -7,6 +7,7 @@ Protocol v1 bootstrap and authorization control plane.
 - `generated_names.json` is the checked output for Python, Kotlin, and Swift identifiers.
 - `p0_1_cases.json` owns the route, recovery-state, error, and threat-test matrices.
 - `golden_vectors.json` owns exact wire examples and the Device Key proof vector.
+- `client_policy_cases.json` owns the shared Client retry, renewal, and lifecycle cases.
 
 The narrative contract remains in `mobile/docs/protocol.md`. Phase P0.1 validates these
 assets without implementing production endpoints. Runtime Engine and Client tests will
@@ -24,6 +25,12 @@ Regenerate or check cross-language identifiers with:
 ```bash
 uv run python tools/scripts/generate_companion_protocol_vocabulary.py --write
 uv run python tools/scripts/generate_companion_protocol_vocabulary.py --check
+```
+
+Verify the checked-in shared Kotlin vocabulary and embedded contract fixtures with:
+
+```bash
+uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 ```
 
 JSON is UTF-8, uses two-space indentation, and ends with one newline. Duplicate object

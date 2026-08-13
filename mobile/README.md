@@ -18,6 +18,14 @@ Run the host-side Android and shared checks from this directory:
 ./gradlew --no-daemon mobileCheck
 ```
 
+Verify the checked-in cross-platform contract fixtures from the repository root:
+
+```bash
+uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
+uv run python tools/scripts/generate_companion_protocol_vocabulary.py --check
+uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
+```
+
 On Apple Silicon macOS, add the Kotlin/Native gates:
 
 ```bash

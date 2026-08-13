@@ -129,6 +129,7 @@ VOCABULARY = _load_json('vocabulary.json')
 CASES = _load_json('p0_1_cases.json')
 GOLDEN_VECTORS = _load_json('golden_vectors.json')
 GENERATED_NAMES = _load_json('generated_names.json')
+CLIENT_POLICY_CASES = _load_json('client_policy_cases.json')
 
 
 def _decode_base64url(value: str, encoded_length_key: str) -> bytes:
@@ -340,12 +341,86 @@ def test_root_state_matrix_is_complete() -> None:
         for state in transition['from']
     }
     assert incoming_states | source_states >= ROOT_STATES
-    assert next(
+    websocket_close = next(
         transition for transition in transitions if transition['id'] == 'websocket_policy_close'
-    )['to'] == 'connecting'
-    assert next(
+    )
+    assert websocket_close['to'] == 'connecting'
+    assert set(websocket_close['from']) == {
+        'connecting',
+        'degraded',
+        'online',
+        'refreshing',
+    }
+    assert websocket_close['bearer_effect'] == 'delete'
+
+    access_session_unavailable = next(
+        transition
+        for transition in transitions
+        if transition['id'] == 'access_session_unavailable'
+    )
+    assert access_session_unavailable['to'] == 'connecting'
+    assert set(access_session_unavailable['from']) == {
+        'connecting',
+        'degraded',
+        'online',
+        'refreshing',
+    }
+    assert access_session_unavailable['bearer_effect'] == 'delete'
+
+    active_refresh = next(
+        transition for transition in transitions if transition['id'] == 'active_refresh_reconciled'
+    )
+    assert set(active_refresh['from']) == {'degraded', 'online'}
+    assert active_refresh['to'] == 'refreshing'
+    assert active_refresh['bearer_effect'] == 'keep'
+
+    proof_and_active_refresh = next(
+        transition
+        for transition in transitions
+        if transition['id'] == 'proof_and_active_refresh_reconciled'
+    )
+    assert proof_and_active_refresh['from'] == ['connecting']
+    assert proof_and_active_refresh['to'] == 'refreshing'
+    assert proof_and_active_refresh['device_session_effect'] == 'keep'
+    assert proof_and_active_refresh['snapshot_effect'] == 'keep'
+    assert proof_and_active_refresh['bearer_effect'] == 'replace'
+
+    for transition_id in (
+            'proof_locked',
+            'proof_profile_mismatch',
+            'protocol_incompatible',
+    ):
+        transition = next(
+            candidate for candidate in transitions if candidate['id'] == transition_id
+        )
+        assert transition['from'] == ['connecting']
+        assert transition['device_session_effect'] == 'keep'
+        assert transition['snapshot_effect'] == 'keep'
+        assert transition['bearer_effect'] == 'delete'
+
+    challenge_unavailable = next(
+        transition for transition in transitions if transition['id'] == 'challenge_unavailable'
+    )
+    assert challenge_unavailable['from'] == ['connecting']
+    assert challenge_unavailable['to'] == 'connecting'
+    assert challenge_unavailable['device_session_effect'] == 'keep'
+    assert challenge_unavailable['snapshot_effect'] == 'keep'
+    assert challenge_unavailable['bearer_effect'] == 'keep_until_expiry'
+
+    not_authorized = next(
         transition for transition in transitions if transition['id'] == 'proof_not_authorized'
-    )['to'] == 'revoked'
+    )
+    assert not_authorized['to'] == 'revoked'
+    assert set(not_authorized['from']) == {
+        'connecting',
+        'degraded',
+        'online',
+        'refreshing',
+        'unreachable',
+    }
+    assert not_authorized['device_session_effect'] == 'delete'
+    assert not_authorized['snapshot_effect'] == 'delete'
+    assert not_authorized['bearer_effect'] == 'delete'
 
 
 def test_threat_matrix_is_complete() -> None:
@@ -438,3 +513,39 @@ def test_websocket_vocabulary_and_examples_agree() -> None:
         VOCABULARY['websocket_event_types'],
     )
     assert all(set(example['payload']) == {'type', 'data'} for example in examples)
+
+
+def test_client_policy_cases_match_normative_constants() -> None:
+    assert CLIENT_POLICY_CASES['schema_version'] == 1
+    assert CLIENT_POLICY_CASES['input_limits'] == {
+        'maximum_control_response_bytes': 65536,
+        'maximum_json_nesting_depth': 64,
+        'maximum_websocket_buffered_frames': 16,
+        'maximum_websocket_event_bytes': 65536,
+    }
+    retry = CLIENT_POLICY_CASES['retry_policy']
+    assert retry['attempt_limits'] == {
+        'safe_get': 3,
+        'idempotent_write': 2,
+        'challenge_or_proof': 1,
+    }
+    assert retry['retryable_http_statuses'] == [408, 429, 502, 503, 504]
+    assert retry['base_delay_milliseconds'] == 250
+    assert retry['maximum_delay_milliseconds'] == 2000
+    assert retry['maximum_retry_after_seconds'] == 5
+    assert len({case['id'] for case in retry['cases']}) == len(retry['cases']) == 15
+
+    renewal = CLIENT_POLICY_CASES['renewal_policy']
+    assert renewal['access_session_lifetime_seconds'] == (
+        VOCABULARY['lifetimes_seconds']['access_session'])
+    assert renewal['renewal_window_seconds'] == (
+        VOCABULARY['lifetimes_seconds']['proactive_renewal_window'])
+    assert len({case['id'] for case in renewal['cases']}) == len(renewal['cases']) == 5
+
+    lifecycle = CLIENT_POLICY_CASES['lifecycle_policy']['cases']
+    assert {case['visibility'] for case in lifecycle} == {
+        'active_foreground',
+        'background_or_locked',
+        'inactive',
+    }
+    assert len({case['id'] for case in lifecycle}) == len(lifecycle) == 3

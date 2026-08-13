@@ -443,7 +443,6 @@
     {
       "id": "active_refresh_reconciled",
       "from": [
-        "connecting",
         "degraded",
         "online"
       ],
@@ -452,6 +451,18 @@
       "device_session_effect": "keep",
       "snapshot_effect": "keep",
       "bearer_effect": "keep",
+      "recovery": "observe_refresh"
+    },
+    {
+      "id": "proof_and_active_refresh_reconciled",
+      "from": [
+        "connecting"
+      ],
+      "stimulus": "proof_and_active_refresh_reconciled",
+      "to": "refreshing",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "replace",
       "recovery": "observe_refresh"
     },
     {
@@ -508,6 +519,7 @@
     {
       "id": "access_session_unavailable",
       "from": [
+        "connecting",
         "degraded",
         "online",
         "refreshing"
@@ -520,8 +532,23 @@
       "recovery": "prove_device"
     },
     {
+      "id": "proactive_renewal_started",
+      "from": [
+        "degraded",
+        "online",
+        "refreshing"
+      ],
+      "stimulus": "proactive_renewal_started",
+      "to": "connecting",
+      "device_session_effect": "keep",
+      "snapshot_effect": "keep",
+      "bearer_effect": "keep_until_expiry",
+      "recovery": "renew_and_reconcile"
+    },
+    {
       "id": "websocket_policy_close",
       "from": [
+        "connecting",
         "degraded",
         "online",
         "refreshing"
@@ -542,7 +569,7 @@
       "to": "engine_locked",
       "device_session_effect": "keep",
       "snapshot_effect": "keep",
-      "bearer_effect": "absent",
+      "bearer_effect": "delete",
       "recovery": "unlock_full_client"
     },
     {
@@ -554,7 +581,7 @@
       "to": "profile_mismatch",
       "device_session_effect": "keep",
       "snapshot_effect": "keep",
-      "bearer_effect": "absent",
+      "bearer_effect": "delete",
       "recovery": "open_bound_profile"
     },
     {
@@ -566,13 +593,17 @@
       "to": "incompatible",
       "device_session_effect": "keep",
       "snapshot_effect": "keep",
-      "bearer_effect": "absent",
+      "bearer_effect": "delete",
       "recovery": "upgrade_engine"
     },
     {
       "id": "proof_not_authorized",
       "from": [
-        "connecting"
+        "connecting",
+        "degraded",
+        "online",
+        "refreshing",
+        "unreachable"
       ],
       "stimulus": "not_authorized",
       "to": "revoked",
@@ -590,7 +621,7 @@
       "to": "connecting",
       "device_session_effect": "keep",
       "snapshot_effect": "keep",
-      "bearer_effect": "absent",
+      "bearer_effect": "keep_until_expiry",
       "recovery": "request_challenge"
     },
     {
