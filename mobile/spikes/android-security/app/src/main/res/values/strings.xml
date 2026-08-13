@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">P0.3 Android security spike</string>
+    <string name="status_initial">Checking Android Keystore and biometric eligibility…</string>
+    <string name="refresh">Refresh eligibility</string>
+    <string name="open_enrollment">Open biometric enrollment</string>
+    <string name="create_material">Create new pairing material</string>
+    <string name="sign_transcript">Sign protocol transcript</string>
+    <string name="encrypt_sample">Encrypt sample after biometric</string>
+    <string name="decrypt_sample">Decrypt sample after biometric</string>
+    <string name="destroy_material">Destroy local material</string>
+    <string name="biometric_prompt_title">Unlock encrypted snapshot</string>
+    <string name="biometric_prompt_subtitle">Strong biometric only</string>
+    <string name="cancel">Cancel</string>
+</resources>

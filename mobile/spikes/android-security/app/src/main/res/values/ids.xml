@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="security_status" type="id" />
+    <item name="refresh_eligibility" type="id" />
+    <item name="open_enrollment" type="id" />
+    <item name="create_material" type="id" />
+    <item name="sign_transcript" type="id" />
+    <item name="encrypt_sample" type="id" />
+    <item name="decrypt_sample" type="id" />
+    <item name="destroy_material" type="id" />
+</resources>
