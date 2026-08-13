@@ -3,6 +3,8 @@ extend-exclude = [
     "**/**/*.svg",  # images.
     "**/**/*.csv",  # import data
     "**/**/*.json",  # translation files, etc.
+    # Embedded canonical JSON fixture payload; the authored JSON is excluded above.
+    "mobile/shared/src/commonTest/kotlin/org/rotki/mobile/core/protocol/generated/GeneratedProtocolFixtures.kt",
     "frontend/pnpm-lock.yaml",  # pnpm lockfile
     "*.db",  # skip db blobs
 ]
