@@ -1,17 +1,33 @@
 package org.rotki.mobile.core.ports
 
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+
 public sealed interface SecureSnapshotReadOutcome {
     public data object Missing : SecureSnapshotReadOutcome
 
+    /**
+     * A revocable application-owned plaintext handle.
+     *
+     * The native store retains this handle and calls [discard] on background/system lock. Callers
+     * must treat every [documentCopy] as short-lived and clear their own copy through the same
+     * lifecycle transition; no JVM or Native API can revoke an arbitrary copy retained by a caller.
+     */
+    @OptIn(ExperimentalAtomicApi::class)
     public class Unlocked(document: ByteArray) : SecureSnapshotReadOutcome {
-        private val storedDocument: ByteArray = document.copyOf()
+        private val storedDocument: AtomicReference<ByteArray?> =
+            AtomicReference(document.copyOf())
 
-        public fun documentCopy(): ByteArray = storedDocument.copyOf()
+        /** Returns null after this handle has been revoked. */
+        public fun documentCopy(): ByteArray? = storedDocument.load()?.copyOf()
 
-        override fun equals(other: Any?): Boolean =
-            other is Unlocked && storedDocument.contentEquals(other.storedDocument)
+        /** Idempotently revokes this handle and overwrites its owned plaintext buffer. */
+        public fun discard(): Unit {
+            storedDocument.exchange(null)?.fill(0)
+        }
 
-        override fun hashCode(): Int = storedDocument.contentHashCode()
+        public val isDiscarded: Boolean
+            get() = storedDocument.load() == null
 
         override fun toString(): String = "Unlocked(redacted)"
     }

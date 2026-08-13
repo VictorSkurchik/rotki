@@ -17,6 +17,8 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -55,15 +57,45 @@ android {
         buildConfig = true
         compose = true
     }
+
+    testOptions {
+        managedDevices {
+            localDevices {
+                create("pixel2Api28") {
+                    device = "Pixel 2"
+                    apiLevel = 28
+                    systemImageSource = "google"
+                    require64Bit = true
+                }
+                create("pixel8Api36") {
+                    device = "Pixel 8"
+                    apiLevel = 36
+                    systemImageSource = "google"
+                    require64Bit = true
+                }
+            }
+        }
+    }
+
+    sourceSets {
+        getByName("androidTest").assets.directories.add("../protocol/v1")
+    }
 }
 
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.biometric)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.fragment)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
+
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit)
 }

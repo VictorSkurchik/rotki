@@ -92,6 +92,75 @@ jobs:
             :androidApp:lintDevDebug \
             :androidApp:assembleDebug
 
+  android-security:
+    name: 'Android security (${{ matrix.label }})'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 'API 28 floor'
+            task: pixel2Api28DevDebugAndroidTest
+            system-image: 'system-images;android-28;google_apis;x86_64'
+            artifact: api28
+          - label: 'API 36 stable'
+            task: pixel8Api36DevDebugAndroidTest
+            system-image: 'system-images;android-36;google_apis;x86_64'
+            artifact: api36
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95  # v5.6.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb  # v6
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Install Android device image and compile SDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-37.0' \
+            'build-tools;36.0.0' \
+            '${{ matrix.system-image }}'
+
+      - name: Enable emulator acceleration
+        run: |
+          test -e /dev/kvm
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android security instrumentation
+        working-directory: mobile
+        run: |
+          ./gradlew --no-daemon \
+            ':androidApp:${{ matrix.task }}' \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+
+      - name: Upload Android security results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: android-security-${{ matrix.artifact }}
+          path: |
+            mobile/androidApp/build/reports/androidTests/managedDevice/**
+            mobile/androidApp/build/outputs/androidTest-results/managedDevice/**
+          if-no-files-found: warn
+          retention-days: 14
+
   apple:
     name: 'Shared iOS'
     runs-on: macos-26

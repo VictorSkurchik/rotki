@@ -438,6 +438,27 @@ Gate G2: a clean checkout builds both KMP targets and Android; identical decimal
 tests pass on JVM and iOS; Android platform-security instrumentation passes on API 28 and
 a current emulator; root Python/pnpm/Cargo builds remain independent.
 
+Implementation status (2026-08-13): production implementation and local automated
+validation are complete; hosted validation and enrolled-device acceptance remain pending.
+The Android app now owns persistent non-exportable P-256 signing, per-operation
+`BIOMETRIC_STRONG` AES-256-GCM with no device-credential fallback, a strict versioned
+envelope in `noBackupFilesDir`, atomic last-good replacement, durable Pairing storage,
+destructive invalidation cleanup, and one process-retained security/lifecycle graph. Shared
+Snapshot plaintext is exposed through revocable handles and background or screen lock
+cancels pending authentication and clears every store-owned buffer.
+
+Locally, shared JVM/Android-host and iOS Simulator tests pass, the iosArm64 test binary and
+both frameworks link, all six Android flavor/build-type unit suites and all debug/release
+APKs pass, and dev lint reports zero errors. Clean managed Pixel devices pass seven
+non-interactive production security tests on both API 28 and stable API 36 with zero
+failures; the two enrolled-biometric tests are explicitly skipped on each clean image. The
+opt-in suite exercises the production broker/store, exact key policy, fresh IVs, encrypted
+round trips, and tag rejection, but is not counted as evidence until it runs on an enrolled
+device. The Android P0.3 spike therefore remains checked in, and Gate G2 stays open until
+the new hosted `Mobile` Android-security matrix is green. Physical Android prompt,
+enrollment-change, OEM/hardware, and secure-deletion checks remain pending and are not
+substituted by emulator results.
+
 ## Phase 3 — Coherent Engine data plane
 
 ### D3.1 — Snapshot contract and revision
@@ -1091,6 +1112,10 @@ cargo test -p starling-proxy
 ./gradlew :shared:iosSimulatorArm64Test :shared:linkDebugTestIosArm64 \
   :shared:linkDebugFrameworkIosArm64 :shared:linkDebugFrameworkIosSimulatorArm64
 ./gradlew :androidApp:test :androidApp:lintDevDebug :androidApp:assembleDebug
+./gradlew :androidApp:pixel2Api28DevDebugAndroidTest \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+./gradlew :androidApp:pixel8Api36DevDebugAndroidTest \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
 ./gradlew :shared:goldenEngineContractTest
 ./gradlew :androidApp:connectedTracerDebugAndroidTest
 

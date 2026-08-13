@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="biometric_snapshot_title">Unlock portfolio</string>
+    <string name="biometric_snapshot_subtitle">Authenticate to access the offline snapshot</string>
+    <string name="biometric_cancel">Cancel</string>
+
     <style name="Theme.RotkiCompanion" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
