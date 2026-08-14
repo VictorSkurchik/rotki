@@ -115,6 +115,15 @@ transport wraps its sensitive encoded bytes in `OutgoingContent` with a constant
 diagnostic representation and does not install `ContentNegotiation`.
 The Engine-origin extraction preserves the established canonical bytes and validation precedence
 without defining a new host grammar.
+The first Android composition/navigation tranche remains physically in `:androidApp`: its
+application starts Koin exactly once and retains the security/session graph for the process. Its
+biometric broker binds the current Activity explicitly and releases it in `onDestroy` instead of
+constructor-capturing an Activity for the process lifetime. The authenticated placeholder shell
+replaces its local tab index with four typed, argument-free Navigation Compose destinations. Privacy
+plus root Pairing, lock, recovery,
+incompatible, and revoked selection remains a fail-closed state guard outside `NavHost`, so a saved
+back stack cannot bypass it. The target `android/*` modules, Room KMP owner, and complete design
+system have not been created yet.
 
 ```text
 mobile/
@@ -219,13 +228,17 @@ network, database, cryptographic, or repository work.
 - Each Android feature exports one focused Koin module. The application composition root assembles
   feature, platform, and environment modules and calls `startKoin` exactly once.
 - Process-retained security/session components use an explicit application scope. Screen state uses
-  a ViewModel/back-stack-entry scope. Activity-bound biometric or permission brokers must not be
-  captured by process singletons.
+  a ViewModel/back-stack-entry scope. A process singleton must not retain an Activity for its own
+  lifetime; it may own an application-scoped broker proxy that binds exactly the current Activity
+  through identity-checked attach/detach calls and releases that binding with the Activity lifecycle.
 - Environment selection belongs to the app composition root. Feature code must not branch on build
   flavor to choose implementations.
 - Koin definitions are verified in tests. Tests replace ports with explicit fakes rather than
   mutating a global container from individual test bodies.
 - iOS uses its native/manual composition boundary. Koin must not become a cross-platform API.
+- The current bootstrap implementation keeps its focused platform and Pairing definitions in
+  `:androidApp`; physical `android/platform` and `android/feature/*` extraction follows only with a
+  real slice and must not change the process, Activity, or ViewModel lifetimes above.
 
 ## Android MVI and unidirectional data flow
 
@@ -336,6 +349,9 @@ Rules for the final system and its implementation:
 - ViewModels emit state or typed effects; the route maps them to navigation operations.
 - Pairing, privacy lock, incompatible, revoked, and recovery states guard the application root.
   Overview, Portfolio, History, and Sources live in the authenticated graph.
+- The current first tranche navigates only the authenticated four-tab placeholder shell. Its
+  privacy/root-state guard deliberately remains outside `NavHost`; moving that guard into a future
+  root graph requires explicit stack replacement and proof that no saved destination can bypass it.
 - Back-stack and saved-state behavior must be explicit and tested for logout/unpair, Profile mismatch,
   process recreation, and deep-link rejection. No route may bypass Pairing or privacy guards.
 
@@ -396,9 +412,13 @@ Do not perform a big-bang package move. Use this order:
    facade-scoped port adapter, including the recovered cleanup barrier; data has no dependency on
    `:shared`. Keep the facade-owned connection transaction in the stable shared wrapper until its
    opaque attempt and cleanup capabilities can move without reversing the dependency graph.
-3. Introduce Android Koin modules and replace the manual composition root slice by slice.
+3. Introduce Android Koin modules and replace the manual composition root slice by slice. The first
+   process-scoped platform/Pairing composition is implemented inside `:androidApp`; physical Android
+   feature/platform modules remain incremental follow-up work.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
-   migrate Pairing and the four-tab shell. Do not build the full component catalog yet.
+   migrate Pairing and the four-tab shell. The four authenticated placeholder destinations are now
+   typed and navigation-backed, while the security root guard remains outside `NavHost`; Pairing/root
+   graph migration and the full component catalog remain deferred.
 5. Create the Room KMP module only with its first approved relational use case.
 6. Build Overview, Portfolio, History, and Sources directly in the target module shape.
 7. After the functional destinations and Gate G6 are stable, run a dedicated Claude Design step and

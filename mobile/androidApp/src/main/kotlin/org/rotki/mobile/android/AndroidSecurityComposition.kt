@@ -37,7 +37,7 @@ import org.rotki.mobile.auth.PairingDevicePlatform
 import javax.crypto.Cipher
 
 /** One retained security graph for the lifetime of the Android application process. */
-internal class AndroidSecurityComposition private constructor(
+internal class AndroidSecurityComposition(
     private val applicationContext: Context,
 ) {
     val visibility: AndroidApplicationVisibility = AndroidApplicationVisibility()
@@ -157,18 +157,6 @@ internal class AndroidSecurityComposition private constructor(
             facade = facade,
             retryCleanup = pairingConnection::retryIncompleteCleanup,
         )
-
-    companion object {
-        @Volatile
-        private var retained: AndroidSecurityComposition? = null
-
-        fun get(context: Context): AndroidSecurityComposition =
-            retained ?: synchronized(this) {
-                retained ?: AndroidSecurityComposition(context.applicationContext).also {
-                    retained = it
-                }
-            }
-    }
 }
 
 private fun PairingConnectionOutcome.toStartupUiState(): PairingConnectionUiState =

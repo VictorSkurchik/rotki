@@ -48,8 +48,11 @@ The production build currently contains:
   `core:security-api` through the single framework. Protocol credentials, data/network seams, codec
   mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
-  `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
-  Keys, atomic Pairing records, and Android 17 local-network permission recovery;
+  `prod` environment flavors, an Android-only Koin process composition root, CameraX/ML Kit
+  scanning, Android Keystore-backed Device Keys, atomic Pairing records, and Android 17
+  local-network permission recovery. Its authenticated placeholder shell uses four typed Navigation
+  Compose destinations; the fail-closed privacy and root-state guard stays outside `NavHost`. Room
+  and the complete Atomic Design-based Rotki design system remain deliberately deferred;
 - `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
   unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
   persistence, and native iOS security remain deliberately disabled until their gates.

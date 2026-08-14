@@ -1,6 +1,9 @@
 package org.rotki.mobile.android.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -35,6 +38,7 @@ class RotkiCompanionAppTest {
         }
 
         composeRule.onNodeWithTag(UiTags.PAIRING_INTRO).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertDoesNotExist()
         composeRule.onNodeWithTag(UiTags.PAIRING_SCAN_BUTTON).performClick()
         composeRule.runOnIdle { assertTrue(scanRequested) }
     }
@@ -88,6 +92,47 @@ class RotkiCompanionAppTest {
     }
 
     @Test
+    fun losingRootAuthorityDiscardsAuthenticatedBackStack() {
+        var appStatus by
+            mutableStateOf(
+                CompanionStatus(
+                    rootState = CompanionRootState.Online,
+                    snapshotCoverage = SnapshotCoverage.Complete,
+                ),
+            )
+        composeRule.setContent {
+            TestApp(
+                status = appStatus,
+                pairing = PairingPresentationForTest(PairingUiState.INTRO),
+            )
+        }
+        composeRule.onNodeWithText("History").performClick()
+        composeRule.onNodeWithText("Recent activity").assertIsDisplayed()
+
+        composeRule.runOnIdle {
+            appStatus =
+                CompanionStatus(
+                    rootState = CompanionRootState.DeviceLocked,
+                    snapshotCoverage = SnapshotCoverage.Complete,
+                )
+        }
+        composeRule.onNodeWithText("Portfolio locked").assertIsDisplayed()
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertDoesNotExist()
+        composeRule.onNodeWithText("Recent activity").assertDoesNotExist()
+
+        composeRule.runOnIdle {
+            appStatus =
+                CompanionStatus(
+                    rootState = CompanionRootState.Online,
+                    snapshotCoverage = SnapshotCoverage.Complete,
+                )
+        }
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertIsDisplayed()
+        composeRule.onNodeWithText("Portfolio overview").assertIsDisplayed()
+        composeRule.onNodeWithText("Recent activity").assertDoesNotExist()
+    }
+
+    @Test
     fun privacyCoverObscuresEveryRootScreen() {
         composeRule.setContent {
             TestApp(
@@ -102,6 +147,7 @@ class RotkiCompanionAppTest {
         }
 
         composeRule.onNodeWithTag(UiTags.PRIVACY_COVER).assertIsDisplayed()
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Portfolio hidden").assertIsDisplayed()
         composeRule.onNodeWithText("Portfolio overview").assertIsNotDisplayed()
         composeRule.onNodeWithText("Sources").assertIsNotDisplayed()

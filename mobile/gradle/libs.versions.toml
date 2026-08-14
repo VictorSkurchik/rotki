@@ -15,6 +15,7 @@ coroutines = "1.11.0"
 # Detekt 2.0 is the first line tested with this build's Kotlin 2.4 and Gradle 9 toolchain.
 detekt = "2.0.0-alpha.5"
 junit = "4.13.2"
+koin = "4.2.1"
 kotlin = "2.4.10"
 ios-deployment-target = "17.0"
 jvm-toolchain = "17"
@@ -22,6 +23,7 @@ ktlint-engine = "1.8.0"
 ktlint-gradle = "14.2.0"
 ktor = "3.5.2"
 mlkit-barcode-scanning = "17.3.0"
+navigation = "2.9.8"
 serialization = "1.11.0"
 
 [libraries]
@@ -41,11 +43,17 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidx-fragment" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation" }
+androidx-navigation-testing = { module = "androidx.navigation:navigation-testing", version.ref = "navigation" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test" }
 androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-test-junit" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test" }
 ionspin-bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
 junit = { module = "junit:junit", version.ref = "junit" }
+koin-android = { module = "io.insert-koin:koin-android" }
+koin-android-test = { module = "io.insert-koin:koin-android-test" }
+koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin" }
+koin-test-junit4 = { module = "io.insert-koin:koin-test-junit4" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }

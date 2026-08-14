@@ -16,9 +16,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.rotki.mobile.android.pairing.AndroidEpochClock
+import org.koin.android.ext.android.inject
+import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.rotki.mobile.android.pairing.AndroidLocalNetworkPermissionPolicy
 import org.rotki.mobile.android.pairing.PairingViewModel
 import org.rotki.mobile.android.pairing.scanner.PairingCodeScanner
@@ -30,8 +30,8 @@ import org.rotki.mobile.auth.PairingUiState
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 
 class MainActivity : FragmentActivity() {
-    private lateinit var securityComposition: AndroidSecurityComposition
-    private lateinit var pairingViewModel: PairingViewModel
+    private val securityComposition: AndroidSecurityComposition by inject()
+    private val pairingViewModel: PairingViewModel by viewModel()
 
     private val cameraPermissionLauncher =
         registerForActivityResult(
@@ -57,19 +57,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        securityComposition = AndroidSecurityComposition.get(applicationContext)
-        pairingViewModel =
-            ViewModelProvider(
-                this,
-                PairingViewModel.Factory(
-                    facade = securityComposition.facade,
-                    clock = AndroidEpochClock,
-                    pairingConnection = securityComposition.pairingConnection,
-                    cleanupConnector = securityComposition::retryIncompletePairingCleanup,
-                    initialConnectionState =
-                        securityComposition.initialPairingConnectionState,
-                ),
-            )[PairingViewModel::class.java]
         securityComposition.attachActivity(
             activity = this,
             promptCopy =
@@ -154,9 +141,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
-        if (::securityComposition.isInitialized) {
-            securityComposition.detachActivity(this)
-        }
+        securityComposition.detachActivity(this)
         super.onDestroy()
     }
 

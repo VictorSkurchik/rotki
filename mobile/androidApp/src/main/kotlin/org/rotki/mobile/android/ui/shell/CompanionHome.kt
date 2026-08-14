@@ -25,9 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -40,7 +37,19 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import org.rotki.mobile.android.ui.UiTags
+import org.rotki.mobile.android.ui.navigation.HistoryRoute
+import org.rotki.mobile.android.ui.navigation.OverviewRoute
+import org.rotki.mobile.android.ui.navigation.PortfolioRoute
+import org.rotki.mobile.android.ui.navigation.SourcesRoute
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionStatus
 import org.rotki.mobile.core.state.SnapshotCoverage
@@ -78,8 +87,9 @@ internal fun CompanionHome(
     status: CompanionStatus,
     modifier: Modifier = Modifier,
 ) {
-    var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
-    val destination = HomeDestination.entries[selectedIndex]
+    val navController = rememberNavController()
+    val currentBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = currentBackStackEntry?.destination
     Scaffold(
         modifier = modifier.testTag(UiTags.HOME_SHELL),
         topBar = {
@@ -94,14 +104,14 @@ internal fun CompanionHome(
         },
         bottomBar = {
             NavigationBar {
-                HomeDestination.entries.forEachIndexed { index, item ->
+                HomeDestination.entries.forEach { item ->
                     NavigationBarItem(
-                        selected = selectedIndex == index,
-                        onClick = { selectedIndex = index },
+                        selected = currentDestination.hasRoute(item),
+                        onClick = { navController.navigateTo(item) },
                         icon = {
                             DestinationIcon(
                                 destination = item,
-                                selected = selectedIndex == index,
+                                selected = currentDestination.hasRoute(item),
                             )
                         },
                         label = { Text(item.label) },
@@ -123,8 +133,57 @@ internal fun CompanionHome(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             ConnectionBanner(status)
-            DestinationPlaceholder(destination)
+            HomeNavHost(navController)
         }
+    }
+}
+
+@Composable
+private fun HomeNavHost(navController: NavHostController) {
+    NavHost(
+        navController = navController,
+        startDestination = OverviewRoute,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        composable<OverviewRoute> {
+            DestinationPlaceholder(HomeDestination.Overview)
+        }
+        composable<PortfolioRoute> {
+            DestinationPlaceholder(HomeDestination.Portfolio)
+        }
+        composable<HistoryRoute> {
+            DestinationPlaceholder(HomeDestination.History)
+        }
+        composable<SourcesRoute> {
+            DestinationPlaceholder(HomeDestination.Sources)
+        }
+    }
+}
+
+private fun NavDestination?.hasRoute(destination: HomeDestination): Boolean =
+    when (destination) {
+        HomeDestination.Overview -> this?.hasRoute<OverviewRoute>() == true
+        HomeDestination.Portfolio -> this?.hasRoute<PortfolioRoute>() == true
+        HomeDestination.History -> this?.hasRoute<HistoryRoute>() == true
+        HomeDestination.Sources -> this?.hasRoute<SourcesRoute>() == true
+    }
+
+private fun NavHostController.navigateTo(destination: HomeDestination) {
+    when (destination) {
+        HomeDestination.Overview -> navigateTopLevel(OverviewRoute)
+        HomeDestination.Portfolio -> navigateTopLevel(PortfolioRoute)
+        HomeDestination.History -> navigateTopLevel(HistoryRoute)
+        HomeDestination.Sources -> navigateTopLevel(SourcesRoute)
+    }
+}
+
+private fun <T : Any> NavHostController.navigateTopLevel(route: T) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 

@@ -1,7 +1,6 @@
 package org.rotki.mobile.android.pairing
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -10,7 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.rotki.mobile.CompanionFacade
-import org.rotki.mobile.auth.PairingConnection
 import org.rotki.mobile.auth.PairingConnectionOutcome
 import org.rotki.mobile.auth.PairingFlow
 import org.rotki.mobile.auth.PairingPresentation
@@ -220,26 +218,6 @@ internal class PairingViewModel(
         connectionGeneration += 1
         connectionJob?.cancel()
         connectionJob = null
-    }
-
-    internal class Factory(
-        private val facade: CompanionFacade,
-        private val clock: Clock,
-        private val pairingConnection: PairingConnection,
-        private val cleanupConnector: PendingPairingCleanupConnector,
-        private val initialConnectionState: PairingConnectionUiState,
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            require(modelClass.isAssignableFrom(PairingViewModel::class.java))
-            return PairingViewModel(
-                facade = facade,
-                clock = clock,
-                connector = PendingPairingConnector(pairingConnection::connectPendingPairing),
-                cleanupConnector = cleanupConnector,
-                initialConnectionState = initialConnectionState,
-            ) as T
-        }
     }
 }
 

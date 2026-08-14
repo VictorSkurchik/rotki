@@ -529,20 +529,28 @@ admission cannot be mistaken for stale material and silently removed. Domain and
 store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
 creates an Apple framework.
 
-Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical remains the reference slice. The real `:feature:pairing:data` module now owns strict QR
-decoding, registration transport DTOs/mapping, Pairing-specific request construction, and its
-internal Ktor client; it implements the domain submission gateway and has no edge to `:shared`.
-Generic Ktor client construction, bounded response execution, replay/renewal policy, and platform
-engines live in `:core:network`; generic HTTP envelopes and decoders remain in `:core:protocol`, while
-the complete security contract boundary lives in `:core:security-api`. The canonical generated test
-corpus has one owner in test-only `:core:testing`, which the graph forbids from production source
-sets. Raw `Json` is private behind the Kotlin-only protocol codec hidden from Objective-C and Swift.
-The stable shared Pairing wrappers retain facade-owned connection lifecycle, durability, and cleanup
-orchestration plus the not-yet-implemented challenge/proof and Access Session DTOs. Pairing data
-creates no framework; its redacted Kotlin integration seams expose no Ktor type and stay hidden from
-native export. Next replace manual Android composition and tab selection with Koin and typed
-Navigation Compose while preserving that boundary.
+The first Android-only Koin and typed Navigation Compose tranche is implemented inside
+`:androidApp`. The application starts one Koin process composition, preserving one facade/security
+graph while its biometric broker explicitly binds and releases the current Activity. The authenticated
+placeholder shell now uses typed, argument-free Overview, Portfolio, History, and Sources
+destinations instead of a saved integer tab index. Privacy and the fail-closed root-state decision
+remain outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be
+bypassed through a retained back stack. The target physical `android/platform`,
+`android/navigation`, and Android feature modules remain incremental follow-up work.
+
+The existing Auth/Pairing vertical remains the reference slice. The real
+`:feature:pairing:data` module owns strict QR decoding, registration transport DTOs/mapping,
+Pairing-specific request construction, and its internal Ktor client; it implements the domain
+submission gateway and has no edge to `:shared`. Generic Ktor client construction, bounded response
+execution, replay/renewal policy, and platform engines live in `:core:network`; generic HTTP
+envelopes and decoders remain in `:core:protocol`, while the complete security contract boundary
+lives in `:core:security-api`. The canonical generated test corpus has one owner in test-only
+`:core:testing`, which the graph forbids from production source sets. Raw `Json` is private behind
+the Kotlin-only protocol codec hidden from Objective-C and Swift. The stable shared Pairing wrappers
+retain facade-owned connection lifecycle, durability, and cleanup orchestration plus the
+not-yet-implemented challenge/proof and Access Session DTOs. Pairing data creates no framework; its
+redacted Kotlin integration seams expose no Ktor type and stay hidden from native export.
+
 Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
 remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
 component system is deliberately deferred to Phase 7 and Claude Design.
@@ -1006,13 +1014,15 @@ ViewModel adapter. Exercise Capability discovery, Device Key registration, proof
 in-memory Access Session acquisition against the real Engine. Process restart must mint a
 new Access Session from the Device Key without Pairing again.
 
-Implementation status (2026-08-13): the mobile Client now reaches durable Device Session
-registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and
-recovery screens, a thin ViewModel, immediate privacy cover, and a navigable
-Overview/Portfolio/History/Sources placeholder shell. Shared strictly parses the QR,
-discovers protocol Capability over Ktor, creates a Device Key, submits an idempotent
-registration request, validates the bound response, and persists the Pairing record before
-committing UI state. Accepted QR authority is one-shot; transient inactivity suspends and
+Implementation status (2026-08-14): the mobile Client now reaches durable Device Session
+registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery
+screens, a thin ViewModel, immediate privacy cover, one Koin-backed process composition, and typed
+Navigation Compose destinations for the Overview/Portfolio/History/Sources placeholder shell. The
+fail-closed privacy/root-state guard remains outside `NavHost`. `:feature:pairing:data` strictly
+parses the QR and owns protocol Capability discovery plus the idempotent registration request over
+Ktor. The stable shared wrapper coordinates one-shot authority, Android Device Key creation, bound
+response validation, and durable Pairing-record persistence before committing UI state. Accepted
+QR authority is one-shot; transient inactivity suspends and
 resumes the same request identity, while background or expiry triggers fail-closed cleanup.
 A secret-free durable cleanup journal and Android startup reconciliation prevent interrupted
 registration from becoming a false Pairing. Android also handles API 37 local-network
