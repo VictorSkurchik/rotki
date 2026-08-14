@@ -13,10 +13,11 @@ This platform-neutral KMP leaf is a deliberately narrow protocol extraction. It 
   error mapping;
 - bounded WebSocket notification decoding and the typed refresh/snapshot notification model.
 
-Auth DTOs and network transport remain in `:shared` for later migration tranches. This module has no
-project, Ktor, database, Compose, Koin, native UI, or platform implementation dependency. The
-Engine-origin extraction preserves the existing accepted canonical bytes and validation precedence;
-it does not introduce a new DNS, IP, or IPv6 host grammar.
+The generic Ktor execution and platform-engine boundary lives in `:core:network`. Auth DTOs and
+Pairing-specific request construction remain in `:shared` for the next feature-data tranche. This
+module has no project, Ktor, database, Compose, Koin, native UI, or platform implementation
+dependency. The Engine-origin extraction preserves the existing accepted canonical bytes and
+validation precedence; it does not introduce a new DNS, IP, or IPv6 host grammar.
 
 `EngineOrigin`, `DeviceSessionId`, `IdempotencyKey`, `P1363Signature`, `X963PublicKey`, and their
 parse outcomes keep their established native API and are exported through the single `RotkiShared`

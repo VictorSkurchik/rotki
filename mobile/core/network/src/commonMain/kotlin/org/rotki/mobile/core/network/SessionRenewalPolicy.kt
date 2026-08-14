@@ -1,8 +1,12 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.network
 
 import org.rotki.mobile.core.protocol.generated.ProtocolLifetimesSeconds
+import kotlin.native.HiddenFromObjC
 
-internal enum class SessionRenewalDecision {
+@HiddenFromObjC
+public enum class SessionRenewalDecision {
     KEEP_CURRENT_SESSION,
     START_SINGLE_FLIGHT_RENEWAL,
     RENEWAL_ALREADY_IN_FLIGHT,
@@ -10,8 +14,9 @@ internal enum class SessionRenewalDecision {
     OUTSIDE_ACTIVE_FOREGROUND,
 }
 
-internal object SessionRenewalPolicy {
-    internal fun decide(
+@HiddenFromObjC
+public object SessionRenewalPolicy {
+    public fun decide(
         nowEpochSeconds: Long,
         sessionExpiresAtEpochSeconds: Long,
         isActiveForeground: Boolean,

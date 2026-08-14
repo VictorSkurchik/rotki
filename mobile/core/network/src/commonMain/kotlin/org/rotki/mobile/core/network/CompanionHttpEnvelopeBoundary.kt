@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.network
 
 import io.ktor.client.statement.HttpResponse
@@ -17,6 +19,7 @@ import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecodeOutcome
 import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecoder
 import org.rotki.mobile.core.protocol.dto.CompanionFailureEnvelopeDto
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
+import kotlin.native.HiddenFromObjC
 
 internal suspend fun <T> HttpStatement.executeCompanionSuccessEnvelope(
     deserializer: DeserializationStrategy<T>,
@@ -42,7 +45,8 @@ internal suspend fun HttpStatement.executeCompanionFailureEnvelope():
  * The Ktor transport boundary must classify every non-cancellation client failure.
  */
 @Suppress("TooGenericExceptionCaught")
-internal suspend fun <T> HttpStatement.executeCompanionResponse(
+@HiddenFromObjC
+public suspend fun <T> HttpStatement.executeCompanionResponse(
     expectedSuccessStatusCode: Int,
     deserializer: DeserializationStrategy<T>,
     requiredSuccessCacheControl: String? = null,
@@ -181,24 +185,35 @@ internal sealed interface BoundedControlResponseBodyOutcome {
     data object ContractFailure : BoundedControlResponseBodyOutcome
 }
 
-internal sealed interface CompanionHttpResponseOutcome<out T> {
-    data class Success<T>(
-        internal val value: T,
-    ) : CompanionHttpResponseOutcome<T>
+@HiddenFromObjC
+public sealed interface CompanionHttpResponseOutcome<out T> {
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Success<T> internal constructor(
+        public val value: T,
+    ) : CompanionHttpResponseOutcome<T> {
+        public override fun toString(): String = "Success(redacted)"
+    }
 
-    data class Failure(
-        internal val statusCode: Int,
-        internal val envelope: CompanionFailureEnvelopeDto,
-        internal val retryAfterSeconds: Long?,
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Failure internal constructor(
+        public val statusCode: Int,
+        public val envelope: CompanionFailureEnvelopeDto,
+        public val retryAfterSeconds: Long?,
     ) : CompanionHttpResponseOutcome<Nothing>
 
-    data class ContractFailure(
-        internal val statusCode: Int,
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class ContractFailure internal constructor(
+        public val statusCode: Int,
     ) : CompanionHttpResponseOutcome<Nothing>
 
-    data object PreResponseTransportFailure : CompanionHttpResponseOutcome<Nothing>
+    @HiddenFromObjC
+    public data object PreResponseTransportFailure : CompanionHttpResponseOutcome<Nothing>
 
-    data object CompleteResponseTransportFailure : CompanionHttpResponseOutcome<Nothing>
+    @HiddenFromObjC
+    public data object CompleteResponseTransportFailure : CompanionHttpResponseOutcome<Nothing>
 }
 
 private fun HttpResponse.retryAfterSeconds(statusCode: Int): Long? {

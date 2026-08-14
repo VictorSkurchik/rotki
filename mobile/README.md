@@ -21,6 +21,9 @@ The production build currently contains:
   control-envelope decoder, discovery negotiation, authored error mapping, and the bounded WebSocket
   notification decoder with its typed refresh/snapshot notification model. It owns no Auth DTOs,
   transport, or Apple framework of its own;
+- `core:network`: the reusable KMP Ktor execution boundary. It owns the hardened Companion client,
+  bounded HTTP response handling, retry/session-renewal policies, and OkHttp/Darwin engine actuals.
+  It depends only on `core:protocol` inside the project and remains hidden from Swift;
 - `core:security-api`: the platform-neutral security-contract leaf. It owns the secret-free Pairing
   cleanup journal, Device-proof and idempotency ports, the redacted Pairing-record persistence
   contract, and the secure Snapshot-store contract with its revocable application-owned plaintext
@@ -34,9 +37,10 @@ The production build currently contains:
   lifecycle-aware Device Key registration, and durable cleanup recovery. Its existing `PairingFlow`
   and `PairingConnection` remain ABI-compatible adapters over the extracted feature ports and no
   longer depend directly on `CompanionFacade`; one facade-scoped internal adapter supplies both.
-  `shared` re-exports the stable public surfaces of `core:common`, `core:model`, `core:protocol`, and
-  `core:security-api` through the single framework. Protocol credentials, codec mechanics, and wire
-  vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
+  `shared` consumes `core:network` as an implementation dependency and re-exports the stable public
+  surfaces of `core:common`, `core:model`, `core:protocol`, and `core:security-api` through the single
+  framework. Protocol credentials, codec mechanics, network seams, and wire vocabulary remain
+  Kotlin-only and hidden from Objective-C and Swift;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;

@@ -74,6 +74,12 @@ val featureModuleBoundaryRules =
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
                 forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
             ),
+        ":core:network" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":core:protocol"),
+                forbiddenGroupPrefixes = nativeUiDependencyGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
         ":core:common" to
             ModuleBoundaryRule(
                 allowedProjectDependencies = emptySet(),
@@ -109,6 +115,7 @@ val featureModuleBoundaryRules =
                 allowedProjectDependencies =
                     setOf(
                         ":core:model",
+                        ":core:network",
                         ":core:common",
                         ":core:protocol",
                         ":core:security-api",

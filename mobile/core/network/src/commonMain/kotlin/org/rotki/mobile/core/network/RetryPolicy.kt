@@ -1,30 +1,40 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.network
 
 import org.rotki.mobile.core.protocol.generated.ProtocolRetryPolicy
 import kotlin.math.min
+import kotlin.native.HiddenFromObjC
 import kotlin.random.Random
 
-internal enum class RequestReplayPolicy {
+@HiddenFromObjC
+public enum class RequestReplayPolicy {
     SAFE_READ,
     IDEMPOTENT_WRITE,
     NEVER,
 }
 
-internal sealed interface RetryFailure {
-    data object PreResponseTransport : RetryFailure
+@HiddenFromObjC
+public sealed interface RetryFailure {
+    @HiddenFromObjC
+    public data object PreResponseTransport : RetryFailure
 
-    data class HttpResponse(
-        internal val statusCode: Int,
-        internal val typedError: TypedErrorRetryDisposition = TypedErrorRetryDisposition.NOT_PRESENT,
-        internal val retryAfterSeconds: Long? = null,
+    @HiddenFromObjC
+    public data class HttpResponse(
+        public val statusCode: Int,
+        public val typedError: TypedErrorRetryDisposition = TypedErrorRetryDisposition.NOT_PRESENT,
+        public val retryAfterSeconds: Long? = null,
     ) : RetryFailure
 
-    data object CompleteResponseTransport : RetryFailure
+    @HiddenFromObjC
+    public data object CompleteResponseTransport : RetryFailure
 
-    data object ContractViolation : RetryFailure
+    @HiddenFromObjC
+    public data object ContractViolation : RetryFailure
 }
 
-internal enum class TypedErrorRetryDisposition {
+@HiddenFromObjC
+public enum class TypedErrorRetryDisposition {
     NOT_PRESENT,
     RETRYABLE,
     NOT_RETRYABLE,
@@ -32,17 +42,21 @@ internal enum class TypedErrorRetryDisposition {
     UNEXPECTED_ENGINE_ERROR,
 }
 
-internal sealed interface RetryDecision {
-    data class RetryAfter(
-        internal val delayMillis: Long,
+@HiddenFromObjC
+public sealed interface RetryDecision {
+    @HiddenFromObjC
+    public data class RetryAfter(
+        public val delayMillis: Long,
     ) : RetryDecision
 
-    data class Stop(
-        internal val reason: RetryStopReason,
+    @HiddenFromObjC
+    public data class Stop(
+        public val reason: RetryStopReason,
     ) : RetryDecision
 }
 
-internal enum class RetryStopReason {
+@HiddenFromObjC
+public enum class RetryStopReason {
     REQUEST_NOT_REPLAYABLE,
     FAILURE_NOT_RETRYABLE,
     ATTEMPT_BUDGET_EXHAUSTED,
@@ -51,18 +65,20 @@ internal enum class RetryStopReason {
     RETRY_AFTER_TOO_LONG,
 }
 
-internal fun interface RetryJitterSource {
-    fun nextLong(boundExclusive: Long): Long
+@HiddenFromObjC
+public fun interface RetryJitterSource {
+    public fun nextLong(boundExclusive: Long): Long
 }
 
 internal object DefaultRetryJitterSource : RetryJitterSource {
     override fun nextLong(boundExclusive: Long): Long = Random.nextLong(boundExclusive)
 }
 
-internal class RetryPolicy(
+@HiddenFromObjC
+public class RetryPolicy(
     private val jitterSource: RetryJitterSource = DefaultRetryJitterSource,
 ) {
-    internal fun decide(
+    public fun decide(
         replayPolicy: RequestReplayPolicy,
         completedAttempts: Int,
         failure: RetryFailure,

@@ -12,7 +12,7 @@ domain-level material getter. Implementations may retain secret-bearing material
 active in-memory Pairing session and must never persist or log it.
 
 The current implementation remains behind a non-exported, facade-scoped adapter in `:shared`.
-Core common, protocol, and the complete local security contract boundary are extracted, but strict
-QR decoding and registration transport remain in `:shared` until the network boundary can move
-without a dependency cycle. A real `:feature:pairing:data` module is created only with that
-production implementation; no placeholder data module exists.
+Core common, protocol, network, and the complete local security contract boundary are extracted.
+Strict QR decoding and Pairing-specific registration remain in `:shared`; their next coherent move
+creates the real `:feature:pairing:data` implementation against those lower-level leaves. No
+placeholder data module exists.

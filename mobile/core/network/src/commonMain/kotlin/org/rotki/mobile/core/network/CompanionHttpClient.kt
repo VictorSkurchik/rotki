@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.network
 
 import io.ktor.client.HttpClient
@@ -6,8 +8,10 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.websocket.ChannelOverflow
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
+import kotlin.native.HiddenFromObjC
 
-internal fun createCompanionHttpClient(engine: HttpClientEngine): HttpClient =
+@HiddenFromObjC
+public fun createCompanionHttpClient(engine: HttpClientEngine): HttpClient =
     HttpClient(engine) {
         expectSuccess = false
         followRedirects = false
@@ -35,8 +39,8 @@ internal fun createCompanionHttpClient(engine: HttpClientEngine): HttpClient =
         }
     }
 
-internal fun createPlatformCompanionHttpClient(): HttpClient =
-    createCompanionHttpClient(createPlatformHttpClientEngine())
+@HiddenFromObjC
+public fun createPlatformCompanionHttpClient(): HttpClient = createCompanionHttpClient(createPlatformHttpClientEngine())
 
 internal expect fun createPlatformHttpClientEngine(): HttpClientEngine
 

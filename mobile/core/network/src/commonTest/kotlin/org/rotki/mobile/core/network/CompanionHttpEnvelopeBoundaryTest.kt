@@ -91,6 +91,15 @@ class CompanionHttpEnvelopeBoundaryTest {
     }
 
     @Test
+    fun `success outcome redacts decoded value`() {
+        val seededSecret = "seeded_access_secret"
+        val rendered = CompanionHttpResponseOutcome.Success(seededSecret).toString()
+
+        assertEquals("Success(redacted)", rendered)
+        assertFalse(seededSecret in rendered)
+    }
+
+    @Test
     fun `content type requires one application json value and only utf8 charset`() {
         assertTrue(hasStrictJsonContentType(listOf("application/json")))
         assertTrue(hasStrictJsonContentType(listOf("application/json; charset=UTF-8")))

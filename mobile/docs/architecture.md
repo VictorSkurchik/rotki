@@ -74,12 +74,13 @@ rules without carrying private configuration.
 
 ## Target Gradle module graph
 
-The current `:core:common`, `:core:model`, `:core:protocol`, `:core:security-api`,
-`:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are
-the first migration state, not the final boundary. Create target modules only when moving or adding
-real production code. `:core:common` owns `Clock`, application visibility/controller contracts, and
-the lifecycle policy; `:core:model` owns `ExactDecimal` plus its characterization assets; and the
-completed `:core:security-api` boundary owns the Pairing cleanup journal, Device-proof signer,
+The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
+`:core:security-api`, `:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and
+`:androidApp` modules are the first migration state, not the final boundary. Create target modules
+only when moving or adding real production code. `:core:common` owns `Clock`, application
+visibility/controller contracts, and the lifecycle policy; `:core:model` owns `ExactDecimal` plus
+its characterization assets; and the completed `:core:security-api` boundary owns the Pairing
+cleanup journal, Device-proof signer,
 idempotency-key generator, Pairing-record persistence, and revocable Snapshot secure-store contracts.
 Its sole project edge is to the value types in `:core:protocol`. The physical `:core:protocol` leaf
 owns the strict Companion JSON codec, duplicate-member/syntax scanner, strict scalar
@@ -91,15 +92,19 @@ of its own. Stable public value types are exported through `RotkiShared`; creden
 seams, raw-byte helpers, codec mechanics, generated vocabulary, and WebSocket notification types
 remain hidden from Objective-C and Swift. Pairing domain owns the secret-free submission contract
 plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
+The physical `:core:network` leaf owns hardened Ktor client construction, bounded HTTP execution,
+replay and session-renewal policy, the single-flight renewal gate, and OkHttp/Darwin engine actuals.
+Its sole project edge is `:core:protocol`; its Kotlin-only seams are hidden from Objective-C and
+Swift, it creates no framework, and `:shared` consumes it as an implementation dependency.
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
 depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
-current implementation. Strict QR decoding, Auth DTOs, and transport remain in `:shared`. Raw `Json`
-is sealed behind the Kotlin-only codec in
+current implementation. Strict QR decoding, Auth DTOs, and Pairing-specific request construction
+remain in `:shared`. Raw `Json` is sealed behind the Kotlin-only codec in
 `:core:protocol`, hidden from Objective-C and Swift. The Ktor transport wraps its sensitive encoded
 bytes in `OutgoingContent` with a constant, redacted diagnostic representation and no longer
 installs `ContentNegotiation`.
 The Engine-origin extraction preserves the established canonical bytes and validation precedence
-without defining a new host grammar. The network leaf follows.
+without defining a new host grammar.
 
 ```text
 mobile/
@@ -135,11 +140,13 @@ flowchart LR
     Presentation --> Domain["feature domain"]
     Data["feature data"] --> Domain
     Data --> Network["core network"]
+    Network --> Protocol["core protocol implementation"]
     Data --> Database["core database"]
     AndroidApp --> Data
     Shared["shared Swift facade"] --> Presentation
     Shared --> Domain
-    Shared --> Protocol["core protocol implementation"]
+    Shared --> Protocol
+    Shared --> Network
 ```
 
 Rules:
@@ -364,18 +371,17 @@ Rules for the final system and its implementation:
 Do not perform a big-bang package move. Use this order:
 
 1. Add convention plugins and extract stable core common/model/protocol/network/security contracts.
-   The reusable KMP library convention plus `:core:common`, `:core:model`, `:core:protocol`, and the
-   completed `:core:security-api` boundary are in place. Common owns `Clock` and
+   The reusable KMP library convention plus `:core:common`, `:core:model`, `:core:protocol`,
+   `:core:network`, and the completed `:core:security-api` boundary are in place. Common owns `Clock` and
    application-lifecycle contracts, while its authored protocol-fixture parity test remains in
    `:shared`. Protocol owns strict decoding and wire values; Security API owns the complete local
-   security contract surface. Network execution remains in the umbrella until its coherent slice
-   moves.
+   security contract surface; Network owns generic Ktor execution, retry/renewal policy, and platform
+   engine selection.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
    submission/session/attempt domain contracts and pure presentation reducer are extracted.
    `PairingFlow` and `PairingConnection` now use a facade-scoped port adapter, including the recovered
-   cleanup barrier. Extract the network leaf from step 1 before moving QR decoding and remote
-   registration into a real Pairing data module; do not add a placeholder module or a dependency on
-   `:shared` from data.
+   cleanup barrier. Next move QR decoding and remote registration together into a real Pairing data
+   module; do not add a placeholder module or a dependency on `:shared` from data.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. Do not build the full component catalog yet.

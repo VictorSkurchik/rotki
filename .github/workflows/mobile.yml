@@ -94,6 +94,7 @@ jobs:
           ./gradlew --no-daemon \
             :core:common:dependencies \
             :core:model:dependencies \
+            :core:network:dependencies \
             :core:protocol:dependencies \
             :core:security-api:dependencies \
             :feature:pairing:domain:dependencies \
@@ -210,7 +211,7 @@ jobs:
         working-directory: mobile
         run: ./gradlew --no-daemon appleCheck
 
-      - name: Verify protocol internals stay out of Swift
+      - name: Verify Kotlin internals stay out of Swift
         working-directory: mobile
         run: |
           device_header='shared/build/bin/iosArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
@@ -221,8 +222,13 @@ jobs:
           forbidden_pattern+='|ProtocolDiscoveryEnvelopeDto|ProtocolDiscoveryResultDto|ProtocolNegotiationOutcome|decodeSuccess|decodeFailure|negotiate|toDomain'
           forbidden_pattern+='|WebSocketNotificationDecoder|WebSocketNotificationDecodeOutcome|WebSocketNotificationDto|CompanionNotification|SnapshotRevisionAvailable|SnapshotRevisionDataDto'
           forbidden_pattern+='|RefreshOperationNotification|RefreshTarget|RefreshOperationState|RefreshProgress|RefreshOperationError|RefreshOperationChanged|RefreshOperationDataDto|RefreshProgressDto|RefreshOperationErrorDto'
+          forbidden_pattern+='|createCompanionHttpClient|createPlatformCompanionHttpClient|createPlatformHttpClientEngine|executeCompanionSuccessEnvelope|executeCompanionFailureEnvelope|executeCompanionResponse'
+          forbidden_pattern+='|CompanionHttpResponseOutcome|BoundedControlResponseBodyOutcome|readBoundedControlResponseText|hasStrictJsonContentType|isTransportFailure'
+          forbidden_pattern+='|RequestReplayPolicy|RetryFailure|TypedErrorRetryDisposition|RetryDecision|RetryStopReason|RetryJitterSource|DefaultRetryJitterSource|RetryPolicy'
+          forbidden_pattern+='|SessionRenewalDecision|SessionRenewalPolicy|SessionRenewalGate|SessionRenewalLease'
+          forbidden_pattern+='|HttpClientEngine|HttpClient|HttpStatement|HttpResponse|ByteReadChannel|OutgoingContent|io_ktor|Ktor|ktor'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
-            echo '::error::Kotlin-only protocol internals leaked into the Swift framework header'
+            echo '::error::Kotlin-only protocol or network internals leaked into the Swift framework header'
             exit 1
           fi
           required_swift_names=(
