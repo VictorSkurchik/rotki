@@ -260,6 +260,153 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Android Pairing scanner AAR boundary
+        working-directory: mobile
+        run: |
+          aar='android/feature/pairing/build/outputs/aar/pairing-debug.aar'
+          classes_jar="$RUNNER_TEMP/android-pairing-scanner-classes.jar"
+          manifest="$RUNNER_TEMP/android-pairing-scanner-AndroidManifest.xml"
+          public_api="$RUNNER_TEMP/android-pairing-scanner-public-api.txt"
+          controller_api="$RUNNER_TEMP/android-pairing-scanner-controller-api.txt"
+          failure_api="$RUNNER_TEMP/android-pairing-scanner-failure-api.txt"
+          holder_api="$RUNNER_TEMP/android-pairing-scanner-holder-api.txt"
+          r_txt="$RUNNER_TEMP/android-pairing-scanner-R.txt"
+          test -f "$aar"
+
+          actual_entries="$(unzip -Z1 "$aar" | LC_ALL=C sort)"
+          expected_entries="$(
+            printf '%s\n' \
+              'AndroidManifest.xml' \
+              'META-INF/com/android/build/gradle/aar-metadata.properties' \
+              'R.txt' \
+              'classes.jar' \
+              | LC_ALL=C sort
+          )"
+          if [[ "$actual_entries" != "$expected_entries" ]]; then
+            echo '::error::Unexpected files or resources leaked into the Android Pairing scanner AAR'
+            diff <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries") || true
+            exit 1
+          fi
+
+          unzip -p "$aar" R.txt > "$r_txt"
+          if [[ -s "$r_txt" ]]; then
+            echo '::error::Android Pairing scanner resources leaked into R.txt'
+            cat "$r_txt"
+            exit 1
+          fi
+
+          unzip -p "$aar" AndroidManifest.xml > "$manifest"
+          python3 - "$manifest" androidApp/src/main/AndroidManifest.xml <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          android = "{http://schemas.android.com/apk/res/android}"
+          library_manifest = ET.parse(sys.argv[1]).getroot()
+          expected_uses_sdk = {f"{android}minSdkVersion": "28"}
+          children = list(library_manifest)
+          if (
+              library_manifest.tag != "manifest"
+              or library_manifest.attrib != {
+                  "package": "org.rotki.mobile.android.feature.pairing",
+              }
+              or len(children) != 1
+              or children[0].tag != "uses-sdk"
+              or children[0].attrib != expected_uses_sdk
+              or list(children[0])
+          ):
+              raise SystemExit(
+                  "Android Pairing scanner components, permissions, features, resources, "
+                  "or attributes leaked into the AAR manifest"
+              )
+
+          app_manifest = ET.parse(sys.argv[2]).getroot()
+          camera_permissions = [
+              node
+              for node in app_manifest.findall("uses-permission")
+              if node.attrib.get(f"{android}name") == "android.permission.CAMERA"
+          ]
+          camera_features = [
+              node
+              for node in app_manifest.findall("uses-feature")
+              if node.attrib.get(f"{android}name") == "android.hardware.camera"
+          ]
+          if len(camera_permissions) != 1:
+              raise SystemExit("The app must remain the sole owner of the CAMERA permission")
+          if (
+              len(camera_features) != 1
+              or camera_features[0].attrib.get(f"{android}required") != "false"
+          ):
+              raise SystemExit(
+                  "The app must retain one optional android.hardware.camera feature declaration"
+              )
+          PY
+
+          unzip -p "$aar" classes.jar > "$classes_jar"
+          while IFS= read -r class_entry; do
+            class_name="${class_entry%.class}"
+            class_name="${class_name//\//.}"
+            javap -classpath "$classes_jar" -public "$class_name"
+          done < <(jar tf "$classes_jar" | grep -E '\.class$' | LC_ALL=C sort) > "$public_api"
+
+          actual_public_types="$(
+            grep -E '^public (.* )?(class|interface|enum) ' "$public_api" \
+              | sed 's/ {$//' \
+              | LC_ALL=C sort -u
+          )"
+          expected_public_types="$(
+            printf '%s\n' \
+              'public final class org.rotki.mobile.android.pairing.scanner.PairingCodeScannerFailure extends java.lang.Enum<org.rotki.mobile.android.pairing.scanner.PairingCodeScannerFailure>' \
+              'public final class org.rotki.mobile.android.pairing.scanner.PairingCodeScannerKt' \
+              'public interface org.rotki.mobile.android.pairing.scanner.PairingCodeScannerController' \
+              | LC_ALL=C sort
+          )"
+          if [[ "$actual_public_types" != "$expected_public_types" ]]; then
+            echo '::error::Android Pairing scanner public JVM type boundary changed'
+            diff \
+              <(printf '%s\n' "$expected_public_types") \
+              <(printf '%s\n' "$actual_public_types") \
+              || true
+            exit 1
+          fi
+
+          controller_restart='public abstract void restart();'
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.pairing.scanner.PairingCodeScannerController \
+            > "$controller_api"
+          if [[ "$(grep -Ec '^  public ' "$controller_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$controller_restart" "$controller_api")" -ne 1 ]]; then
+            echo '::error::Android Pairing scanner controller API changed'
+            cat "$controller_api"
+            exit 1
+          fi
+
+          failure_type='org.rotki.mobile.android.pairing.scanner.PairingCodeScannerFailure'
+          javap -classpath "$classes_jar" -public "$failure_type" > "$failure_api"
+          if [[ "$(grep -Ec '^  public ' "$failure_api")" -ne 6 ]] || \
+             [[ "$(grep -Fc "public static final ${failure_type} CAMERA_PERMISSION_REQUIRED;" "$failure_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "public static final ${failure_type} CAMERA_UNAVAILABLE;" "$failure_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "public static final ${failure_type} DECODER_FAILED;" "$failure_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "public static ${failure_type}[] values();" "$failure_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "public static ${failure_type} valueOf(java.lang.String);" "$failure_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "public static kotlin.enums.EnumEntries<${failure_type}> getEntries();" "$failure_api")" -ne 1 ]]; then
+            echo '::error::Android Pairing scanner failure API changed'
+            cat "$failure_api"
+            exit 1
+          fi
+
+          remember_factory='public static final org.rotki.mobile.android.pairing.scanner.PairingCodeScannerController rememberPairingCodeScannerController(androidx.compose.runtime.Composer, int);'
+          scanner_composable='public static final void PairingCodeScanner(kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, androidx.compose.ui.Modifier, org.rotki.mobile.android.pairing.scanner.PairingCodeScannerController, kotlin.jvm.functions.Function1<? super org.rotki.mobile.android.pairing.scanner.PairingCodeScannerFailure, kotlin.Unit>, androidx.compose.runtime.Composer, int, int);'
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.pairing.scanner.PairingCodeScannerKt \
+            > "$holder_api"
+          if [[ "$(grep -Ec '^  public ' "$holder_api")" -ne 2 ]] || \
+             [[ "$(grep -Fc "$remember_factory" "$holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$scanner_composable" "$holder_api")" -ne 1 ]]; then
+            echo '::error::Android Pairing scanner Compose API changed'
+            cat "$holder_api"
+            exit 1
+          fi
+
   android-security:
     name: 'Android security (${{ matrix.label }})'
     runs-on: ubuntu-24.04
@@ -372,7 +519,10 @@ jobs:
         run: |
           device_header='shared/build/bin/iosArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
           simulator_header='shared/build/bin/iosSimulatorArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
+          device_modulemap='shared/build/bin/iosArm64/debugFramework/RotkiShared.framework/Modules/module.modulemap'
+          simulator_modulemap='shared/build/bin/iosSimulatorArm64/debugFramework/RotkiShared.framework/Modules/module.modulemap'
           cmp "$device_header" "$simulator_header"
+          cmp "$device_modulemap" "$simulator_modulemap"
           forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|isCanonicalFixedBase64Url|bytesCopy|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PairingId|PairingCredential|ChallengeId|ChallengeNonce|AccessSessionCredential|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
           forbidden_pattern+='|CompanionEnvelopeDecoder|CompanionEnvelopeDecodeOutcome|CompanionEnvelopeShape|CompanionErrorDto|CompanionFailureEnvelopeDto|CompanionFailureLocalEffect|CompanionFailure'
           forbidden_pattern+='|ProtocolDiscoveryEnvelopeDto|ProtocolDiscoveryResultDto|ProtocolNegotiationOutcome|decodeSuccess|decodeFailure|negotiate|toDomain'
@@ -392,9 +542,16 @@ jobs:
           forbidden_pattern+='|org_rotki_mobile_android_security|createAndroid(DeviceProofSigner|IdempotencyKeyGenerator)|Android(DeviceProofSigner|IdempotencyKeyGenerator|SigningKey(Store|Material)|P256Encoding)|DeviceSigningKeyStore|IdempotencyRandomFill'
           forbidden_pattern+='|ANDROID_DEVICE_PROOF_SIGNING_ALIAS|ANDROID_KEY_STORE_PROVIDER|SIGNATURE_ALGORITHM|P256_CURVE_NAME|P256_KEY_SIZE_BITS|CERTIFICATE_SUBJECT|CERTIFICATE_NOT_(BEFORE|AFTER)_MILLIS|IDEMPOTENCY_KEY_BYTE_COUNT|GENERATION_FAILURE_MESSAGE'
           forbidden_pattern+='|rotki_companion_device_proof_signing_v1|AndroidKeyStore|SHA256withECDSA|secp256r1|CN=rotki Companion Device Key'
+          forbidden_pattern+='|org_rotki_mobile_android_pairing_scanner|PairingCodeScanner(Controller|Failure)?|rememberPairingCodeScannerController|CameraXPairingCodeSource|MlKitQrFrameDecoder|PairingCode(Source|Analyzer|DeliveryGate)|PairingFrame(Decoder|DecodeResult)|CloseOnce'
+          forbidden_pattern+='|androidx_camera|com_google_mlkit|BarcodeScanner|ImageProxy|PreviewView'
           forbidden_pattern+='|swift_name\("DeviceSession"\)|swift_name\("DeviceLabel"\)'
-          if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
-            echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform internals leaked into the Swift framework header'
+          if grep -En \
+            "$forbidden_pattern" \
+            "$device_header" \
+            "$simulator_header" \
+            "$device_modulemap" \
+            "$simulator_modulemap"; then
+            echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform/feature internals leaked into the Swift framework'
             exit 1
           fi
           required_swift_names=(

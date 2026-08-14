@@ -18,6 +18,7 @@ dependencyResolutionManagement {
 rootProject.name = "rotki-mobile"
 
 include(":androidApp")
+include(":android:feature:pairing")
 include(":android:navigation")
 include(":android:platform")
 include(":core:common")

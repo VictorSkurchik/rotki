@@ -7,7 +7,7 @@ class PairingCodeDeliveryGateTest {
     @Test
     fun `delivers only the first payload until explicit restart`() {
         val delivered = mutableListOf<String>()
-        val gate = PairingCodeDeliveryGate()
+        val gate = PairingScannerTestBridge.createGate()
         gate.activate()
         val firstSession = checkNotNull(gate.currentSession())
 
@@ -27,7 +27,7 @@ class PairingCodeDeliveryGateTest {
     @Test
     fun `blank values do not consume the delivery cycle`() {
         val delivered = mutableListOf<String>()
-        val gate = PairingCodeDeliveryGate()
+        val gate = PairingScannerTestBridge.createGate()
         gate.activate()
         val session = checkNotNull(gate.currentSession())
 
@@ -42,7 +42,7 @@ class PairingCodeDeliveryGateTest {
     @Test
     fun `late results from stopped or replaced sessions are ignored`() {
         val delivered = mutableListOf<String>()
-        val gate = PairingCodeDeliveryGate()
+        val gate = PairingScannerTestBridge.createGate()
         gate.activate()
         val stoppedSession = checkNotNull(gate.currentSession())
 
@@ -58,8 +58,9 @@ class PairingCodeDeliveryGateTest {
 
     @Test
     fun `detected result redacts its diagnostic representation`() {
-        val result = PairingFrameDecodeResult.Detected("sensitive-payload")
-
-        assertEquals("Detected(redacted)", result.toString())
+        assertEquals(
+            "Detected(redacted)",
+            PairingScannerTestBridge.detectedResultDiagnostic("sensitive-payload"),
+        )
     }
 }

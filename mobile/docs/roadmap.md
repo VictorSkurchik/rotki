@@ -549,8 +549,11 @@ argument-free Overview, Portfolio, History, and Sources destinations instead of 
 index. It has no project dependencies; `:androidApp` maps authoritative shared status to its narrow
 `HomeConnectionBannerState` input. Privacy and the fail-closed root-state decision remain in the app
 outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be bypassed
-through a retained back stack. Remaining biometric/Snapshot/permission adapters and Android feature
-modules remain incremental follow-up work.
+through a retained back stack. The first physical `:android:feature:pairing` slice now owns the
+CameraX/ML Kit scanner behind a narrow Compose API and has no project dependencies. `:androidApp`
+retains the camera permission/settings flow, ViewModel/Koin wiring, and authoritative Pairing action
+mapping. Remaining biometric/Snapshot/permission adapters and the Pairing Screen/ViewModel module
+slice remain incremental follow-up work.
 
 The existing Auth/Pairing vertical remains the reference slice. The real
 `:feature:pairing:data` module owns strict QR decoding, registration transport DTOs/mapping,
@@ -1032,9 +1035,10 @@ Implementation status (2026-08-14): the mobile Client now reaches durable Device
 registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery
 screens, a thin ViewModel, immediate privacy cover, one Koin-backed process composition, and typed
 Navigation Compose destinations for the Overview/Portfolio/History/Sources placeholder shell. The
-project-dependency-free `:android:navigation` leaf owns that authenticated host, while the
-fail-closed privacy/root-state guard and authoritative status mapping remain in `:androidApp`
-outside `NavHost`. `:feature:pairing:data` strictly
+project-dependency-free `:android:feature:pairing` leaf owns the scanner, and the likewise
+project-dependency-free `:android:navigation` leaf owns that authenticated host. The camera
+permission flow and fail-closed privacy/root-state guard remain in `:androidApp`, with authoritative
+status mapping outside `NavHost`. `:feature:pairing:data` strictly
 parses the QR and owns protocol Capability discovery plus the idempotent registration request over
 Ktor. The stable shared wrapper coordinates one-shot authority, Android Device Key creation, bound
 response validation, and durable Pairing-record persistence before committing UI state. Accepted

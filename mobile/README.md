@@ -57,9 +57,13 @@ The production build currently contains:
   argument-free Overview, Portfolio, History, and Sources destinations plus their authenticated
   `NavHost` and interim placeholder shell. The app maps authoritative root status to its narrow
   `HomeConnectionBannerState` input before entering the host;
+- `android:feature:pairing`: an Android-only leaf with no project dependencies. Its first physical
+  slice owns the CameraX/ML Kit QR scanner behind a narrow Compose controller, Composable, and
+  payload-free failure API. Camera/lifecycle/decoder details are private; permission requests,
+  settings recovery, ViewModel actions, and authoritative Pairing state remain app-owned;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
-  `prod` environment flavors, an Android-only Koin process composition root, CameraX/ML Kit
-  scanning, biometric-bound Snapshot security, and Android 17 local-network permission recovery.
+  `prod` environment flavors, an Android-only Koin process composition root, biometric-bound
+  Snapshot security, and Android 17 local-network permission recovery.
   It retains one platform storage pair plus one Device-proof signer and idempotency generator, owns
   the fail-closed privacy and root-state guard outside `NavHost`, creates the navigation leaf only
   after authenticated authority is present, and supplies the process callbacks delegated to the

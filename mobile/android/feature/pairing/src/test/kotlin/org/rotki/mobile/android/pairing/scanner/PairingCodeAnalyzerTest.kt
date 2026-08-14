@@ -14,7 +14,7 @@ class PairingCodeAnalyzerTest {
         fixture.analyzer.analyze(fixture.image)
 
         assertEquals(0, fixture.closeCount)
-        decoder.complete(PairingFrameDecodeResult.Empty)
+        decoder.complete(PairingScannerTestBridge.emptyResult())
         assertEquals(1, fixture.closeCount)
     }
 
@@ -24,8 +24,8 @@ class PairingCodeAnalyzerTest {
         val fixture = Fixture(decoder)
         fixture.analyzer.analyze(fixture.image)
 
-        decoder.complete(PairingFrameDecodeResult.Detected("first-payload"))
-        decoder.complete(PairingFrameDecodeResult.Detected("second-payload"))
+        decoder.complete(PairingScannerTestBridge.detectedResult("first-payload"))
+        decoder.complete(PairingScannerTestBridge.detectedResult("second-payload"))
 
         assertEquals(1, fixture.closeCount)
         assertEquals(listOf("first-payload"), fixture.delivered)
@@ -47,39 +47,39 @@ class PairingCodeAnalyzerTest {
     }
 
     private class Fixture(
-        decoder: PairingFrameDecoder,
+        decoder: PairingScannerTestBridge.TestDecoder,
     ) {
         var closeCount: Int = 0
         val delivered = mutableListOf<String>()
         val failures = mutableListOf<PairingCodeScannerFailure>()
         val image: ImageProxy = recordingImageProxy { closeCount += 1 }
-        private val deliveryGate = PairingCodeDeliveryGate().apply { activate() }
-        val analyzer =
-            PairingCodeAnalyzer(
-                decoder = decoder,
-                deliveryGate = deliveryGate,
-                onPairingCode = delivered::add,
-                onFailure = failures::add,
+        private val deliveryGate = PairingScannerTestBridge.createGate().apply { activate() }
+        val analyzer: PairingScannerTestBridge.TestAnalyzer =
+            PairingScannerTestBridge.createAnalyzer(
+                decoder,
+                deliveryGate,
+                delivered::add,
+                failures::add,
             )
     }
 
     @Test
     fun `late asynchronous result after scanner stop is discarded and frame closes`() {
         val decoder = FakeFrameDecoder()
-        val gate = PairingCodeDeliveryGate().apply { activate() }
+        val gate = PairingScannerTestBridge.createGate().apply { activate() }
         var closeCount = 0
         val delivered = mutableListOf<String>()
         val analyzer =
-            PairingCodeAnalyzer(
-                decoder = decoder,
-                deliveryGate = gate,
-                onPairingCode = delivered::add,
-                onFailure = {},
+            PairingScannerTestBridge.createAnalyzer(
+                decoder,
+                gate,
+                delivered::add,
+                {},
             )
 
         analyzer.analyze(recordingImageProxy { closeCount += 1 })
         gate.deactivate()
-        decoder.complete(PairingFrameDecodeResult.Detected("late-payload"))
+        decoder.complete(PairingScannerTestBridge.detectedResult("late-payload"))
 
         assertEquals(emptyList<String>(), delivered)
         assertEquals(1, closeCount)
@@ -88,49 +88,45 @@ class PairingCodeAnalyzerTest {
     @Test
     fun `late decoder failure after scanner stop is discarded and frame closes`() {
         val decoder = FakeFrameDecoder()
-        val gate = PairingCodeDeliveryGate().apply { activate() }
+        val gate = PairingScannerTestBridge.createGate().apply { activate() }
         var closeCount = 0
         val failures = mutableListOf<PairingCodeScannerFailure>()
         val analyzer =
-            PairingCodeAnalyzer(
-                decoder = decoder,
-                deliveryGate = gate,
-                onPairingCode = {},
-                onFailure = failures::add,
+            PairingScannerTestBridge.createAnalyzer(
+                decoder,
+                gate,
+                {},
+                failures::add,
             )
 
         analyzer.analyze(recordingImageProxy { closeCount += 1 })
         gate.deactivate()
-        decoder.complete(PairingFrameDecodeResult.Failed)
+        decoder.complete(PairingScannerTestBridge.failedResult())
 
         assertEquals(emptyList<PairingCodeScannerFailure>(), failures)
         assertEquals(1, closeCount)
     }
 
-    private class FakeFrameDecoder : PairingFrameDecoder {
-        private var completion: ((PairingFrameDecodeResult) -> Unit)? = null
+    private class FakeFrameDecoder : PairingScannerTestBridge.TestDecoder {
+        private var completion: PairingScannerTestBridge.TestCompletion? = null
 
         override fun decode(
             frame: ImageProxy,
-            complete: (PairingFrameDecodeResult) -> Unit,
+            complete: PairingScannerTestBridge.TestCompletion,
         ) {
             completion = complete
         }
 
-        fun complete(result: PairingFrameDecodeResult) {
-            checkNotNull(completion)(result)
+        fun complete(result: PairingScannerTestBridge.TestDecodeResult) {
+            checkNotNull(completion).complete(result)
         }
-
-        override fun close(): Unit = Unit
     }
 
-    private class ThrowingFrameDecoder : PairingFrameDecoder {
+    private class ThrowingFrameDecoder : PairingScannerTestBridge.TestDecoder {
         override fun decode(
             frame: ImageProxy,
-            complete: (PairingFrameDecodeResult) -> Unit,
+            complete: PairingScannerTestBridge.TestCompletion,
         ): Unit = error("synthetic decoder failure")
-
-        override fun close(): Unit = Unit
     }
 
     private companion object {

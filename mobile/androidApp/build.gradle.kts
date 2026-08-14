@@ -79,15 +79,12 @@ android {
 }
 
 dependencies {
+    implementation(project(":android:feature:pairing"))
     implementation(project(":android:navigation"))
     implementation(project(":android:platform"))
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.biometric)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -96,7 +93,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
-    implementation(libs.mlkit.barcode.scanning)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 

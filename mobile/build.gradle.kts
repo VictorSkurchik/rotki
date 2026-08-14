@@ -70,7 +70,52 @@ val featureModuleBoundaryRules =
     mapOf(
         ":androidApp" to
             ModuleBoundaryRule(
-                allowedProjectDependencies = setOf(":android:navigation", ":android:platform", ":shared"),
+                allowedProjectDependencies =
+                    setOf(
+                        ":android:feature:pairing",
+                        ":android:navigation",
+                        ":android:platform",
+                        ":shared",
+                    ),
+            ),
+        ":android:feature:pairing" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                allowedExternalModules =
+                    setOf(
+                        "androidx.camera" to "camera-camera2",
+                        "androidx.camera" to "camera-core",
+                        "androidx.camera" to "camera-lifecycle",
+                        "androidx.camera" to "camera-view",
+                        "androidx.compose" to "compose-bom",
+                        "androidx.compose.compiler" to "compiler",
+                        "androidx.compose.runtime" to "runtime",
+                        "androidx.compose.ui" to "ui",
+                        "androidx.lifecycle" to "lifecycle-runtime-compose",
+                        "com.google.mlkit" to "barcode-scanning",
+                    ),
+                allowedTestExternalModules =
+                    setOf(
+                        "junit" to "junit",
+                    ),
+                forbiddenGroupPrefixes =
+                    setOf(
+                        "androidx.",
+                        "com.google.mlkit",
+                        "io.insert-koin",
+                        "io.ktor",
+                        "junit",
+                        "org.jetbrains.kotlinx",
+                    ),
+                forbiddenPluginIds =
+                    setOf(
+                        "com.android.application",
+                        "com.android.kotlin.multiplatform.library",
+                        "org.jetbrains.compose",
+                        "org.jetbrains.kotlin.android",
+                        "org.jetbrains.kotlin.multiplatform",
+                        "org.jetbrains.kotlin.plugin.serialization",
+                    ),
             ),
         ":android:navigation" to
             ModuleBoundaryRule(
@@ -385,6 +430,9 @@ tasks.register("mobileCheck") {
     description = "Runs host-side KMP and Android checks available on the current OS."
     dependsOn(checkModuleGraph, qualityCheck)
     dependsOn(
+        ":android:feature:pairing:assembleDebug",
+        ":android:feature:pairing:lintDebug",
+        ":android:feature:pairing:test",
         ":android:navigation:assembleDebug",
         ":android:navigation:lintDebug",
         ":android:navigation:test",

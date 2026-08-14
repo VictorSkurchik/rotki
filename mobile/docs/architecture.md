@@ -77,8 +77,9 @@ rules without carrying private configuration.
 The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
 `:core:security-api`, test-only `:core:testing`, `:feature:pairing:domain`,
 `:feature:pairing:data`, `:feature:pairing:presentation`, `:android:navigation`,
-`:android:platform`, `:shared`, and `:androidApp` modules are the first migration state, not the final
-boundary. Create target modules only when moving or adding real production code. `:core:common` owns
+`:android:platform`, `:android:feature:pairing`, `:shared`, and `:androidApp` modules are the first
+migration state, not the final boundary. Create target modules only when moving or adding real
+production code. `:core:common` owns
 `Clock`, application visibility/controller contracts, and the lifecycle policy. `:core:model` owns
 `ExactDecimal` plus its characterization assets; and the completed `:core:security-api` boundary
 owns the Pairing cleanup journal, Device-proof signer,
@@ -138,9 +139,15 @@ The physical `:android:navigation` leaf now owns the authenticated placeholder `
 typed, argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative
 shared status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,
 lock, recovery, incompatible, and revoked selection remains a fail-closed state guard in
-`:androidApp` outside `NavHost`, so a saved back stack cannot bypass it. Android platform adapters
-beyond the lifecycle, Pairing-storage, Device-proof, and idempotency slices, Android feature modules,
-the Room KMP owner, and the complete design system have not been created yet.
+`:androidApp` outside `NavHost`, so a saved back stack cannot bypass it.
+
+The physical `:android:feature:pairing` leaf now owns the native QR-scanner slice. It has no project
+dependencies and exposes only its remembered controller, scanner Composable, and coarse failure
+enum. CameraX, ML Kit, frame decoding, and delivery latching remain private implementation details.
+The app retains the camera manifest/runtime-permission flow, settings recovery, ViewModel/Koin
+composition, and mapping to authoritative Pairing actions. Remaining Android platform adapters,
+the Pairing Screen/ViewModel extraction, the Room KMP owner, and the complete design system remain
+incremental follow-up work.
 
 ```text
 mobile/
@@ -161,7 +168,7 @@ mobile/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
 │   ├── navigation/          # typed Navigation Compose contracts and root graphs
 │   ├── platform/            # lifecycle, Pairing storage, Device proof, and idempotency
-│   └── feature/<feature>/   # ViewModel, Route, Screen, feature-local UI and Koin module
+│   └── feature/pairing/     # scanner leaf; later ViewModel, Route, Screen, and Koin module
 ├── shared/                  # thin Apple-framework aggregation and Swift-safe facade
 ├── androidApp/              # Android application and top-level composition root
 └── iosApp/                  # native SwiftUI application and iOS composition root
@@ -176,7 +183,8 @@ flowchart LR
     AndroidPlatform --> Common["core common"]
     AndroidPlatform --> SecurityApi["core security API"]
     AndroidPlatform --> Protocol
-    AndroidApp["androidApp composition root"] --> AndroidFeature["Android feature UI"]
+    AndroidApp --> AndroidPairingScanner["Android Pairing scanner leaf"]
+    AndroidApp["androidApp composition root"] --> AndroidFeature["future Android feature UI"]
     AndroidFeature --> Presentation["feature presentation"]
     Presentation --> Domain["feature domain"]
     Data["feature data"] --> Domain
@@ -205,6 +213,10 @@ Rules:
   code is not.
 - `android:navigation` is a project-dependency-free Android leaf. It accepts only UI-safe root input
   selected by the application and never imports shared/KMP state, Koin, data, or platform adapters.
+- `android:feature:pairing` is currently a project-dependency-free scanner leaf. CameraX and ML Kit
+  stay behind its narrow Compose API; the app retains camera permission/settings orchestration and
+  Pairing action mapping. It gains presentation/design-system/Koin edges only when the corresponding
+  Screen/ViewModel slice moves with stable inward-facing contracts.
 - `android:platform` exposes the lifecycle bridge plus port-returning factories for backup-excluded
   Pairing storage, Android Keystore Device proof, and secure-random idempotency. Its project edges are
   limited to `:core:common`, `:core:security-api`, and implementation-only protocol value types.
@@ -269,10 +281,10 @@ network, database, cryptographic, or repository work.
   mutating a global container from individual test bodies.
 - iOS uses its native/manual composition boundary. Koin must not become a cross-platform API.
 - The physical `android/platform` module owns the lifecycle callback bridge and durable Pairing
-  record/journal adapters behind core ports. Cryptographic, biometric, permission, and focused
-  Pairing definitions remain in `:androidApp`; later platform and `android/feature/*` extraction
-  follows only with a real slice and must not change the process, Activity, or ViewModel lifetimes
-  above.
+  record/journal adapters behind core ports. The physical `android/feature/pairing` module owns only
+  the composition-scoped QR scanner so far. Biometric/Snapshot-encryption policy, permission,
+  Screen/ViewModel, and focused Koin definitions remain in `:androidApp`; later extraction follows
+  only with a real slice and must not change the process, Activity, or ViewModel lifetimes above.
 
 ## Android MVI and unidirectional data flow
 
@@ -458,8 +470,10 @@ Do not perform a big-bang package move. Use this order:
    migrate Pairing and the four-tab shell. The four authenticated placeholder destinations and their
    host are now typed, navigation-backed, and physically owned by the project-dependency-free
    `:android:navigation` leaf. The security root guard and authoritative state mapping remain in
-   `:androidApp` outside `NavHost`; Pairing/root graph migration and the full component catalog remain
-   deferred.
+   `:androidApp` outside `NavHost`. The project-dependency-free `:android:feature:pairing` leaf now
+   owns the native scanner implementation while the app retains its permission flow, Screen,
+   ViewModel, Koin wiring, and authoritative Pairing actions. Pairing/root graph migration and the
+   full component catalog remain deferred.
 5. Create the Room KMP module only with its first approved relational use case.
 6. Build Overview, Portfolio, History, and Sources directly in the target module shape.
 7. After the functional destinations and Gate G6 are stable, run a dedicated Claude Design step and
