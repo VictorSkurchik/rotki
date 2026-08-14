@@ -52,14 +52,14 @@ kotlin {
             api(libs.kotlinx.coroutines.core)
             implementation(project(":core:network"))
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.ktor.client.core)
+            implementation(project(":feature:pairing:data"))
             implementation(project(":feature:pairing:domain"))
             implementation(project(":feature:pairing:presentation"))
         }
         commonTest.dependencies {
+            implementation(project(":core:testing"))
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.ktor.client.mock)
         }
     }
 }

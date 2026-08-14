@@ -12,10 +12,11 @@ Its only project dependency is `:core:protocol`, which supplies protocol limits,
 the strict envelope decoder. Ktor, coroutines, and serialization are infrastructure dependencies of
 this module; Compose, Koin, Room, native UI, and application composition are forbidden.
 
-`:shared` consumes `:core:network` as an implementation dependency while Pairing-specific Auth DTOs,
-request construction, and orchestration remain there. Public Kotlin seams exist only where those
-callers or authored fixture-parity tests cross the module boundary; all are hidden from Objective-C
-and Swift. The module creates no Apple framework and is not exported through `RotkiShared`.
+`:feature:pairing:data` consumes `:core:network` as an implementation dependency for protocol
+discovery and Device Session registration. The facade-scoped lifecycle, durability, and cleanup
+orchestration remains in `:shared`. Public Kotlin network seams exist only where infrastructure
+callers cross the module boundary; all are hidden from Objective-C and Swift. The module creates no
+Apple framework and is not exported through `RotkiShared`.
 
 Transport bodies may contain credentials or other sensitive protocol material. They stay bounded,
 must never be logged or persisted, and use constant redacted diagnostic representations where a

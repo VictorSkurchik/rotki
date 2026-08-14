@@ -484,7 +484,8 @@ convention now owns the common JVM, Android host, and Apple target policy. `:cor
 extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
 vectors, and generator. `:core:common` now owns `Clock`, the application-visibility/controller
 contracts, and the exhaustive lifecycle policy. Its autonomous contract tests moved with it, while
-the authored lifecycle-fixture parity test remains in `:shared` beside the generated protocol fixtures.
+the authored lifecycle-fixture parity test remains downstream and consumes the single generated
+protocol corpus from test-only `:core:testing`.
 The physical `:core:protocol` leaf now owns the strict Companion JSON codec,
 duplicate-member/syntax scanner, strict scalar serializers, generated protocol vocabulary, and
 fixed-width protocol value types and the Ktor-free Engine-origin parser, plus the bounded HTTP
@@ -495,8 +496,8 @@ through `RotkiShared`, while credentials, DTO/decoder seams, WebSocket notificat
 helpers, codec mechanics, and generated vocabulary remain hidden from Swift.
 The physical `:core:network` leaf owns hardened Ktor client construction, bounded HTTP response
 execution, replay and session-renewal policy, the single-flight renewal gate, and OkHttp/Darwin
-engine actuals. Its only project dependency is `:core:protocol`; `:shared` consumes it as an
-implementation dependency, and all of its cross-module seams remain hidden from Swift.
+engine actuals. Its only project dependency is `:core:protocol`; Pairing data and `:shared` consume
+it as an implementation dependency, and all of its cross-module seams remain hidden from Swift.
 The completed `:core:security-api` boundary owns the secret-free Pairing cleanup journal, Device-proof
 signer, idempotency-key generator, redacted Pairing-record persistence contract, and secure
 Snapshot-store contract with its revocable application-owned plaintext handle. It depends only on
@@ -509,6 +510,14 @@ or hand-maintained test lists. The root `checkModuleGraph` gate rejects
 unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
 the extracted Clean Architecture boundaries.
 
+The real `:feature:pairing:data` module implements the domain submission gateway and owns strict QR
+decoding plus the complete implemented discovery/registration wire boundary. Its Ktor client and raw
+DTOs remain internal; the substitutable registration gateway and redacted Pairing carriers exposed
+to the shared orchestrator are Kotlin-only and hidden from native export. It depends only on
+`:core:common`, `:core:protocol`, `:core:network`, and `:feature:pairing:domain`, with no edge back to
+`:shared`. `:core:testing` supplies one canonical generated corpus only to test configurations, which
+the module-graph guard enforces.
+
 The first Auth/Pairing boundary is also extracted without changing the native API:
 `:feature:pairing:domain` owns the one-shot submission contract, coarse outcomes, and opaque
 session/attempt ports, while `:feature:pairing:presentation` owns the synchronous UDF
@@ -516,22 +525,24 @@ state/action/reducer. The existing Swift-facing `PairingFlow` and `PairingConnec
 ports and no longer depend directly on `CompanionFacade`. One non-exported adapter scoped to the
 facade implements admission, single-flight attempt ownership, durability, and cleanup. Recovered
 cleanup now claims its facade barrier before deleting key or record material, so a concurrent QR
-admission cannot be mistaken for stale material and silently removed. Neither feature module stores
-QR material or creates an Apple framework.
+admission cannot be mistaken for stale material and silently removed. Domain and presentation never
+store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
+creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical remains the reference slice. Strict QR decoding, registration transport, Auth protocol
-DTOs and Pairing-specific request construction are still physically located inside `:shared`. Generic
-Ktor client construction, bounded response execution, replay/renewal policy, and platform engines
-have moved to `:core:network`; generic HTTP envelopes and decoders remain in `:core:protocol`, while
-the complete security contract boundary lives in `:core:security-api`. Raw `Json` is private behind
-the Kotlin-only protocol codec hidden from Objective-C and Swift. Ktor wraps sensitive encoded bytes
-in content with a constant, redacted diagnostic representation and does not install
-`ContentNegotiation`, so transport does not consume the serializer configuration directly. Core
-network creates no framework and its public Kotlin seams are hidden from native export. Next move QR
-decoding and registration together into a real `:feature:pairing:data` module. No placeholder data
-module or temporary `data -> shared` dependency is planned. Afterward replace manual Android
-composition and tab selection with Koin and typed Navigation Compose.
+vertical remains the reference slice. The real `:feature:pairing:data` module now owns strict QR
+decoding, registration transport DTOs/mapping, Pairing-specific request construction, and its
+internal Ktor client; it implements the domain submission gateway and has no edge to `:shared`.
+Generic Ktor client construction, bounded response execution, replay/renewal policy, and platform
+engines live in `:core:network`; generic HTTP envelopes and decoders remain in `:core:protocol`, while
+the complete security contract boundary lives in `:core:security-api`. The canonical generated test
+corpus has one owner in test-only `:core:testing`, which the graph forbids from production source
+sets. Raw `Json` is private behind the Kotlin-only protocol codec hidden from Objective-C and Swift.
+The stable shared Pairing wrappers retain facade-owned connection lifecycle, durability, and cleanup
+orchestration plus the not-yet-implemented challenge/proof and Access Session DTOs. Pairing data
+creates no framework; its redacted Kotlin integration seams expose no Ktor type and stay hidden from
+native export. Next replace manual Android composition and tab selection with Koin and typed
+Navigation Compose while preserving that boundary.
 Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
 remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
 component system is deliberately deferred to Phase 7 and Claude Design.

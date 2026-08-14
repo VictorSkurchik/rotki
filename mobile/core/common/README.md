@@ -14,9 +14,9 @@ required by `ApplicationVisibility.state`; it has no project, serialization, Kto
 Koin, or native UI dependency.
 
 Autonomous common tests cover the injected clock, controller progression, redacted representation,
-and the exhaustive three-state policy matrix. The authored protocol-fixture parity test deliberately
-remains in `:shared`, where the generated protocol assets and JSON decoder already live; they are not
-dependencies of this leaf.
+and the exhaustive three-state policy matrix. The authored protocol-fixture parity test remains a
+downstream test and reads the single generated corpus from test-only `:core:testing`; neither test
+support module is a production dependency of this leaf.
 
 `:shared` consumes this module as an API dependency and exports it through the existing
 `RotkiShared` Apple framework. The packages and native-facing declarations remain unchanged, and

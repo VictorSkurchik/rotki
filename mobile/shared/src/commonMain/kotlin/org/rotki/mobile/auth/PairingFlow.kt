@@ -5,15 +5,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.rotki.mobile.auth.protocol.PairingQr
-import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
-import org.rotki.mobile.auth.protocol.PairingQrParser
-import org.rotki.mobile.auth.protocol.PairingQrRejection
+import org.rotki.mobile.auth.protocol.createPairingSubmissionGateway
 import org.rotki.mobile.core.ports.Clock
-import org.rotki.mobile.feature.pairing.domain.PairingAdmission
 import org.rotki.mobile.feature.pairing.domain.PairingSessionPort
 import org.rotki.mobile.feature.pairing.domain.PairingSubmissionGateway
-import org.rotki.mobile.feature.pairing.domain.PairingSubmissionOutcome
-import org.rotki.mobile.feature.pairing.domain.PairingSubmissionRejection
 import org.rotki.mobile.feature.pairing.presentation.PairingAction
 import org.rotki.mobile.feature.pairing.presentation.PairingFailureCategory
 import org.rotki.mobile.feature.pairing.presentation.PairingReducer
@@ -65,11 +60,11 @@ public class PairingPresentation internal constructor(
  */
 public class PairingFlow internal constructor(
     private val session: PairingSessionPort<PairingQr>,
-    private val parser: PairingQrParser,
+    private val submissionGateway: PairingSubmissionGateway,
 ) {
     internal constructor(session: PairingSessionPort<PairingQr>, clock: Clock) : this(
         session = session,
-        parser = PairingQrParser(clock),
+        submissionGateway = createPairingSubmissionGateway(session, clock),
     )
 
     internal constructor(session: PairingSessionPort<PairingQr>) : this(
@@ -77,8 +72,6 @@ public class PairingFlow internal constructor(
         clock = Clock { KotlinClock.System.now().epochSeconds },
     )
 
-    private val submissionGateway: PairingSubmissionGateway =
-        PairingSubmissionGateway(::submitPairing)
     private val mutablePresentation: MutableStateFlow<PairingPresentation> =
         MutableStateFlow(
             PairingReducer
@@ -123,40 +116,7 @@ public class PairingFlow internal constructor(
                 .toPublicPresentation()
         }
     }
-
-    private fun submitPairing(rawPayload: String): PairingSubmissionOutcome =
-        when (val outcome = parser.parse(rawPayload.encodeToByteArray())) {
-            is PairingQrParseOutcome.Accepted -> {
-                acceptQr(outcome.pairingQr)
-            }
-
-            is PairingQrParseOutcome.Rejected -> {
-                PairingSubmissionOutcome.Rejected(outcome.reason.toDomainRejection())
-            }
-        }
-
-    private fun acceptQr(pairingQr: PairingQr): PairingSubmissionOutcome =
-        when (session.admit(pairingQr)) {
-            PairingAdmission.ACCEPTED -> PairingSubmissionOutcome.Accepted
-            PairingAdmission.IGNORED -> PairingSubmissionOutcome.Ignored
-        }
 }
-
-private fun PairingQrRejection.toDomainRejection(): PairingSubmissionRejection =
-    when (this) {
-        PairingQrRejection.EXPIRED -> PairingSubmissionRejection.EXPIRED
-
-        PairingQrRejection.UNSUPPORTED_FORMAT -> PairingSubmissionRejection.UNSUPPORTED
-
-        PairingQrRejection.DUPLICATE_MEMBER,
-        PairingQrRejection.INVALID_CREDENTIAL,
-        PairingQrRejection.INVALID_ORIGIN,
-        PairingQrRejection.INVALID_PAIRING_ID,
-        PairingQrRejection.INVALID_SHAPE,
-        PairingQrRejection.INVALID_UTF8,
-        PairingQrRejection.TOO_LARGE,
-        -> PairingSubmissionRejection.MALFORMED
-    }
 
 private fun PairingPresentation.toFeatureState(): PairingState =
     when (state) {

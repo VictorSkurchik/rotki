@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.auth
 
 import io.ktor.client.HttpClient
@@ -8,16 +10,19 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.OutgoingContent
-import org.rotki.mobile.auth.protocol.AuthContractOutcome
 import org.rotki.mobile.auth.protocol.DeviceLabel
 import org.rotki.mobile.auth.protocol.DeviceSession
 import org.rotki.mobile.auth.protocol.DeviceSessionEnvelopeDto
+import org.rotki.mobile.auth.protocol.PairingQr
 import org.rotki.mobile.auth.protocol.RegisterDeviceSessionRequestDto
-import org.rotki.mobile.auth.protocol.encodeCompanionJson
 import org.rotki.mobile.auth.protocol.matchesRegistration
+import org.rotki.mobile.auth.protocol.toDomainOrNull
 import org.rotki.mobile.core.network.CompanionHttpResponseOutcome
+import org.rotki.mobile.core.network.createPlatformCompanionHttpClient
 import org.rotki.mobile.core.network.executeCompanionResponse
 import org.rotki.mobile.core.protocol.CompanionFailure
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
+import org.rotki.mobile.core.protocol.DeviceSessionId
 import org.rotki.mobile.core.protocol.EngineOrigin
 import org.rotki.mobile.core.protocol.IdempotencyKey
 import org.rotki.mobile.core.protocol.PairingCredential
@@ -30,13 +35,38 @@ import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolHeaders
 import org.rotki.mobile.core.protocol.generated.SUPPORTED_PROTOCOL_VERSIONS
-import org.rotki.mobile.auth.protocol.toDomain as toDeviceSession
+import kotlin.native.HiddenFromObjC
 import org.rotki.mobile.core.protocol.toDomain as toCompanionFailure
+
+@HiddenFromObjC
+public interface PairingRegistrationRemoteGateway {
+    public suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome
+
+    /**
+     * Uses [pairingQr], [idempotencyKey], and [deviceLabel] only for this registration operation.
+     * Implementations must not retain, persist, log, or expose those values through exceptions or
+     * object representations.
+     */
+    public suspend fun register(
+        pairingQr: PairingQr,
+        selectedProtocolVersion: Int,
+        idempotencyKey: IdempotencyKey,
+        deviceLabel: DeviceLabel,
+        platform: CompanionPlatform,
+        publicKey: X963PublicKey,
+    ): PairingRegistrationRemoteOutcome
+
+    public fun close(): Unit
+}
+
+@HiddenFromObjC
+public fun createPlatformPairingRegistrationRemoteGateway(): PairingRegistrationRemoteGateway =
+    PairingProtocolClient(createPlatformCompanionHttpClient())
 
 internal class PairingProtocolClient(
     private val client: HttpClient,
-) {
-    internal suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome {
+) : PairingRegistrationRemoteGateway {
+    override suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome {
         val response =
             client
                 .prepareRequest(
@@ -106,6 +136,27 @@ internal class PairingProtocolClient(
         }
     }
 
+    override suspend fun register(
+        pairingQr: PairingQr,
+        selectedProtocolVersion: Int,
+        idempotencyKey: IdempotencyKey,
+        deviceLabel: DeviceLabel,
+        platform: CompanionPlatform,
+        publicKey: X963PublicKey,
+    ): PairingRegistrationRemoteOutcome =
+        register(
+            PairingRegistrationRequest(
+                engineOrigin = pairingQr.engineOrigin,
+                pairingId = pairingQr.pairingId,
+                pairingCredential = pairingQr.pairingCredential,
+                selectedProtocolVersion = selectedProtocolVersion,
+                idempotencyKey = idempotencyKey,
+                deviceLabel = deviceLabel,
+                platform = platform,
+                publicKey = publicKey,
+            ),
+        )
+
     internal suspend fun register(request: PairingRegistrationRequest): PairingRegistrationRemoteOutcome {
         val response =
             client
@@ -135,28 +186,22 @@ internal class PairingProtocolClient(
                 )
         return when (response) {
             is CompanionHttpResponseOutcome.Success -> {
-                when (
-                    val domain =
-                        response.value.result.deviceSession
-                            .toDeviceSession()
+                val deviceSession =
+                    response.value.result.deviceSession
+                        .toDomainOrNull()
+                if (deviceSession != null &&
+                    deviceSession.matchesRegistration(request.deviceLabel, request.platform)
                 ) {
-                    is AuthContractOutcome.Accepted -> {
-                        if (
-                            domain.value.matchesRegistration(request.deviceLabel, request.platform)
-                        ) {
-                            PairingRegistrationRemoteOutcome.Registered(domain.value)
-                        } else {
-                            PairingRegistrationRemoteOutcome.ContractFailure(
-                                PairingProtocolRoutes.Registration.successStatusCode,
-                            )
-                        }
-                    }
-
-                    AuthContractOutcome.ContractFailure -> {
-                        PairingRegistrationRemoteOutcome.ContractFailure(
-                            PairingProtocolRoutes.Registration.successStatusCode,
-                        )
-                    }
+                    PairingRegistrationRemoteOutcome.Registered(
+                        PairingRegisteredSession(
+                            id = deviceSession.id,
+                            pairedAtEpochSeconds = deviceSession.pairedAtEpochSeconds,
+                        ),
+                    )
+                } else {
+                    PairingRegistrationRemoteOutcome.ContractFailure(
+                        PairingProtocolRoutes.Registration.successStatusCode,
+                    )
                 }
             }
 
@@ -182,8 +227,11 @@ internal class PairingProtocolClient(
         }
     }
 
-    internal fun close(): Unit = client.close()
+    override fun close(): Unit = client.close()
 }
+
+private fun RegisterDeviceSessionRequestDto.encodeCompanionJson(): ByteArray =
+    CompanionJsonCodec.encodeToByteArray(RegisterDeviceSessionRequestDto.serializer(), this)
 
 private class CompanionJsonContent private constructor(
     private val content: ByteArray,
@@ -218,45 +266,78 @@ internal class PairingRegistrationRequest(
     override fun toString(): String = "PairingRegistrationRequest(redacted)"
 }
 
-internal sealed interface PairingDiscoveryOutcome {
-    data class Compatible(
-        internal val selectedProtocolVersion: Int,
-    ) : PairingDiscoveryOutcome
+@HiddenFromObjC
+public sealed interface PairingDiscoveryOutcome {
+    @HiddenFromObjC
+    public data class Compatible(
+        public val selectedProtocolVersion: Int,
+    ) : PairingDiscoveryOutcome {
+        public override fun toString(): String = "Compatible(redacted)"
+    }
 
-    data object Incompatible : PairingDiscoveryOutcome
+    @HiddenFromObjC
+    public data object Incompatible : PairingDiscoveryOutcome
 
-    data class Rejected(
-        internal val failure: CompanionFailure,
-        internal val retryAfterSeconds: Long?,
-    ) : PairingDiscoveryOutcome
+    @HiddenFromObjC
+    public data class Rejected(
+        public val failure: CompanionFailure,
+        public val retryAfterSeconds: Long?,
+    ) : PairingDiscoveryOutcome {
+        public override fun toString(): String = "Rejected(redacted)"
+    }
 
-    data class ContractFailure(
-        internal val statusCode: Int,
-    ) : PairingDiscoveryOutcome
+    @HiddenFromObjC
+    public data class ContractFailure(
+        public val statusCode: Int,
+    ) : PairingDiscoveryOutcome {
+        public override fun toString(): String = "ContractFailure(redacted)"
+    }
 
-    data object PreResponseTransportFailure : PairingDiscoveryOutcome
+    @HiddenFromObjC
+    public data object PreResponseTransportFailure : PairingDiscoveryOutcome
 
-    data object CompleteResponseTransportFailure : PairingDiscoveryOutcome
+    @HiddenFromObjC
+    public data object CompleteResponseTransportFailure : PairingDiscoveryOutcome
 }
 
-internal sealed interface PairingRegistrationRemoteOutcome {
-    data class Registered(
-        internal val deviceSession: DeviceSession,
-    ) : PairingRegistrationRemoteOutcome
+@HiddenFromObjC
+public sealed interface PairingRegistrationRemoteOutcome {
+    @HiddenFromObjC
+    public data class Registered(
+        public val deviceSession: PairingRegisteredSession,
+    ) : PairingRegistrationRemoteOutcome {
+        public override fun toString(): String = "Registered(redacted)"
+    }
 
-    data class Rejected(
-        internal val statusCode: Int,
-        internal val failure: CompanionFailure,
-        internal val retryAfterSeconds: Long?,
-    ) : PairingRegistrationRemoteOutcome
+    @HiddenFromObjC
+    public data class Rejected(
+        public val statusCode: Int,
+        public val failure: CompanionFailure,
+        public val retryAfterSeconds: Long?,
+    ) : PairingRegistrationRemoteOutcome {
+        public override fun toString(): String = "Rejected(redacted)"
+    }
 
-    data class ContractFailure(
-        internal val statusCode: Int,
-    ) : PairingRegistrationRemoteOutcome
+    @HiddenFromObjC
+    public data class ContractFailure(
+        public val statusCode: Int,
+    ) : PairingRegistrationRemoteOutcome {
+        public override fun toString(): String = "ContractFailure(redacted)"
+    }
 
-    data object PreResponseTransportFailure : PairingRegistrationRemoteOutcome
+    @HiddenFromObjC
+    public data object PreResponseTransportFailure : PairingRegistrationRemoteOutcome
 
-    data object CompleteResponseTransportFailure : PairingRegistrationRemoteOutcome
+    @HiddenFromObjC
+    public data object CompleteResponseTransportFailure : PairingRegistrationRemoteOutcome
+}
+
+@HiddenFromObjC
+public data class PairingRegisteredSession(
+    public val id: DeviceSessionId,
+    public val pairedAtEpochSeconds: Long,
+) {
+    public override fun toString(): String = "PairingRegisteredSession(redacted)"
 }
 
 private fun CompanionFailure.isIncompatibleProtocol(): Boolean =

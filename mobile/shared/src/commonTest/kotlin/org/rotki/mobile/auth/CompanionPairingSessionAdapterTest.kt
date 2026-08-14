@@ -3,9 +3,6 @@ package org.rotki.mobile.auth
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.auth.protocol.PairingQr
-import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
-import org.rotki.mobile.auth.protocol.PairingQrParser
-import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionTransitionOutcome
 import org.rotki.mobile.feature.pairing.domain.PairingAdmission
@@ -150,13 +147,7 @@ class CompanionPairingSessionAdapterTest {
     }
 }
 
-private fun parsedQr(expiresAt: Long): PairingQr {
-    val outcome =
-        PairingQrParser(Clock { NOW }).parse(
-            validQr(expiresAt).encodeToByteArray(),
-        )
-    return assertIs<PairingQrParseOutcome.Accepted>(outcome).pairingQr
-}
+private fun parsedQr(expiresAt: Long): PairingQr = acceptedPairingQr(validQr(expiresAt), NOW)
 
 private fun validQr(expiresAt: Long): String =
     """{"kind":"rotki_companion_pairing","format_version":1,"engine_origin":"$ORIGIN","pairing_id":"$PAIRING_ID","pairing_credential":"$PAIRING_CREDENTIAL","expires_at":$expiresAt}"""

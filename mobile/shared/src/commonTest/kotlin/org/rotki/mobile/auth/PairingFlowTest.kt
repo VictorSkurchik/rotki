@@ -1,8 +1,6 @@
 package org.rotki.mobile.auth
 
 import org.rotki.mobile.CompanionFacade
-import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
-import org.rotki.mobile.auth.protocol.PairingQrParser
 import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionTransitionOutcome
@@ -239,11 +237,7 @@ class PairingFlowTest {
     @Test
     fun `lock racing accepted qr cannot leave connecting without ownership`() {
         val facade = CompanionFacade()
-        val parsed =
-            PairingQrParser(Clock { NOW }).parse(
-                validQr(expiresAt = NOW + 1).encodeToByteArray(),
-            )
-        val pairingQr = assertIs<PairingQrParseOutcome.Accepted>(parsed).pairingQr
+        val pairingQr = acceptedPairingQr(validQr(expiresAt = NOW + 1), NOW)
 
         val outcome = facade.acceptPairing(pairingQr) { facade.lock() }
 

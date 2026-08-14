@@ -28,19 +28,25 @@ The production build currently contains:
   cleanup journal, Device-proof and idempotency ports, the redacted Pairing-record persistence
   contract, and the secure Snapshot-store contract with its revocable application-owned plaintext
   handle. It depends only on protocol value types and contains no native implementation;
+- `core:testing`: the test-only KMP home for the single generated Companion protocol corpus and its
+  shared fixture parser. Production source sets cannot depend on it;
+- `feature:pairing:data`: the real Pairing data implementation. It owns strict QR decoding,
+  registration DTOs and mapping, Pairing-specific request construction, and the Ktor-backed
+  discovery/registration client. It implements the domain submission gateway, depends only on the
+  approved core/domain leaves, and remains hidden from Swift;
 - `feature:pairing:domain`: platform-neutral Pairing submission contracts, coarse secret-free
   outcomes, and opaque session/attempt ports;
 - `feature:pairing:presentation`: the pure synchronous Pairing UDF state/action/reducer layer,
   depending only on Pairing domain contracts;
 - `shared`: the single Swift-facing `RotkiShared` framework umbrella and the migration home for
-  behavior not yet extracted, including strict Pairing QR parsing, Capability discovery,
-  lifecycle-aware Device Key registration, and durable cleanup recovery. Its existing `PairingFlow`
-  and `PairingConnection` remain ABI-compatible adapters over the extracted feature ports and no
-  longer depend directly on `CompanionFacade`; one facade-scoped internal adapter supplies both.
-  `shared` consumes `core:network` as an implementation dependency and re-exports the stable public
-  surfaces of `core:common`, `core:model`, `core:protocol`, and `core:security-api` through the single
-  framework. Protocol credentials, codec mechanics, network seams, and wire vocabulary remain
-  Kotlin-only and hidden from Objective-C and Swift;
+  behavior not yet extracted, including challenge/proof and Access Session DTOs plus the
+  facade-scoped Pairing ownership, lifecycle, durable registration, and cleanup transaction. Its
+  existing `PairingFlow` and `PairingConnection` remain ABI-compatible adapters over the extracted
+  feature ports and data implementation; one facade-scoped internal adapter supplies both.
+  `shared` consumes `core:network` and Pairing data as implementation dependencies and re-exports
+  only the stable public surfaces of `core:common`, `core:model`, `core:protocol`, and
+  `core:security-api` through the single framework. Protocol credentials, data/network seams, codec
+  mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;

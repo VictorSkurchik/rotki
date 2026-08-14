@@ -75,8 +75,9 @@ rules without carrying private configuration.
 ## Target Gradle module graph
 
 The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
-`:core:security-api`, `:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and
-`:androidApp` modules are the first migration state, not the final boundary. Create target modules
+`:core:security-api`, test-only `:core:testing`, `:feature:pairing:domain`,
+`:feature:pairing:data`, `:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are the
+first migration state, not the final boundary. Create target modules
 only when moving or adding real production code. `:core:common` owns `Clock`, application
 visibility/controller contracts, and the lifecycle policy; `:core:model` owns `ExactDecimal` plus
 its characterization assets; and the completed `:core:security-api` boundary owns the Pairing
@@ -96,13 +97,22 @@ The physical `:core:network` leaf owns hardened Ktor client construction, bounde
 replay and session-renewal policy, the single-flight renewal gate, and OkHttp/Darwin engine actuals.
 Its sole project edge is `:core:protocol`; its Kotlin-only seams are hidden from Objective-C and
 Swift, it creates no framework, and `:shared` consumes it as an implementation dependency.
+Test-only `:core:testing` owns the single generated Companion corpus and fixture parser; the module
+graph forbids every production source-set dependency declaration from depending on it. The physical
+`:feature:pairing:data` module implements the domain submission gateway and owns strict QR decoding,
+registration DTOs/mapping, Pairing-specific request construction, and its internal Ktor client. Its
+production edges are limited to common, protocol, network, and Pairing domain, with no edge to
+`:shared`; public Kotlin integration seams contain no Ktor types and remain hidden from Objective-C
+and Swift.
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
 depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
-current implementation. Strict QR decoding, Auth DTOs, and Pairing-specific request construction
-remain in `:shared`. Raw `Json` is sealed behind the Kotlin-only codec in
-`:core:protocol`, hidden from Objective-C and Swift. The Ktor transport wraps its sensitive encoded
-bytes in `OutgoingContent` with a constant, redacted diagnostic representation and no longer
-installs `ContentNegotiation`.
+current session/attempt implementation. Pairing connection lifecycle, durability, and cleanup stay
+in that shared wrapper because their opaque capabilities are facade-owned; deferred challenge,
+proof, Access Session, rename, and revoke DTOs also remain there. The public
+`DeviceLabelValidator` remains a stable shared wrapper over data-owned validation. Raw `Json` is
+sealed behind the Kotlin-only codec in `:core:protocol`, hidden from Objective-C and Swift. The Ktor
+transport wraps its sensitive encoded bytes in `OutgoingContent` with a constant, redacted
+diagnostic representation and does not install `ContentNegotiation`.
 The Engine-origin extraction preserves the established canonical bytes and validation precedence
 without defining a new host grammar.
 
@@ -117,10 +127,10 @@ mobile/
 │   ├── security-api/        # KMP ports; no platform implementation
 │   └── testing/             # reusable test fixtures, never a production dependency
 ├── feature/
-│   └── <feature>/
-│       ├── domain/          # models, ports, use cases; KMP
-│       ├── data/            # repository implementations and DTO/entity mapping; KMP
-│       └── presentation/    # platform-neutral state machine/contracts; KMP, no Compose
+│   └── pairing/
+│       ├── domain/          # secret-free contracts and opaque capabilities
+│       ├── data/            # QR and registration boundary; internal Ktor implementation
+│       └── presentation/    # pure UDF state/action/reducer
 ├── android/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
 │   ├── navigation/          # typed Navigation Compose contracts and root graphs
@@ -139,12 +149,15 @@ flowchart LR
     AndroidFeature --> Presentation["feature presentation"]
     Presentation --> Domain["feature domain"]
     Data["feature data"] --> Domain
+    Data --> Common["core common"]
     Data --> Network["core network"]
     Network --> Protocol["core protocol implementation"]
+    Data --> Protocol
     Data --> Database["core database"]
     AndroidApp --> Data
     Shared["shared Swift facade"] --> Presentation
     Shared --> Domain
+    Shared --> Data
     Shared --> Protocol
     Shared --> Network
 ```
@@ -378,10 +391,11 @@ Do not perform a big-bang package move. Use this order:
    security contract surface; Network owns generic Ktor execution, retry/renewal policy, and platform
    engine selection.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
-   submission/session/attempt domain contracts and pure presentation reducer are extracted.
-   `PairingFlow` and `PairingConnection` now use a facade-scoped port adapter, including the recovered
-   cleanup barrier. Next move QR decoding and remote registration together into a real Pairing data
-   module; do not add a placeholder module or a dependency on `:shared` from data.
+   submission/session/attempt domain contracts, pure presentation reducer, and the real QR plus
+   registration data implementation are extracted. `PairingFlow` and `PairingConnection` use a
+   facade-scoped port adapter, including the recovered cleanup barrier; data has no dependency on
+   `:shared`. Keep the facade-owned connection transaction in the stable shared wrapper until its
+   opaque attempt and cleanup capabilities can move without reversing the dependency graph.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. Do not build the full component catalog yet.

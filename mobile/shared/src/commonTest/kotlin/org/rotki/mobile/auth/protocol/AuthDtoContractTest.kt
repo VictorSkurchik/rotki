@@ -16,17 +16,7 @@ import kotlin.test.assertTrue
 
 class AuthDtoContractTest {
     @Test
-    fun `five auth success examples decode through auth-owned envelopes`() {
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse("register_device_session", DeviceSessionEnvelopeDto.serializer())
-                .result.deviceSession
-                .toDomain(),
-        )
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse("rename_current_device_session", DeviceSessionEnvelopeDto.serializer())
-                .result.deviceSession
-                .toDomain(),
-        )
+    fun `non-pairing auth success examples decode through auth-owned envelopes`() {
         assertTrue(
             decodeResponse("revoke_current_device_session", RevokedEnvelopeDto.serializer())
                 .result.revoked,
@@ -43,13 +33,6 @@ class AuthDtoContractTest {
 
     @Test
     fun `quoted JSON scalars are rejected across auth responses`() {
-        assertFailsWith<SerializationException> {
-            ProtocolFixtureData.decodeCompanionJson(
-                responseText("register_device_session")
-                    .replace("\"paired_at\":1786550300", "\"paired_at\":\"1786550300\""),
-                DeviceSessionEnvelopeDto.serializer(),
-            )
-        }
         assertFailsWith<SerializationException> {
             ProtocolFixtureData.decodeCompanionJson(
                 responseText("revoke_current_device_session")
@@ -76,10 +59,6 @@ class AuthDtoContractTest {
     @OptIn(ExperimentalSerializationApi::class)
     @Test
     fun `auth envelope descriptors retain their pre-seam identity`() {
-        assertEnvelopeDescriptor(
-            DeviceSessionEnvelopeDto.serializer().descriptor,
-            "org.rotki.mobile.core.protocol.dto.DeviceSessionEnvelopeDto",
-        )
         assertEnvelopeDescriptor(
             RevokedEnvelopeDto.serializer().descriptor,
             "org.rotki.mobile.core.protocol.dto.RevokedEnvelopeDto",

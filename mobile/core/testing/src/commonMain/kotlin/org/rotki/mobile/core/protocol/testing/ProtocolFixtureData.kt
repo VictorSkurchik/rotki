@@ -12,21 +12,21 @@ import org.rotki.mobile.core.protocol.generated.PROTOCOL_GOLDEN_VECTORS_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_P0_1_CASES_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_VOCABULARY_JSON
 
-internal object ProtocolFixtureData {
-    internal val vocabulary: JsonObject = parse(PROTOCOL_VOCABULARY_JSON)
-    internal val generatedNames: JsonObject = parse(PROTOCOL_GENERATED_NAMES_JSON)
-    internal val cases: JsonObject = parse(PROTOCOL_P0_1_CASES_JSON)
-    internal val golden: JsonObject = parse(PROTOCOL_GOLDEN_VECTORS_JSON)
-    internal val clientPolicy: JsonObject = parse(PROTOCOL_CLIENT_POLICY_CASES_JSON)
+public object ProtocolFixtureData {
+    public val vocabulary: JsonObject = parse(PROTOCOL_VOCABULARY_JSON)
+    public val generatedNames: JsonObject = parse(PROTOCOL_GENERATED_NAMES_JSON)
+    public val cases: JsonObject = parse(PROTOCOL_P0_1_CASES_JSON)
+    public val golden: JsonObject = parse(PROTOCOL_GOLDEN_VECTORS_JSON)
+    public val clientPolicy: JsonObject = parse(PROTOCOL_CLIENT_POLICY_CASES_JSON)
 
-    internal fun successExample(id: String): JsonObject =
+    public fun successExample(id: String): JsonObject =
         golden
             .getValue("success_examples")
             .jsonArray
             .map { element -> element.jsonObject }
             .single { example -> example.getValue("id").jsonPrimitive.content == id }
 
-    internal fun <T> decodeCompanionJson(
+    public fun <T> decodeCompanionJson(
         text: String,
         deserializer: DeserializationStrategy<T>,
     ): T =

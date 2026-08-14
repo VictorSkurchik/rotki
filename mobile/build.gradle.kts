@@ -25,7 +25,7 @@ val exactGeneratedKotlinPathsByProject =
             setOf(
                 "**/GeneratedProtocolVocabulary.kt",
             ),
-        ":shared" to
+        ":core:testing" to
             setOf(
                 "**/GeneratedProtocolFixtures.kt",
             ),
@@ -55,6 +55,13 @@ val forbiddenNonUiKmpPluginIds =
         "org.jetbrains.compose",
         "org.jetbrains.kotlin.android",
         "org.jetbrains.kotlin.plugin.compose",
+    )
+val sourceSetDependencyBucketSuffixes =
+    setOf(
+        "Api",
+        "Implementation",
+        "CompileOnly",
+        "RuntimeOnly",
     )
 val featureModuleBoundaryRules =
     mapOf(
@@ -98,6 +105,25 @@ val featureModuleBoundaryRules =
                 forbiddenPluginIds =
                     forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
             ),
+        ":core:testing" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":core:protocol"),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
+        ":feature:pairing:data" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies =
+                    setOf(
+                        ":core:common",
+                        ":core:network",
+                        ":core:protocol",
+                        ":core:testing",
+                        ":feature:pairing:domain",
+                    ),
+                forbiddenGroupPrefixes = nativeUiDependencyGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
         ":feature:pairing:domain" to
             ModuleBoundaryRule(
                 allowedProjectDependencies = emptySet(),
@@ -119,6 +145,8 @@ val featureModuleBoundaryRules =
                         ":core:common",
                         ":core:protocol",
                         ":core:security-api",
+                        ":core:testing",
+                        ":feature:pairing:data",
                         ":feature:pairing:domain",
                         ":feature:pairing:presentation",
                     ),
@@ -197,11 +225,22 @@ subprojects {
         }
 
     configurations.configureEach {
+        val dependencyConfigurationName = name
+        val isSourceSetDependencyBucket =
+            isCanBeDeclared &&
+                sourceSetDependencyBucketSuffixes.any(dependencyConfigurationName::endsWith)
         dependencies.configureEach {
             val dependency = this
             if (dependency is ProjectDependency && dependency.path != sourceProjectPath) {
                 require(dependency.path in boundaryRule.allowedProjectDependencies) {
                     "$sourceProjectPath may not depend on ${dependency.path}"
+                }
+                require(
+                    dependency.path != ":core:testing" ||
+                        !isSourceSetDependencyBucket ||
+                        dependencyConfigurationName.contains("test", ignoreCase = true),
+                ) {
+                    "$sourceProjectPath may depend on :core:testing only from a test configuration"
                 }
             }
 

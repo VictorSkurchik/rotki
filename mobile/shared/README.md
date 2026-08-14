@@ -19,28 +19,30 @@ single-flight renewal gate, and OkHttp/Darwin engine actuals. `:shared` consumes
 implementation dependency, while its API dependencies on the four Swift-facing core leaves export
 their stable public surfaces through `RotkiShared`. Core leaves create no framework of their own;
 credentials, DTO/decoder seams, network seams, byte helpers, codec mechanics, generated vocabulary,
-and WebSocket notification types stay hidden from Swift. Authored downstream fixture-parity tests,
-Auth DTOs, and generated protocol fixtures remain here.
+and WebSocket notification types stay hidden from Swift. The single generated protocol corpus and
+its reusable parser now live in test-only `:core:testing`.
 
-Pairing now has implementation-only `:feature:pairing:domain` and
+Pairing now has implementation-only `:feature:pairing:domain`, `:feature:pairing:data`, and
 `:feature:pairing:presentation` boundaries. The public `PairingFlow` stays here as the stable
-Swift/Kotlin adapter and delegates presentation transitions to the feature reducer. Pairing domain
-owns the submission, session, and attempt contracts. `PairingFlow` and `PairingConnection` consume
-those ports instead of depending directly on `CompanionFacade`; one non-exported adapter scoped to
-the facade supplies admission, attempt ownership, and cleanup operations. Process-recovery cleanup
-claims a facade cleanup barrier before touching local key or record material, preventing a concurrent
-replacement attempt from being silently deleted. The feature modules retain no QR payload or
-credential and are not exported as additional Apple APIs.
+Swift/Kotlin adapter, delegates presentation transitions to the feature reducer, and submits raw QR
+input through the data implementation of the domain gateway. Pairing data owns strict QR decoding,
+registration DTOs/mapping, request construction, and the internal Ktor client. `PairingFlow` and
+`PairingConnection` consume the feature ports and Kotlin-only data gateway instead of implementing
+those wire details. One non-exported adapter scoped to the facade supplies admission, attempt
+ownership, and cleanup operations. Process-recovery cleanup claims a facade cleanup barrier before
+touching local key or record material, preventing a concurrent replacement attempt from being
+silently deleted. None of the feature modules is exported as an additional Apple API.
 
-Strict QR decoding, Auth DTOs, Pairing-specific registration request construction, and the
-facade-backed in-memory implementation remain in this umbrella for now. Their native Android
-Device-key, idempotency-key, and Pairing-record implementations remain in `:androidApp`; `:shared`
-consumes those contracts from `:core:security-api` and delegates generic transport execution to
-`:core:network`. Raw `Json` is sealed behind the Kotlin-only codec in `:core:protocol`; Ktor wraps
-sensitive encoded bytes in content with a constant, redacted diagnostic representation and does not
-install `ContentNegotiation`. The next coherent move can place QR decoding and registration in a
-real `:feature:pairing:data` module without introducing `shared <-> data` cycles; no placeholder data
-module is declared.
+The facade-backed in-memory attempt and cleanup implementation remains in this umbrella, along with
+unimplemented challenge/proof, Access Session, rename, and revoke Auth DTOs. Native Android Device
+Key, idempotency-key, and Pairing-record implementations remain in `:androidApp`; `:shared` consumes
+those contracts from `:core:security-api`, Pairing data as an implementation dependency, and generic
+retry/lifecycle policy from `:core:network`. The data module has no edge back to `:shared`; its
+redacted QR and label authority carriers plus the substitutable registration gateway and outcomes
+cross this Kotlin boundary, and every such seam is hidden from Objective-C and Swift.
+`DeviceLabelValidator` remains here as the stable
+native wrapper over data-owned validation. Raw `Json` stays sealed behind the Kotlin-only protocol
+codec, while sensitive request bytes retain a constant redacted diagnostic representation.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned
@@ -48,7 +50,7 @@ feature boundaries and will be created only when their first real vertical slice
 [`../docs/architecture.md`](../docs/architecture.md). Compose, Android UI, SwiftUI, Koin,
 Navigation Compose, Room implementation types, Ktor engines, and platform-security
 implementations must not leak into domain or Swift-facing public APIs. Infrastructure-only Kotlin
-seams in `:core:network` remain hidden from Objective-C and Swift.
+seams in `:core:network` and `:feature:pairing:data` remain hidden from Objective-C and Swift.
 
 Exact-decimal implementation and migration evidence is retained in
 [`../docs/characterization/exact-decimal.md`](../docs/characterization/exact-decimal.md).

@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.auth.protocol
 
 import kotlinx.serialization.SerialName
@@ -17,6 +19,39 @@ import org.rotki.mobile.core.protocol.StrictJsonIntSerializer
 import org.rotki.mobile.core.protocol.StrictJsonLongSerializer
 import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
 import org.rotki.mobile.core.protocol.hasValidJsonSyntax
+import org.rotki.mobile.feature.pairing.domain.PairingAdmission
+import org.rotki.mobile.feature.pairing.domain.PairingSessionPort
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionGateway
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionOutcome
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionRejection
+import kotlin.native.HiddenFromObjC
+
+@HiddenFromObjC
+public fun createPairingSubmissionGateway(
+    session: PairingSessionPort<PairingQr>,
+    clock: Clock,
+): PairingSubmissionGateway = PairingSubmissionDataGateway(session, PairingQrParser(clock))
+
+private class PairingSubmissionDataGateway(
+    private val session: PairingSessionPort<PairingQr>,
+    private val parser: PairingQrParser,
+) : PairingSubmissionGateway {
+    override fun submit(rawPayload: String): PairingSubmissionOutcome =
+        when (val outcome = parser.parse(rawPayload.encodeToByteArray())) {
+            is PairingQrParseOutcome.Accepted -> {
+                when (session.admit(outcome.pairingQr)) {
+                    PairingAdmission.ACCEPTED -> PairingSubmissionOutcome.Accepted
+                    PairingAdmission.IGNORED -> PairingSubmissionOutcome.Ignored
+                }
+            }
+
+            is PairingQrParseOutcome.Rejected -> {
+                PairingSubmissionOutcome.Rejected(outcome.reason.toDomainRejection())
+            }
+        }
+
+    override fun toString(): String = "PairingSubmissionDataGateway(redacted)"
+}
 
 internal class PairingQrParser(
     private val clock: Clock,
@@ -91,13 +126,14 @@ internal class PairingQrParser(
     }
 }
 
-internal class PairingQr(
-    internal val engineOrigin: EngineOrigin,
-    internal val pairingId: PairingId,
-    internal val pairingCredential: PairingCredential,
-    internal val expiresAtEpochSeconds: Long,
+@HiddenFromObjC
+public class PairingQr internal constructor(
+    public val engineOrigin: EngineOrigin,
+    public val pairingId: PairingId,
+    public val pairingCredential: PairingCredential,
+    public val expiresAtEpochSeconds: Long,
 ) {
-    override fun toString(): String = "PairingQr(redacted)"
+    public override fun toString(): String = "PairingQr(redacted)"
 }
 
 internal sealed interface PairingQrParseOutcome {
@@ -121,6 +157,22 @@ internal enum class PairingQrRejection {
     INVALID_CREDENTIAL,
     EXPIRED,
 }
+
+private fun PairingQrRejection.toDomainRejection(): PairingSubmissionRejection =
+    when (this) {
+        PairingQrRejection.EXPIRED -> PairingSubmissionRejection.EXPIRED
+
+        PairingQrRejection.UNSUPPORTED_FORMAT -> PairingSubmissionRejection.UNSUPPORTED
+
+        PairingQrRejection.DUPLICATE_MEMBER,
+        PairingQrRejection.INVALID_CREDENTIAL,
+        PairingQrRejection.INVALID_ORIGIN,
+        PairingQrRejection.INVALID_PAIRING_ID,
+        PairingQrRejection.INVALID_SHAPE,
+        PairingQrRejection.INVALID_UTF8,
+        PairingQrRejection.TOO_LARGE,
+        -> PairingSubmissionRejection.MALFORMED
+    }
 
 @Serializable
 private class PairingQrDto(

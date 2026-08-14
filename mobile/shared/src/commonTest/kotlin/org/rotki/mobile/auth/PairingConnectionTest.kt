@@ -1,12 +1,5 @@
 package org.rotki.mobile.auth
 
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.content.OutgoingContent
-import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
@@ -17,10 +10,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
-import kotlinx.io.IOException
 import org.rotki.mobile.CompanionFacade
+import org.rotki.mobile.auth.protocol.DeviceLabel
+import org.rotki.mobile.auth.protocol.PairingQr
 import org.rotki.mobile.core.network.RetryPolicy
-import org.rotki.mobile.core.network.createCompanionHttpClient
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.ports.Clock
@@ -38,11 +31,17 @@ import org.rotki.mobile.core.ports.PairingRecordDeleteOutcome
 import org.rotki.mobile.core.ports.PairingRecordReadOutcome
 import org.rotki.mobile.core.ports.PairingRecordStore
 import org.rotki.mobile.core.ports.PairingRecordWriteOutcome
+import org.rotki.mobile.core.protocol.CompanionFailure
+import org.rotki.mobile.core.protocol.DeviceSessionId
+import org.rotki.mobile.core.protocol.EngineOrigin
 import org.rotki.mobile.core.protocol.IdempotencyKey
 import org.rotki.mobile.core.protocol.P1363Signature
 import org.rotki.mobile.core.protocol.ProtocolValueParseOutcome
 import org.rotki.mobile.core.protocol.X963PublicKey
-import org.rotki.mobile.core.protocol.generated.ProtocolHeaders
+import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecodeOutcome
+import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecoder
+import org.rotki.mobile.core.protocol.dto.CompanionFailureEnvelopeDto
+import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.SnapshotCoverage
 import kotlin.test.Test
@@ -52,31 +51,14 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.rotki.mobile.core.protocol.toDomain as toCompanionFailure
 
 class PairingConnectionTest {
     @Test
     fun `discovery precedes key creation and registration persists before commit`(): Unit =
         runTest {
             val fixture = Fixture()
-            val engine =
-                MockEngine { request ->
-                    when (request.url.encodedPath) {
-                        "/api/1/companion/protocol" -> {
-                            fixture.events += "discovery"
-                            respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                        }
-
-                        "/api/1/companion/device-sessions" -> {
-                            fixture.events += "registration"
-                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                        }
-
-                        else -> {
-                            error("Unexpected request")
-                        }
-                    }
-                }
-            val connection = fixture.connection(engine)
+            val connection = fixture.connection()
             try {
                 assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
                 assertEquals(
@@ -107,22 +89,13 @@ class PairingConnectionTest {
             val fixture = Fixture()
             val postStarted = CompletableDeferred<Unit>()
             val releasePost = CompletableDeferred<Unit>()
-            var discoveryCalls = 0
-            var registrationCalls = 0
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        discoveryCalls += 1
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        registrationCalls += 1
-                        postStarted.complete(Unit)
-                        releasePost.await()
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
-                }
-            val ownerConnection = fixture.connection(engine)
-            val waiterConnection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                releasePost.await()
+                successfulRegistration()
+            }
+            val ownerConnection = fixture.connection()
+            val waiterConnection = fixture.connection()
             try {
                 val owner = async { ownerConnection.connectPendingPairing() }
                 postStarted.await()
@@ -130,15 +103,15 @@ class PairingConnectionTest {
                 yield()
 
                 assertFalse(waiter.isCompleted)
-                assertEquals(1, discoveryCalls)
-                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.remote.discoveryOrigins.size)
+                assertEquals(1, fixture.remote.registrationCalls)
 
                 releasePost.complete(Unit)
 
                 assertEquals(PairingConnectionOutcome.REGISTERED, owner.await())
                 assertEquals(PairingConnectionOutcome.NO_PENDING_PAIRING, waiter.await())
-                assertEquals(1, discoveryCalls)
-                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.remote.discoveryOrigins.size)
+                assertEquals(1, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.signer.createCalls)
                 assertEquals(1, fixture.events.count { event -> event == "write" })
             } finally {
@@ -153,22 +126,13 @@ class PairingConnectionTest {
             val fixture = Fixture()
             val postStarted = CompletableDeferred<Unit>()
             val releasePost = CompletableDeferred<Unit>()
-            var discoveryCalls = 0
-            var registrationCalls = 0
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        discoveryCalls += 1
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        registrationCalls += 1
-                        postStarted.complete(Unit)
-                        releasePost.await()
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
-                }
-            val ownerConnection = fixture.connection(engine)
-            val waiterConnection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                releasePost.await()
+                successfulRegistration()
+            }
+            val ownerConnection = fixture.connection()
+            val waiterConnection = fixture.connection()
             try {
                 val owner = async { ownerConnection.connectPendingPairing() }
                 postStarted.await()
@@ -184,8 +148,8 @@ class PairingConnectionTest {
                 releasePost.complete(Unit)
 
                 assertEquals(PairingConnectionOutcome.REGISTERED, owner.await())
-                assertEquals(1, discoveryCalls)
-                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.remote.discoveryOrigins.size)
+                assertEquals(1, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.signer.createCalls)
                 assertEquals(1, fixture.events.count { event -> event == "write" })
             } finally {
@@ -195,40 +159,31 @@ class PairingConnectionTest {
         }
 
     @Test
-    fun `registration retries once with identical bearer idempotency key and body`(): Unit =
+    fun `registration retries once with the identical authority request`(): Unit =
         runTest {
             val fixture = Fixture()
-            var registrationCalls = 0
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        registrationCalls += 1
-                        if (registrationCalls == 1) {
-                            respond(content = "gateway", status = HttpStatusCode.BadGateway)
-                        } else {
-                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                        }
-                    }
+            fixture.remote.registerHandler = {
+                if (fixture.remote.registrationCalls == 1) {
+                    PairingRegistrationRemoteOutcome.ContractFailure(502)
+                } else {
+                    successfulRegistration()
                 }
-            val connection = fixture.connection(engine)
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
-                val registrations =
-                    engine.requestHistory.filter { request ->
-                        request.url.encodedPath.endsWith("/device-sessions")
+                assertEquals(2, fixture.remote.registrationCalls)
+                assertTrue(fixture.remote.registrationAuthorityWasStable)
+                assertEquals(
+                    "OpaqueRegistrationCall(redacted)",
+                    fixture.remote.firstRegistrationRepresentation,
+                )
+                listOf(ORIGIN, PAIRING_ID, PAIRING_CREDENTIAL, IDEMPOTENCY_KEY, PUBLIC_KEY)
+                    .forEach { authority ->
+                        assertFalse(
+                            authority in requireNotNull(fixture.remote.firstRegistrationRepresentation),
+                        )
                     }
-                assertEquals(2, registrations.size)
-                assertEquals(
-                    registrations[0].headers[HttpHeaders.Authorization],
-                    registrations[1].headers[HttpHeaders.Authorization],
-                )
-                assertEquals(
-                    registrations[0].headers[ProtocolHeaders.IdempotencyKey],
-                    registrations[1].headers[ProtocolHeaders.IdempotencyKey],
-                )
-                assertEquals(registrations[0].bodyText(), registrations[1].bodyText())
                 assertEquals(1, fixture.idempotencyGenerator.calls)
                 assertEquals(listOf(0L), fixture.delays)
             } finally {
@@ -240,24 +195,18 @@ class PairingConnectionTest {
     fun `safe discovery retries before creating the device key`(): Unit =
         runTest {
             val fixture = Fixture()
-            var discoveryCalls = 0
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        discoveryCalls += 1
-                        if (discoveryCalls == 1) {
-                            throw IOException("redacted transport failure")
-                        }
-                        fixture.events += "discovery_success"
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
+            fixture.remote.discoverHandler = {
+                if (fixture.remote.discoveryOrigins.size == 1) {
+                    PairingDiscoveryOutcome.PreResponseTransportFailure
+                } else {
+                    fixture.events += "discovery_success"
+                    PairingDiscoveryOutcome.Compatible(1)
                 }
-            val connection = fixture.connection(engine)
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
-                assertEquals(2, discoveryCalls)
+                assertEquals(2, fixture.remote.discoveryOrigins.size)
                 assertEquals(1, fixture.signer.createCalls)
                 assertTrue(fixture.events.indexOf("discovery_success") < fixture.events.indexOf("create_key"))
             } finally {
@@ -269,11 +218,8 @@ class PairingConnectionTest {
     fun `incompatible discovery aborts only ephemeral QR without deleting durable stores`(): Unit =
         runTest {
             val fixture = Fixture()
-            val engine =
-                MockEngine {
-                    respondJson(INCOMPATIBLE_FAILURE, HttpStatusCode.UpgradeRequired)
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.discoverHandler = { PairingDiscoveryOutcome.Incompatible }
+            val connection = fixture.connection()
             try {
                 assertEquals(PairingConnectionOutcome.INCOMPATIBLE, connection.connectPendingPairing())
                 assertEquals(0, fixture.signer.createCalls)
@@ -289,15 +235,14 @@ class PairingConnectionTest {
     fun `pairing unavailable is typed and rolls back the newly created key`(): Unit =
         runTest {
             val fixture = Fixture()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                PairingRegistrationRemoteOutcome.Rejected(
+                    statusCode = 410,
+                    failure = companionFailure(410, PAIRING_UNAVAILABLE_FAILURE),
+                    retryAfterSeconds = null,
+                )
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(
                     PairingConnectionOutcome.PAIRING_UNAVAILABLE,
@@ -315,28 +260,21 @@ class PairingConnectionTest {
     fun `expiry during registration backoff stops without a second post and rolls back`(): Unit =
         runTest {
             val fixture = Fixture()
-            var registrationCalls = 0
             fixture.retryDelay =
                 PairingRetryDelay {
                     fixture.delays += it
                     fixture.clock.now = QR_EXPIRY
                 }
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        registrationCalls += 1
-                        respond(content = "gateway", status = HttpStatusCode.BadGateway)
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                PairingRegistrationRemoteOutcome.ContractFailure(502)
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(
                     PairingConnectionOutcome.PAIRING_EXPIRED,
                     connection.connectPendingPairing(),
                 )
-                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.signer.deleteCalls)
                 assertEquals(1, fixture.store.deleteCalls)
                 assertNull(fixture.store.record)
@@ -351,16 +289,11 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture(qrExpiry = NOW + 1)
             val postStarted = CompletableDeferred<Unit>()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        postStarted.complete(Unit)
-                        awaitCancellation()
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                awaitCancellation()
+            }
+            val connection = fixture.connection()
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
                 launch { result.complete(connection.connectPendingPairing()) }
@@ -384,20 +317,15 @@ class PairingConnectionTest {
             val fixture = Fixture()
             val postStarted = CompletableDeferred<Unit>()
             val postCancelled = CompletableDeferred<Unit>()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        postStarted.complete(Unit)
-                        try {
-                            awaitCancellation()
-                        } finally {
-                            postCancelled.complete(Unit)
-                        }
-                    }
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    postCancelled.complete(Unit)
                 }
-            val connection = fixture.connection(engine)
+            }
+            val connection = fixture.connection()
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
                 val job = launch { result.complete(connection.connectPendingPairing()) }
@@ -423,32 +351,19 @@ class PairingConnectionTest {
             val fixture = Fixture()
             val firstPostStarted = CompletableDeferred<Unit>()
             val firstPostCancelled = CompletableDeferred<Unit>()
-            var registrationCalls = 0
-            val bearerValues = mutableListOf<String?>()
-            val idempotencyValues = mutableListOf<String?>()
-            val bodyValues = mutableListOf<String>()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        registrationCalls += 1
-                        bearerValues += request.headers[HttpHeaders.Authorization]
-                        idempotencyValues += request.headers[ProtocolHeaders.IdempotencyKey]
-                        bodyValues += request.bodyText()
-                        if (registrationCalls == 1) {
-                            firstPostStarted.complete(Unit)
-                            try {
-                                awaitCancellation()
-                            } finally {
-                                firstPostCancelled.complete(Unit)
-                            }
-                        } else {
-                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                        }
+            fixture.remote.registerHandler = {
+                if (fixture.remote.registrationCalls == 1) {
+                    firstPostStarted.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstPostCancelled.complete(Unit)
                     }
+                } else {
+                    successfulRegistration()
                 }
-            val connection = fixture.connection(engine)
+            }
+            val connection = fixture.connection()
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
                 launch { result.complete(connection.connectPendingPairing()) }
@@ -456,16 +371,13 @@ class PairingConnectionTest {
                 fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
                 firstPostCancelled.await()
                 yield()
-                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.signer.createCalls)
 
                 fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
 
                 assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
-                assertEquals(2, registrationCalls)
-                assertEquals(bearerValues.first(), bearerValues.last())
-                assertEquals(idempotencyValues.first(), idempotencyValues.last())
-                assertEquals(bodyValues.first(), bodyValues.last())
+                assertEquals(2, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.idempotencyGenerator.calls)
                 assertEquals(0, fixture.signer.deleteCalls)
             } finally {
@@ -477,23 +389,14 @@ class PairingConnectionTest {
     fun `retry after above policy bound surfaces rate limited and rolls back`(): Unit =
         runTest {
             val fixture = Fixture()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respond(
-                            content = RATE_LIMIT_FAILURE,
-                            status = HttpStatusCode.TooManyRequests,
-                            headers =
-                                headersOf(
-                                    HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
-                                    HttpHeaders.RetryAfter to listOf("6"),
-                                ),
-                        )
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                PairingRegistrationRemoteOutcome.Rejected(
+                    statusCode = 429,
+                    failure = companionFailure(429, RATE_LIMIT_FAILURE),
+                    retryAfterSeconds = 6,
+                )
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(PairingConnectionOutcome.RATE_LIMITED, connection.connectPendingPairing())
                 assertEquals(1, fixture.signer.deleteCalls)
@@ -508,15 +411,14 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.store.deleteOutcome = PairingRecordDeleteOutcome.Unavailable
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                PairingRegistrationRemoteOutcome.Rejected(
+                    statusCode = 410,
+                    failure = companionFailure(410, PAIRING_UNAVAILABLE_FAILURE),
+                    retryAfterSeconds = null,
+                )
+            }
+            val connection = fixture.connection()
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -547,15 +449,8 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.cleanupJournal.markOutcome = PairingCleanupJournalWriteOutcome.Unavailable
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        error("Registration must not start")
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = { error("Registration must not start") }
+            val connection = fixture.connection()
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -576,15 +471,7 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.cleanupJournal.clearOutcome = PairingCleanupJournalClearOutcome.Unavailable
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
-                }
-            val connection = fixture.connection(engine)
+            val connection = fixture.connection()
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -605,7 +492,7 @@ class PairingConnectionTest {
             val fixture = Fixture()
             fixture.cleanupJournal.readOutcomeOverride =
                 PairingCleanupJournalReadOutcome.Unavailable
-            val connection = fixture.connection(MockEngine { error("No network expected") })
+            val connection = fixture.connectionWithoutRemote()
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -633,7 +520,7 @@ class PairingConnectionTest {
                 readStarted.complete(Unit)
                 awaitCancellation()
             }
-            val connection = fixture.connection(MockEngine { error("No network expected") })
+            val connection = fixture.connectionWithoutRemote()
             try {
                 val operation = launch { connection.connectPendingPairing() }
                 readStarted.await()
@@ -654,7 +541,7 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.cleanupJournal.cleanupRequired = true
-            val connection = fixture.connection(MockEngine { error("No network expected") })
+            val connection = fixture.connectionWithoutRemote()
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -689,7 +576,7 @@ class PairingConnectionTest {
                 readStarted.complete(Unit)
                 releaseRead.await()
             }
-            val connection = fixture.connection(MockEngine { error("No network expected") })
+            val connection = fixture.connectionWithoutRemote()
             try {
                 val recovery = async { connection.retryIncompleteCleanup() }
                 readStarted.await()
@@ -719,7 +606,7 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             val restored = CompanionFacade.restorePaired(SnapshotCoverage.Complete)
-            val connection = fixture.connection(MockEngine { error("No network expected") }, restored)
+            val connection = fixture.connectionWithoutRemote(restored)
             try {
                 assertEquals(
                     PairingConnectionOutcome.NO_PENDING_PAIRING,
@@ -740,7 +627,7 @@ class PairingConnectionTest {
             val fixture = Fixture()
             fixture.cleanupJournal.readOutcomeOverride = PairingCleanupJournalReadOutcome.Unavailable
             val restored = CompanionFacade.restorePaired(SnapshotCoverage.Degraded)
-            val connection = fixture.connection(MockEngine { error("No network expected") }, restored)
+            val connection = fixture.connectionWithoutRemote(restored)
             try {
                 assertEquals(
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
@@ -769,16 +656,11 @@ class PairingConnectionTest {
             val fixture = Fixture()
             fixture.signer.deleteOutcome = DeviceProofKeyDeleteOutcome.Unavailable
             val postStarted = CompletableDeferred<Unit>()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        postStarted.complete(Unit)
-                        awaitCancellation()
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                awaitCancellation()
+            }
+            val connection = fixture.connection()
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
                 launch { result.complete(connection.connectPendingPairing()) }
@@ -808,7 +690,7 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.cleanupJournal.cleanupRequired = true
-            val connection = fixture.connection(MockEngine { error("No network expected") })
+            val connection = fixture.connectionWithoutRemote()
             try {
                 // Simulates a new facade where the QR/token died with the previous process.
                 fixture.facade.lock()
@@ -829,20 +711,13 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
-                }
-            val connection = fixture.connection(engine)
+            val connection = fixture.connection()
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
                 launch { result.complete(connection.connectPendingPairing()) }
                 yield()
-                assertTrue(engine.requestHistory.isEmpty())
+                assertTrue(fixture.remote.discoveryOrigins.isEmpty())
+                assertEquals(0, fixture.remote.registrationCalls)
                 assertEquals(0, fixture.signer.createCalls)
                 fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
                 assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
@@ -865,16 +740,11 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             val postStarted = CompletableDeferred<Unit>()
-            val engine =
-                MockEngine { request ->
-                    if (request.url.encodedPath.endsWith("/protocol")) {
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                    } else {
-                        postStarted.complete(Unit)
-                        awaitCancellation()
-                    }
-                }
-            val connection = fixture.connection(engine)
+            fixture.remote.registerHandler = {
+                postStarted.complete(Unit)
+                awaitCancellation()
+            }
+            val connection = fixture.connection()
             try {
                 val job = launch { connection.connectPendingPairing() }
                 postStarted.await()
@@ -902,6 +772,7 @@ class PairingConnectionTest {
         val cleanupJournal: RecordingCleanupJournal = RecordingCleanupJournal(events)
         val idempotencyGenerator: RecordingIdempotencyGenerator =
             RecordingIdempotencyGenerator()
+        val remote: ScriptedPairingRemoteGateway = ScriptedPairingRemoteGateway(events)
         val delays: MutableList<Long> = mutableListOf()
         var retryDelay: PairingRetryDelay = PairingRetryDelay { delays += it }
 
@@ -913,16 +784,19 @@ class PairingConnectionTest {
         }
 
         fun connection(
-            engine: MockEngine,
+            remote: PairingRegistrationRemoteGateway = this.remote,
             facade: CompanionFacade = this.facade,
         ): PairingConnection =
             PairingConnection(
                 attempts = CompanionPairingSessionAdapter(facade),
                 configuration = configuration(),
-                protocolClient = PairingProtocolClient(createCompanionHttpClient(engine)),
+                protocolClient = remote,
                 retryPolicy = RetryPolicy { 0L },
                 retryDelay = retryDelay,
             )
+
+        fun connectionWithoutRemote(facade: CompanionFacade = this.facade): PairingConnection =
+            connection(UnexpectedRemoteGateway, facade)
 
         fun configuration(): PairingConnectionConfiguration =
             PairingConnectionConfiguration(
@@ -941,6 +815,95 @@ class PairingConnectionTest {
         var now: Long,
     ) : Clock {
         override fun nowEpochSeconds(): Long = now
+    }
+
+    private class ScriptedPairingRemoteGateway(
+        private val events: MutableList<String>,
+    ) : PairingRegistrationRemoteGateway {
+        val discoveryOrigins: MutableList<EngineOrigin> = mutableListOf()
+        var registrationCalls: Int = 0
+            private set
+        var registrationAuthorityWasStable: Boolean = true
+            private set
+        val firstRegistrationRepresentation: String?
+            get() = firstRegistration?.toString()
+
+        private var firstRegistration: OpaqueRegistrationCall? = null
+        var discoverHandler: suspend (EngineOrigin) -> PairingDiscoveryOutcome = {
+            PairingDiscoveryOutcome.Compatible(1)
+        }
+        var registerHandler: suspend () -> PairingRegistrationRemoteOutcome = {
+            successfulRegistration()
+        }
+
+        override suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome {
+            discoveryOrigins += origin
+            events += "discovery"
+            return discoverHandler(origin)
+        }
+
+        override suspend fun register(
+            pairingQr: PairingQr,
+            selectedProtocolVersion: Int,
+            idempotencyKey: IdempotencyKey,
+            deviceLabel: DeviceLabel,
+            platform: CompanionPlatform,
+            publicKey: X963PublicKey,
+        ): PairingRegistrationRemoteOutcome {
+            val call =
+                OpaqueRegistrationCall(
+                    pairingQr = pairingQr,
+                    selectedProtocolVersion = selectedProtocolVersion,
+                    idempotencyKey = idempotencyKey,
+                    deviceLabel = deviceLabel,
+                    platform = platform,
+                    publicKey = publicKey,
+                )
+            firstRegistration?.let { first ->
+                registrationAuthorityWasStable =
+                    registrationAuthorityWasStable && first.hasSameAuthority(call)
+            } ?: run { firstRegistration = call }
+            registrationCalls += 1
+            events += "registration"
+            return registerHandler()
+        }
+
+        override fun close(): Unit = Unit
+    }
+
+    private class OpaqueRegistrationCall(
+        private val pairingQr: PairingQr,
+        private val selectedProtocolVersion: Int,
+        private val idempotencyKey: IdempotencyKey,
+        private val deviceLabel: DeviceLabel,
+        private val platform: CompanionPlatform,
+        private val publicKey: X963PublicKey,
+    ) {
+        fun hasSameAuthority(other: OpaqueRegistrationCall): Boolean =
+            pairingQr === other.pairingQr &&
+                selectedProtocolVersion == other.selectedProtocolVersion &&
+                idempotencyKey === other.idempotencyKey &&
+                deviceLabel === other.deviceLabel &&
+                platform == other.platform &&
+                publicKey === other.publicKey
+
+        override fun toString(): String = "OpaqueRegistrationCall(redacted)"
+    }
+
+    private object UnexpectedRemoteGateway : PairingRegistrationRemoteGateway {
+        override suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome =
+            error("No remote discovery expected")
+
+        override suspend fun register(
+            pairingQr: PairingQr,
+            selectedProtocolVersion: Int,
+            idempotencyKey: IdempotencyKey,
+            deviceLabel: DeviceLabel,
+            platform: CompanionPlatform,
+            publicKey: X963PublicKey,
+        ): PairingRegistrationRemoteOutcome = error("No remote registration expected")
+
+        override fun close(): Unit = Unit
     }
 
     private class MutableVisibility : ApplicationVisibility {
@@ -1050,27 +1013,24 @@ class PairingConnectionTest {
     }
 }
 
-private fun OutgoingContent.bodyText(): String =
-    assertIs<OutgoingContent.ByteArrayContent>(this).bytes().decodeToString()
+private fun successfulRegistration(): PairingRegistrationRemoteOutcome.Registered =
+    PairingRegistrationRemoteOutcome.Registered(
+        PairingRegisteredSession(
+            id = parsed(DeviceSessionId.parse(DEVICE_SESSION_ID)),
+            pairedAtEpochSeconds = NOW,
+        ),
+    )
 
-private fun io.ktor.client.request.HttpRequestData.bodyText(): String = body.bodyText()
-
-private fun io.ktor.client.engine.mock.MockRequestHandleScope.respondJson(
+private fun companionFailure(
+    statusCode: Int,
     body: String,
-    status: HttpStatusCode,
-) = respond(
-    content = body,
-    status = status,
-    headers =
-        if (status == HttpStatusCode.Created) {
-            headersOf(
-                HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
-                HttpHeaders.CacheControl to listOf("no-store"),
-            )
-        } else {
-            headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-        },
-)
+): CompanionFailure {
+    val decoded =
+        assertIs<CompanionEnvelopeDecodeOutcome.Decoded<CompanionFailureEnvelopeDto>>(
+            CompanionEnvelopeDecoder.decodeFailure(body),
+        )
+    return decoded.value.toCompanionFailure(statusCode)
+}
 
 private fun validQr(expiresAt: Long = QR_EXPIRY): String =
     """{"kind":"rotki_companion_pairing","format_version":1,"engine_origin":"$ORIGIN","pairing_id":"$PAIRING_ID","pairing_credential":"$PAIRING_CREDENTIAL","expires_at":$expiresAt}"""
@@ -1087,12 +1047,7 @@ private const val PAIRING_CREDENTIAL: String =
 private const val IDEMPOTENCY_KEY: String = "cHFyc3R1dnd4eXp7fH1-fw"
 private const val PUBLIC_KEY: String =
     "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
-private const val DISCOVERY_SUCCESS: String =
-    """{"result":{"supported_protocol_versions":[1],"capabilities":{"device_sessions":1}},"message":""}"""
-private const val REGISTRATION_SUCCESS: String =
-    """{"result":{"device_session":{"device_session_id":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8","device_label":"Pixel 10 Pro","platform":"android","state":"authorized","paired_at":1786550300,"last_seen_at":null,"revoked_at":null}},"message":""}"""
-private const val INCOMPATIBLE_FAILURE: String =
-    """{"result":null,"message":"redacted","error":{"code":"incompatible_protocol","retryable":false,"action":"upgrade_engine"}}"""
+private const val DEVICE_SESSION_ID: String = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
 private const val PAIRING_UNAVAILABLE_FAILURE: String =
     """{"result":null,"message":"redacted","error":{"code":"pairing_unavailable","retryable":false,"action":"pair_again"}}"""
 private const val RATE_LIMIT_FAILURE: String =

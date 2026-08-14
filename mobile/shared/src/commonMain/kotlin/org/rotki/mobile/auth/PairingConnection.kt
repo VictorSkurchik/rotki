@@ -18,14 +18,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.PendingPairingLease
 import org.rotki.mobile.auth.protocol.DeviceLabel
-import org.rotki.mobile.auth.protocol.DeviceLabelParseOutcome
-import org.rotki.mobile.auth.protocol.DeviceSession
+import org.rotki.mobile.auth.protocol.parsePairingDeviceLabel
 import org.rotki.mobile.core.network.RequestReplayPolicy
 import org.rotki.mobile.core.network.RetryDecision
 import org.rotki.mobile.core.network.RetryFailure
 import org.rotki.mobile.core.network.RetryPolicy
 import org.rotki.mobile.core.network.TypedErrorRetryDisposition
-import org.rotki.mobile.core.network.createPlatformCompanionHttpClient
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.ports.Clock
@@ -43,6 +41,8 @@ import org.rotki.mobile.core.ports.PairingRecordReadOutcome
 import org.rotki.mobile.core.ports.PairingRecordStore
 import org.rotki.mobile.core.ports.PairingRecordWriteOutcome
 import org.rotki.mobile.core.protocol.CompanionFailure
+import org.rotki.mobile.core.protocol.IdempotencyKey
+import org.rotki.mobile.core.protocol.X963PublicKey
 import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolErrorAction
@@ -96,7 +96,7 @@ public enum class PairingConnectionOutcome(
 public class PairingConnection internal constructor(
     private val attempts: PairingAttemptPort<PendingPairingLease, PairingCleanupHandle>,
     private val configuration: PairingConnectionConfiguration,
-    private val protocolClient: PairingProtocolClient,
+    private val protocolClient: PairingRegistrationRemoteGateway,
     private val retryPolicy: RetryPolicy,
     private val retryDelay: PairingRetryDelay,
 ) {
@@ -282,15 +282,8 @@ public class PairingConnection internal constructor(
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
         val label =
-            when (val parsed = DeviceLabel.parse(configuration.deviceLabel)) {
-                is DeviceLabelParseOutcome.Accepted -> {
-                    parsed.value
-                }
-
-                DeviceLabelParseOutcome.Rejected -> {
-                    return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
-                }
-            }
+            parsePairingDeviceLabel(configuration.deviceLabel)
+                ?: return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
         val pairingQr = lease.pairingQr
         if (pairingQr.expiresAtEpochSeconds <= configuration.clock.nowEpochSeconds()) {
             return PairingConnectionOutcome.PAIRING_EXPIRED
@@ -369,19 +362,19 @@ public class PairingConnection internal constructor(
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
 
-        val request =
-            PairingRegistrationRequest(
-                engineOrigin = pairingQr.engineOrigin,
-                pairingId = pairingQr.pairingId,
-                pairingCredential = pairingQr.pairingCredential,
-                selectedProtocolVersion = selectedProtocolVersion,
-                idempotencyKey = configuration.idempotencyKeyGenerator.generate(),
-                deviceLabel = label,
-                platform = configuration.platform.toProtocolPlatform(),
-                publicKey = publicKey,
-            )
+        val idempotencyKey = configuration.idempotencyKeyGenerator.generate()
         val deviceSession =
-            when (val registration = registerWithRetry(lease, request)) {
+            when (
+                val registration =
+                    registerWithRetry(
+                        lease = lease,
+                        selectedProtocolVersion = selectedProtocolVersion,
+                        idempotencyKey = idempotencyKey,
+                        deviceLabel = label,
+                        platform = configuration.platform.toProtocolPlatform(),
+                        publicKey = publicKey,
+                    )
+            ) {
                 is RegistrationSequenceOutcome.Registered -> {
                     registration.deviceSession.takeIf { session ->
                         val earliestPairing =
@@ -501,7 +494,11 @@ public class PairingConnection internal constructor(
 
     private suspend fun registerWithRetry(
         lease: PendingPairingLease,
-        request: PairingRegistrationRequest,
+        selectedProtocolVersion: Int,
+        idempotencyKey: IdempotencyKey,
+        deviceLabel: DeviceLabel,
+        platform: CompanionPlatform,
+        publicKey: X963PublicKey,
     ): RegistrationSequenceOutcome {
         var completedAttempts = 0
         while (true) {
@@ -514,7 +511,16 @@ public class PairingConnection internal constructor(
             completedAttempts += 1
             val outcome =
                 executeWhenActive(lease) {
-                    executeBeforePairingExpiry(lease) { protocolClient.register(request) }
+                    executeBeforePairingExpiry(lease) {
+                        protocolClient.register(
+                            pairingQr = lease.pairingQr,
+                            selectedProtocolVersion = selectedProtocolVersion,
+                            idempotencyKey = idempotencyKey,
+                            deviceLabel = deviceLabel,
+                            platform = platform,
+                            publicKey = publicKey,
+                        )
+                    }
                 }
             if (outcome is LifecycleOperationOutcome.Backgrounded) {
                 return RegistrationSequenceOutcome.AttemptUnavailable
@@ -750,7 +756,7 @@ public class PairingConnection internal constructor(
             PairingConnection(
                 attempts = attempts,
                 configuration = configuration,
-                protocolClient = PairingProtocolClient(createPlatformCompanionHttpClient()),
+                protocolClient = createPlatformPairingRegistrationRemoteGateway(),
                 retryPolicy = RetryPolicy(),
                 retryDelay = DefaultPairingRetryDelay,
             )
@@ -802,7 +808,7 @@ private sealed interface DiscoverySequenceOutcome {
 
 private sealed interface RegistrationSequenceOutcome {
     data class Registered(
-        val deviceSession: DeviceSession,
+        val deviceSession: PairingRegisteredSession,
     ) : RegistrationSequenceOutcome
 
     data class Terminal(

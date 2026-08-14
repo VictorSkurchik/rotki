@@ -13,9 +13,10 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.auth.protocol.DeviceLabel
-import org.rotki.mobile.auth.protocol.DeviceLabelParseOutcome
+import org.rotki.mobile.auth.protocol.PairingQr
+import org.rotki.mobile.auth.protocol.parsePairingDeviceLabel
 import org.rotki.mobile.core.network.createCompanionHttpClient
+import org.rotki.mobile.core.protocol.CompanionFailure
 import org.rotki.mobile.core.protocol.EngineOrigin
 import org.rotki.mobile.core.protocol.EngineOriginParseOutcome
 import org.rotki.mobile.core.protocol.IdempotencyKey
@@ -74,12 +75,9 @@ class PairingProtocolClientTest {
                 }
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
             try {
-                assertEquals(
-                    1,
-                    assertIs<PairingDiscoveryOutcome.Compatible>(
-                        client.discover(origin()),
-                    ).selectedProtocolVersion,
-                )
+                val outcome = assertIs<PairingDiscoveryOutcome.Compatible>(client.discover(origin()))
+                assertEquals(1, outcome.selectedProtocolVersion)
+                assertDiscoveryOutcomeRedacted(outcome)
                 assertEquals(1, engine.requestHistory.size)
             } finally {
                 client.close()
@@ -98,7 +96,9 @@ class PairingProtocolClientTest {
                         createCompanionHttpClient(MockEngine { respondJson(body, status) }),
                     )
                 try {
-                    assertIs<PairingDiscoveryOutcome.Incompatible>(client.discover(origin()))
+                    assertDiscoveryOutcomeRedacted(
+                        assertIs<PairingDiscoveryOutcome.Incompatible>(client.discover(origin())),
+                    )
                 } finally {
                     client.close()
                 }
@@ -141,9 +141,13 @@ class PairingProtocolClientTest {
                 }
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
             try {
-                assertIs<PairingRegistrationRemoteOutcome.Registered>(
-                    client.register(registrationRequest()),
-                )
+                val outcome =
+                    assertIs<PairingRegistrationRemoteOutcome.Registered>(
+                        client.registerThroughPublicGateway(),
+                    )
+                assertRegistrationOutcomeRedacted(outcome)
+                assertEquals("PairingRegisteredSession(redacted)", outcome.deviceSession.toString())
+                assertFalse(DEVICE_SESSION_ID in outcome.deviceSession.toString())
                 assertEquals(1, engine.requestHistory.size)
             } finally {
                 client.close()
@@ -164,9 +168,11 @@ class PairingProtocolClientTest {
                     ),
                 )
             try {
-                assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                    mismatchClient.register(registrationRequest()),
-                )
+                val outcome =
+                    assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
+                        mismatchClient.registerThroughPublicGateway(),
+                    )
+                assertRegistrationOutcomeRedacted(outcome)
             } finally {
                 mismatchClient.close()
             }
@@ -186,7 +192,7 @@ class PairingProtocolClientTest {
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
             try {
                 assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                    client.register(registrationRequest()),
+                    client.registerThroughPublicGateway(),
                 )
                 assertEquals(1, engine.requestHistory.size)
             } finally {
@@ -210,7 +216,7 @@ class PairingProtocolClientTest {
                 )
             try {
                 assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                    client.register(registrationRequest()),
+                    client.registerThroughPublicGateway(),
                 )
             } finally {
                 client.close()
@@ -232,7 +238,9 @@ class PairingProtocolClientTest {
                     ),
                 )
             try {
-                assertIs<PairingDiscoveryOutcome.ContractFailure>(discovery.discover(origin()))
+                assertDiscoveryOutcomeRedacted(
+                    assertIs<PairingDiscoveryOutcome.ContractFailure>(discovery.discover(origin())),
+                )
             } finally {
                 discovery.close()
             }
@@ -262,7 +270,7 @@ class PairingProtocolClientTest {
                     )
                 try {
                     assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                        registration.register(registrationRequest()),
+                        registration.registerThroughPublicGateway(),
                     )
                 } finally {
                     registration.close()
@@ -281,7 +289,7 @@ class PairingProtocolClientTest {
                 )
             try {
                 assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                    withoutHeader.register(registrationRequest()),
+                    withoutHeader.registerThroughPublicGateway(),
                 )
             } finally {
                 withoutHeader.close()
@@ -307,16 +315,121 @@ class PairingProtocolClientTest {
                     ),
                 )
             try {
-                assertEquals(
-                    5L,
+                val outcome =
                     assertIs<PairingRegistrationRemoteOutcome.Rejected>(
-                        withHeader.register(registrationRequest()),
-                    ).retryAfterSeconds,
-                )
+                        withHeader.registerThroughPublicGateway(),
+                    )
+                assertEquals(5L, outcome.retryAfterSeconds)
+                assertRegistrationOutcomeRedacted(outcome)
             } finally {
                 withHeader.close()
             }
         }
+
+    @Test
+    fun `registration request redacts every authority field`() {
+        val rendered = registrationRequest().toString()
+
+        assertEquals("PairingRegistrationRequest(redacted)", rendered)
+        listOf(
+            "https://rotki.example",
+            PAIRING_ID,
+            PAIRING_CREDENTIAL,
+            IDEMPOTENCY_KEY,
+            "Victor's iPhone",
+            PUBLIC_KEY,
+        ).forEach { authority -> assertFalse(authority in rendered) }
+    }
+
+    @Test
+    fun `transport registration outcomes have secret-free representations`() {
+        assertRegistrationOutcomeRedacted(
+            PairingRegistrationRemoteOutcome.PreResponseTransportFailure,
+        )
+        assertRegistrationOutcomeRedacted(
+            PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure,
+        )
+    }
+
+    @Test
+    fun `all discovery outcomes have secret-free representations`() {
+        listOf(
+            PairingDiscoveryOutcome.Rejected(
+                failure = CompanionFailure.UnexpectedEngineError,
+                retryAfterSeconds = null,
+            ),
+            PairingDiscoveryOutcome.PreResponseTransportFailure,
+            PairingDiscoveryOutcome.CompleteResponseTransportFailure,
+        ).forEach(::assertDiscoveryOutcomeRedacted)
+    }
+
+    private fun assertDiscoveryOutcomeRedacted(outcome: PairingDiscoveryOutcome) {
+        val rendered = outcome.toString()
+        val expected =
+            when (outcome) {
+                is PairingDiscoveryOutcome.Compatible -> {
+                    "Compatible(redacted)"
+                }
+
+                PairingDiscoveryOutcome.Incompatible -> {
+                    "Incompatible"
+                }
+
+                is PairingDiscoveryOutcome.Rejected -> {
+                    "Rejected(redacted)"
+                }
+
+                is PairingDiscoveryOutcome.ContractFailure -> {
+                    "ContractFailure(redacted)"
+                }
+
+                PairingDiscoveryOutcome.PreResponseTransportFailure -> {
+                    "PreResponseTransportFailure"
+                }
+
+                PairingDiscoveryOutcome.CompleteResponseTransportFailure -> {
+                    "CompleteResponseTransportFailure"
+                }
+            }
+        assertEquals(expected, rendered)
+        listOf(PAIRING_CREDENTIAL, PAIRING_ID, DEVICE_SESSION_ID)
+            .forEach { authority -> assertFalse(authority in rendered) }
+    }
+
+    private fun assertRegistrationOutcomeRedacted(outcome: PairingRegistrationRemoteOutcome) {
+        val rendered = outcome.toString()
+        val expected =
+            when (outcome) {
+                is PairingRegistrationRemoteOutcome.Registered -> {
+                    "Registered(redacted)"
+                }
+
+                is PairingRegistrationRemoteOutcome.Rejected -> {
+                    "Rejected(redacted)"
+                }
+
+                is PairingRegistrationRemoteOutcome.ContractFailure -> {
+                    "ContractFailure(redacted)"
+                }
+
+                PairingRegistrationRemoteOutcome.PreResponseTransportFailure -> {
+                    "PreResponseTransportFailure"
+                }
+
+                PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure -> {
+                    "CompleteResponseTransportFailure"
+                }
+            }
+        assertEquals(expected, rendered)
+        listOf(
+            PAIRING_ID,
+            PAIRING_CREDENTIAL,
+            IDEMPOTENCY_KEY,
+            "Victor's iPhone",
+            PUBLIC_KEY,
+            DEVICE_SESSION_ID,
+        ).forEach { authority -> assertFalse(authority in rendered) }
+    }
 
     private fun registrationRequest(): PairingRegistrationRequest =
         PairingRegistrationRequest(
@@ -325,10 +438,23 @@ class PairingProtocolClientTest {
             pairingCredential = parsed(PairingCredential.parse(PAIRING_CREDENTIAL)),
             selectedProtocolVersion = 1,
             idempotencyKey = parsed(IdempotencyKey.parse(IDEMPOTENCY_KEY)),
-            deviceLabel =
-                assertIs<DeviceLabelParseOutcome.Accepted>(
-                    DeviceLabel.parse("Victor's iPhone"),
-                ).value,
+            deviceLabel = requireNotNull(parsePairingDeviceLabel("Victor's iPhone")),
+            platform = CompanionPlatform.Ios,
+            publicKey = parsed(X963PublicKey.parse(PUBLIC_KEY)),
+        )
+
+    private suspend fun PairingProtocolClient.registerThroughPublicGateway(): PairingRegistrationRemoteOutcome =
+        register(
+            pairingQr =
+                PairingQr(
+                    engineOrigin = origin(),
+                    pairingId = parsed(PairingId.parse(PAIRING_ID)),
+                    pairingCredential = parsed(PairingCredential.parse(PAIRING_CREDENTIAL)),
+                    expiresAtEpochSeconds = 1_786_550_400,
+                ),
+            selectedProtocolVersion = 1,
+            idempotencyKey = parsed(IdempotencyKey.parse(IDEMPOTENCY_KEY)),
+            deviceLabel = requireNotNull(parsePairingDeviceLabel("Victor's iPhone")),
             platform = CompanionPlatform.Ios,
             publicKey = parsed(X963PublicKey.parse(PUBLIC_KEY)),
         )
@@ -365,6 +491,7 @@ private const val PAIRING_CREDENTIAL: String =
 private const val IDEMPOTENCY_KEY: String = "cHFyc3R1dnd4eXp7fH1-fw"
 private const val PUBLIC_KEY: String =
     "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+private const val DEVICE_SESSION_ID: String = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
 private const val DISCOVERY_SUCCESS: String =
     """{"result":{"supported_protocol_versions":[1],"capabilities":{"device_sessions":1}},"message":""}"""
 private const val INCOMPATIBLE_FAILURE: String =

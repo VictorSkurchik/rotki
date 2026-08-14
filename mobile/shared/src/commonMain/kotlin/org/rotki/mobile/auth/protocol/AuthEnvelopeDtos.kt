@@ -4,15 +4,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-@SerialName("org.rotki.mobile.core.protocol.dto.DeviceSessionEnvelopeDto")
-internal class DeviceSessionEnvelopeDto(
-    @SerialName("result")
-    internal val result: DeviceSessionResultDto,
-    @SerialName("message")
-    internal val message: String,
-)
-
-@Serializable
 @SerialName("org.rotki.mobile.core.protocol.dto.RevokedEnvelopeDto")
 internal class RevokedEnvelopeDto(
     @SerialName("result")

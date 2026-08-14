@@ -6,13 +6,18 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
+import org.rotki.mobile.feature.pairing.domain.PairingAdmission
+import org.rotki.mobile.feature.pairing.domain.PairingSessionPort
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionOutcome
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionRejection
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class PairingQrParserTest {
     @OptIn(ExperimentalEncodingApi::class)
@@ -86,12 +91,10 @@ class PairingQrParserTest {
 
     @Test
     fun `device labels reject lone UTF-16 surrogates`() {
-        assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uD800label"))
-        assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uDC00label"))
-        assertIs<DeviceLabelParseOutcome.Rejected>(DeviceLabel.parse("bad\uDB40\uDC01label"))
-        assertIs<DeviceLabelParseOutcome.Accepted>(DeviceLabel.parse("valid 😀 label"))
-        assertFalse(DeviceLabelValidator.isValid("bad\uDB40\uDC01label"))
-        assertTrue(DeviceLabelValidator.isValid("valid 😀 label"))
+        assertNull(DeviceLabel.parse("bad\uD800label"))
+        assertNull(DeviceLabel.parse("bad\uDC00label"))
+        assertNull(DeviceLabel.parse("bad\uDB40\uDC01label"))
+        assertNotNull(DeviceLabel.parse("valid 😀 label"))
     }
 
     @Test
@@ -111,12 +114,96 @@ class PairingQrParserTest {
         )
     }
 
+    @Test
+    fun `submission gateway and accepted QR redact all authority`() {
+        val raw =
+            ProtocolFixtureData.golden
+                .getValue("pairing_qr_cases")
+                .jsonArray
+                .first()
+                .jsonObject
+                .string("wire_utf8")
+        val session = RecordingPairingSession()
+        val gateway = createPairingSubmissionGateway(session, Clock { 0 })
+
+        assertIs<PairingSubmissionOutcome.Accepted>(gateway.submit(raw))
+
+        val pairingQr = requireNotNull(session.admitted)
+        assertEquals("PairingSubmissionDataGateway(redacted)", gateway.toString())
+        assertEquals("PairingQr(redacted)", pairingQr.toString())
+        listOf(
+            pairingQr.engineOrigin.restApiBase,
+            pairingQr.pairingId.encoded,
+            pairingQr.pairingCredential.encoded,
+            raw,
+        ).forEach { authority ->
+            assertFalse(authority in gateway.toString())
+            assertFalse(authority in pairingQr.toString())
+        }
+    }
+
+    @Test
+    fun `submission gateway maps parser and session results without retaining authority`() {
+        val valid =
+            ProtocolFixtureData.golden
+                .getValue("pairing_qr_cases")
+                .jsonArray
+                .first()
+                .jsonObject
+                .string("wire_utf8")
+        val ignoredGateway =
+            createPairingSubmissionGateway(
+                RecordingPairingSession(PairingAdmission.IGNORED),
+                Clock { 1_786_550_399 },
+            )
+
+        assertIs<PairingSubmissionOutcome.Ignored>(ignoredGateway.submit(valid))
+        assertEquals(
+            PairingSubmissionRejection.MALFORMED,
+            assertIs<PairingSubmissionOutcome.Rejected>(ignoredGateway.submit("seeded-secret"))
+                .reason,
+        )
+        assertEquals(
+            PairingSubmissionRejection.UNSUPPORTED,
+            assertIs<PairingSubmissionOutcome.Rejected>(
+                ignoredGateway.submit(valid.replace("\"format_version\":1", "\"format_version\":2")),
+            ).reason,
+        )
+        assertEquals(
+            PairingSubmissionRejection.EXPIRED,
+            assertIs<PairingSubmissionOutcome.Rejected>(
+                createPairingSubmissionGateway(
+                    RecordingPairingSession(),
+                    Clock { 1_786_550_400 },
+                ).submit(valid),
+            ).reason,
+        )
+        assertFalse("seeded-secret" in ignoredGateway.toString())
+    }
+
     private fun buildWire(builder: JsonObject): ByteArray =
         (
             builder.string("prefix") +
                 builder.string("repeat_ascii").repeat(builder.int("repeat_count")) +
                 builder.string("suffix")
         ).encodeToByteArray()
+}
+
+private class RecordingPairingSession(
+    private val admission: PairingAdmission = PairingAdmission.ACCEPTED,
+) : PairingSessionPort<PairingQr> {
+    var admitted: PairingQr? = null
+
+    override fun isConnecting(): Boolean = false
+
+    override fun isUnpaired(): Boolean = true
+
+    override fun admit(material: PairingQr): PairingAdmission {
+        admitted = material
+        return admission
+    }
+
+    override fun toString(): String = "RecordingPairingSession(redacted)"
 }
 
 private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content

@@ -192,12 +192,18 @@ final class PairingInteropTests: XCTestCase {
         let facade = CompanionFacade()
         let flow = facade.pairingFlow()
 
+        XCTAssertEqual(flow.description(), "PairingFlow(redacted)")
+
         guard let intro = flow.presentation.value as? PairingPresentation else {
             XCTFail("Expected an exported PairingPresentation for the initial state")
             return
         }
         XCTAssertEqual(intro.state.code, "intro")
         XCTAssertNil(intro.rejectionCategory)
+        XCTAssertEqual(
+            intro.description(),
+            "PairingPresentation(state=intro, rejection=null)"
+        )
 
         flow.startScanning()
 
@@ -216,6 +222,88 @@ final class PairingInteropTests: XCTestCase {
         }
         XCTAssertEqual(rejected.state.code, "invalid_qr")
         XCTAssertEqual(rejected.rejectionCategory?.code, "malformed")
+        XCTAssertEqual(
+            rejected.description(),
+            "PairingPresentation(state=invalid_qr, rejection=malformed)"
+        )
+    }
+
+    func testPairingNativeVocabularyAndValidatorRemainExported() {
+        XCTAssertTrue(DeviceLabelValidator.shared.isValid(candidate: "valid 😀 label"))
+        XCTAssertFalse(DeviceLabelValidator.shared.isValid(candidate: ""))
+        XCTAssertFalse(DeviceLabelValidator.shared.isValid(candidate: " leading space"))
+
+        let platforms: [PairingDevicePlatform] = [
+            .android,
+            .ios,
+        ]
+        XCTAssertEqual(platforms.map(\.code), ["android", "ios"])
+
+        let outcomes: [PairingConnectionOutcome] = [
+            .registered,
+            .noPendingPairing,
+            .outsideActiveForeground,
+            .pairingExpired,
+            .pairingUnavailable,
+            .incompatible,
+            .rateLimited,
+            .networkUnavailable,
+            .localSecurityUnavailable,
+            .localStorageUnavailable,
+            .localCleanupIncomplete,
+            .unexpectedEngineResponse,
+            .unexpectedFailure,
+        ]
+        XCTAssertEqual(
+            outcomes.map(\.code),
+            [
+                "registered",
+                "no_pending_pairing",
+                "outside_active_foreground",
+                "pairing_expired",
+                "pairing_unavailable",
+                "incompatible",
+                "rate_limited",
+                "network_unavailable",
+                "local_security_unavailable",
+                "local_storage_unavailable",
+                "local_cleanup_incomplete",
+                "unexpected_engine_response",
+                "unexpected_failure",
+            ]
+        )
+
+        let uiStates: [PairingUiState] = [
+            .intro,
+            .scanning,
+            .cameraDenied,
+            .scannerUnavailable,
+            .invalidQr,
+            .expiredQr,
+            .connecting,
+        ]
+        XCTAssertEqual(
+            uiStates.map(\.code),
+            [
+                "intro",
+                "scanning",
+                "camera_denied",
+                "scanner_unavailable",
+                "invalid_qr",
+                "expired_qr",
+                "connecting",
+            ]
+        )
+
+        let rejectionCategories: [PairingRejectionCategory] = [
+            .malformed,
+            .unsupported,
+            .expired,
+        ]
+        XCTAssertEqual(
+            rejectionCategories.map(\.code),
+            ["malformed", "unsupported", "expired"]
+        )
     }
 
     func testCoreCommonLifecycleSurfaceRemainsExportedByUmbrellaFramework() {

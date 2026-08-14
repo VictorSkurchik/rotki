@@ -97,6 +97,8 @@ jobs:
             :core:network:dependencies \
             :core:protocol:dependencies \
             :core:security-api:dependencies \
+            :core:testing:dependencies \
+            :feature:pairing:data:dependencies \
             :feature:pairing:domain:dependencies \
             :feature:pairing:presentation:dependencies \
             :shared:dependencies \
@@ -227,11 +229,26 @@ jobs:
           forbidden_pattern+='|RequestReplayPolicy|RetryFailure|TypedErrorRetryDisposition|RetryDecision|RetryStopReason|RetryJitterSource|DefaultRetryJitterSource|RetryPolicy'
           forbidden_pattern+='|SessionRenewalDecision|SessionRenewalPolicy|SessionRenewalGate|SessionRenewalLease'
           forbidden_pattern+='|HttpClientEngine|HttpClient|HttpStatement|HttpResponse|ByteReadChannel|OutgoingContent|io_ktor|Ktor|ktor'
+          forbidden_pattern+='|PairingQr(Parser|ParseOutcome|Rejection|Dto)?|createPairingSubmissionGateway|PairingProtocolClient|createPairingProtocolClient|PairingRegistrationRequest|createPairingRegistrationRequest|PairingDiscoveryOutcome|PairingRegistrationRemote(Gateway|Outcome)|createPlatformPairingRegistrationRemoteGateway|PairingRegisteredSession|PairingProtocolRoutes?|CompanionJsonContent'
+          forbidden_pattern+='|RegisterDeviceSessionRequestDto|DeviceSession(Result|Envelope)?Dto|DeviceLabelParseOutcome|AuthContractOutcome|encodeCompanionJson|matchesRegistration|isValidDeviceLabel|parse(DeviceLabel|PairingDeviceLabel)'
+          forbidden_pattern+='|swift_name\("DeviceSession"\)|swift_name\("DeviceLabel"\)'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
-            echo '::error::Kotlin-only protocol or network internals leaked into the Swift framework header'
+            echo '::error::Kotlin-only protocol, network, or Pairing data internals leaked into the Swift framework header'
             exit 1
           fi
           required_swift_names=(
+            CompanionFacade
+            CompanionFacade.Companion
+            PairingConnection
+            PairingConnection.Companion
+            PairingConnectionConfiguration
+            PairingConnectionOutcome
+            PairingDevicePlatform
+            PairingFlow
+            PairingPresentation
+            PairingRejectionCategory
+            PairingUiState
+            DeviceLabelValidator
             DeviceSessionId
             IdempotencyKey
             IdempotencyKeyGenerator
