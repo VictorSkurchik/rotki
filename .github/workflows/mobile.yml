@@ -216,11 +216,28 @@ jobs:
           device_header='shared/build/bin/iosArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
           simulator_header='shared/build/bin/iosSimulatorArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
           cmp "$device_header" "$simulator_header"
-          forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
+          forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|isCanonicalFixedBase64Url|bytesCopy|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PairingId|PairingCredential|ChallengeId|ChallengeNonce|AccessSessionCredential|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
             echo '::error::Kotlin-only protocol internals leaked into the Swift framework header'
             exit 1
           fi
+          required_swift_names=(
+            DeviceSessionId
+            IdempotencyKey
+            P1363Signature
+            X963PublicKey
+            ProtocolValueParseOutcome
+            ProtocolValueParseOutcomeAccepted
+            ProtocolValueParseOutcomeRejected
+            ProtocolValueRejection
+          )
+          for swift_name in "${required_swift_names[@]}"; do
+            marker="__attribute__((swift_name(\"$swift_name\")))"
+            if ! grep -Fq "$marker" "$device_header"; then
+              echo "::error::Expected Swift protocol API is missing: $swift_name"
+              exit 1
+            fi
+          done
 
       - name: Run iOS host tests
         working-directory: mobile

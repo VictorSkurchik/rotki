@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol
 
 import com.ionspin.kotlin.bignum.integer.BigInteger
@@ -5,6 +7,7 @@ import org.rotki.mobile.core.protocol.generated.ProtocolEncodedLengths
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.Base64.PaddingOption
 import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.native.HiddenFromObjC
 
 public sealed interface ProtocolValueParseOutcome<out T> {
     public data class Accepted<T>(
@@ -34,7 +37,8 @@ public class DeviceSessionId private constructor(
 
     public override fun toString(): String = "DeviceSessionId(redacted)"
 
-    internal fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
+    @HiddenFromObjC
+    public fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
 
     public companion object {
         public fun parse(candidate: String): ProtocolValueParseOutcome<DeviceSessionId> =
@@ -161,26 +165,28 @@ public class X963PublicKey private constructor(
     }
 }
 
-internal class PairingId private constructor(
-    internal val encoded: String,
+@HiddenFromObjC
+public class PairingId private constructor(
+    public val encoded: String,
 ) {
     override fun toString(): String = "PairingId(redacted)"
 
     internal fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
 
-    internal companion object {
-        internal fun parse(candidate: String): ProtocolValueParseOutcome<PairingId> =
+    public companion object {
+        public fun parse(candidate: String): ProtocolValueParseOutcome<PairingId> =
             parseFixedBase64Url(candidate, ProtocolEncodedLengths.PairingId, 16, ::PairingId)
     }
 }
 
-internal class PairingCredential private constructor(
-    internal val encoded: String,
+@HiddenFromObjC
+public class PairingCredential private constructor(
+    public val encoded: String,
 ) {
     override fun toString(): String = "PairingCredential(redacted)"
 
-    internal companion object {
-        internal fun parse(candidate: String): ProtocolValueParseOutcome<PairingCredential> =
+    public companion object {
+        public fun parse(candidate: String): ProtocolValueParseOutcome<PairingCredential> =
             parseFixedBase64Url(
                 candidate,
                 ProtocolEncodedLengths.PairingCredential,
@@ -190,39 +196,42 @@ internal class PairingCredential private constructor(
     }
 }
 
-internal class ChallengeId private constructor(
-    internal val encoded: String,
+@HiddenFromObjC
+public class ChallengeId private constructor(
+    public val encoded: String,
 ) {
     override fun toString(): String = "ChallengeId(redacted)"
 
-    internal fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
+    public fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
 
-    internal companion object {
-        internal fun parse(candidate: String): ProtocolValueParseOutcome<ChallengeId> =
+    public companion object {
+        public fun parse(candidate: String): ProtocolValueParseOutcome<ChallengeId> =
             parseFixedBase64Url(candidate, ProtocolEncodedLengths.ChallengeId, 16, ::ChallengeId)
     }
 }
 
-internal class ChallengeNonce private constructor(
+@HiddenFromObjC
+public class ChallengeNonce private constructor(
     internal val encoded: String,
 ) {
     override fun toString(): String = "ChallengeNonce(redacted)"
 
-    internal fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
+    public fun bytesCopy(): ByteArray = decodeCanonicalBase64Url(encoded)
 
-    internal companion object {
-        internal fun parse(candidate: String): ProtocolValueParseOutcome<ChallengeNonce> =
+    public companion object {
+        public fun parse(candidate: String): ProtocolValueParseOutcome<ChallengeNonce> =
             parseFixedBase64Url(candidate, ProtocolEncodedLengths.Nonce, 32, ::ChallengeNonce)
     }
 }
 
-internal class AccessSessionCredential private constructor(
+@HiddenFromObjC
+public class AccessSessionCredential private constructor(
     internal val encoded: String,
 ) {
     override fun toString(): String = "AccessSessionCredential(redacted)"
 
-    internal companion object {
-        internal fun parse(candidate: String): ProtocolValueParseOutcome<AccessSessionCredential> =
+    public companion object {
+        public fun parse(candidate: String): ProtocolValueParseOutcome<AccessSessionCredential> =
             parseFixedBase64Url(
                 candidate,
                 ProtocolEncodedLengths.AccessSessionCredential,
@@ -259,7 +268,8 @@ private inline fun <T> parseFixedBase64Url(
     return ProtocolValueParseOutcome.Accepted(construct(candidate))
 }
 
-internal fun isCanonicalFixedBase64Url(
+@HiddenFromObjC
+public fun isCanonicalFixedBase64Url(
     candidate: String,
     encodedLength: Int,
     byteLength: Int,

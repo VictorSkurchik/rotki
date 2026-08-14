@@ -2,6 +2,54 @@ import RotkiShared
 import XCTest
 
 final class PairingInteropTests: XCTestCase {
+    func testProtocolValueSurfaceRemainsExportedByUmbrellaFramework() {
+        // These are public deterministic protocol vectors, never production Pairing material.
+        let deviceSessionOutcome: any ProtocolValueParseOutcome = DeviceSessionId.companion.parse(
+            candidate: "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+        )
+        let idempotencyOutcome: any ProtocolValueParseOutcome = IdempotencyKey.companion.parse(
+            candidate: "AAECAwQFBgcICQoLDA0ODw"
+        )
+        let signatureOutcome: any ProtocolValueParseOutcome = P1363Signature.companion.parse(
+            candidate: "zKnDT8nsSEMoIxqZIzUybLt-QJJr6mtaaXm6SJMRmK7kJLpg-BP20iAJBHwLqXstAHFxaHwb_vs_jb4hSU6N8A"
+        )
+        let publicKeyOutcome: any ProtocolValueParseOutcome = X963PublicKey.companion.parse(
+            candidate: "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+        )
+
+        guard
+            let deviceSession = (
+                deviceSessionOutcome as? ProtocolValueParseOutcomeAccepted<DeviceSessionId>
+            )?.value,
+            let idempotencyKey = (
+                idempotencyOutcome as? ProtocolValueParseOutcomeAccepted<IdempotencyKey>
+            )?.value,
+            let signature = (
+                signatureOutcome as? ProtocolValueParseOutcomeAccepted<P1363Signature>
+            )?.value,
+            let publicKey = (
+                publicKeyOutcome as? ProtocolValueParseOutcomeAccepted<X963PublicKey>
+            )?.value
+        else {
+            XCTFail("Expected public protocol vectors to parse through exported value types")
+            return
+        }
+
+        XCTAssertEqual(deviceSession.description(), "DeviceSessionId(redacted)")
+        XCTAssertEqual(idempotencyKey.description(), "IdempotencyKey(redacted)")
+        XCTAssertEqual(signature.description(), "P1363Signature(redacted)")
+        XCTAssertEqual(publicKey.description(), "X963PublicKey(redacted)")
+
+        let rejectedOutcome: any ProtocolValueParseOutcome = DeviceSessionId.companion.parse(
+            candidate: "invalid"
+        )
+        guard let rejected = rejectedOutcome as? ProtocolValueParseOutcomeRejected else {
+            XCTFail("Expected the exported rejected outcome type")
+            return
+        }
+        XCTAssertTrue(rejected.reason === ProtocolValueRejection.invalidLength)
+    }
+
     func testPairingFlowAdapterRemainsExportedByUmbrellaFramework() {
         let facade = CompanionFacade()
         let flow = facade.pairingFlow()

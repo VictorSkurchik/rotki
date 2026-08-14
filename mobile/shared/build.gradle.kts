@@ -38,6 +38,7 @@ kotlin {
             isStatic = true
             export(project(":core:model"))
             export(project(":core:common"))
+            export(project(":core:protocol"))
             export(project(":core:security-api"))
         }
     }
@@ -46,13 +47,12 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:common"))
             api(project(":core:model"))
+            api(project(":core:protocol"))
             api(project(":core:security-api"))
             api(libs.kotlinx.coroutines.core)
-            implementation(libs.ionspin.bignum)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
-            implementation(project(":core:protocol"))
             implementation(project(":feature:pairing:domain"))
             implementation(project(":feature:pairing:presentation"))
         }
