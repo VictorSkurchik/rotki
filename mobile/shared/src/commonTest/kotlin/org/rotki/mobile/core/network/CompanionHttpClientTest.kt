@@ -1,6 +1,5 @@
 package org.rotki.mobile.core.network
 
-import io.ktor.client.call.body
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondOk
@@ -17,7 +16,6 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -83,27 +81,6 @@ class CompanionHttpClientTest {
         }
 
     @Test
-    fun installsTheStrictSharedJsonConfiguration(): Unit =
-        runTest {
-            val engine =
-                MockEngine {
-                    respond(
-                        content = """{"value":"ok","future":1}""",
-                        headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
-                    )
-                }
-            val client = createCompanionHttpClient(engine)
-            try {
-                assertEquals(
-                    JsonFixture("ok"),
-                    client.get("https://rotki.example/value").body<JsonFixture>(),
-                )
-            } finally {
-                client.close()
-            }
-        }
-
-    @Test
     fun ownerCancellationStopsAnInFlightRequestWithoutRetry(): Unit =
         runTest {
             val handlerStarted = CompletableDeferred<Unit>()
@@ -138,9 +115,4 @@ class CompanionHttpClientTest {
                 client.close()
             }
         }
-
-    @Serializable
-    private data class JsonFixture(
-        val value: String,
-    )
 }

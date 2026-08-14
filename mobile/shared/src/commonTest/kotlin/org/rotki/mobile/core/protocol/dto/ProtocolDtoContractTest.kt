@@ -1,11 +1,11 @@
 package org.rotki.mobile.core.protocol.dto
 
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.generated.ProtocolCapability
 import org.rotki.mobile.core.protocol.generated.SUPPORTED_PROTOCOL_VERSIONS
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 class ProtocolDtoContractTest {
     @Test
     fun `protocol discovery example decodes through handwritten DTOs`() {
-        val protocol = decodeResponse<ProtocolDiscoveryEnvelopeDto>("get_protocol")
+        val protocol = decodeResponse("get_protocol", ProtocolDiscoveryEnvelopeDto.serializer())
         assertEquals(
             1,
             assertIs<ProtocolNegotiationOutcome.Compatible>(
@@ -43,17 +43,18 @@ class ProtocolDtoContractTest {
         val additive = original.dropLast(1) + ",\"future_hint\":true}"
         val missing = original.replace(",\"message\":\"\"", "")
 
-        CompanionJson.decodeFromString<ProtocolDiscoveryEnvelopeDto>(additive)
+        ProtocolFixtureData.decodeCompanionJson(additive, ProtocolDiscoveryEnvelopeDto.serializer())
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<ProtocolDiscoveryEnvelopeDto>(missing)
+            ProtocolFixtureData.decodeCompanionJson(missing, ProtocolDiscoveryEnvelopeDto.serializer())
         }
     }
 
     @Test
     fun `quoted JSON scalars are rejected in protocol discovery`() {
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<ProtocolDiscoveryEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 responseText("get_protocol").replace("[1]", "[\"1\"]"),
+                ProtocolDiscoveryEnvelopeDto.serializer(),
             )
         }
     }
@@ -74,13 +75,16 @@ class ProtocolDtoContractTest {
         )
     }
 
-    private inline fun <reified T> decodeResponse(id: String): T {
+    private fun <T> decodeResponse(
+        id: String,
+        deserializer: DeserializationStrategy<T>,
+    ): T {
         val response: JsonObject =
             ProtocolFixtureData
                 .successExample(id)
                 .getValue("response")
                 .jsonObject
-        return CompanionJson.decodeFromJsonElement(response)
+        return CompanionJsonCodec.decodeFromJsonElement(deserializer, response)
     }
 
     private fun responseText(id: String): String =

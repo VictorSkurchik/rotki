@@ -5,8 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.decodeFromJsonElement
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.StrictJsonBooleanSerializer
 import org.rotki.mobile.core.protocol.StrictJsonIntSerializer
 import org.rotki.mobile.core.protocol.StrictJsonLongSerializer
@@ -33,7 +32,7 @@ internal object WebSocketNotificationDecoder {
         }
         val envelope =
             try {
-                CompanionJson.parseToJsonElement(text) as? JsonObject
+                CompanionJsonCodec.parseToJsonElement(text) as? JsonObject
                     ?: return WebSocketNotificationDecodeOutcome.ContractFailure
             } catch (_: SerializationException) {
                 return WebSocketNotificationDecodeOutcome.ContractFailure
@@ -63,7 +62,7 @@ internal object WebSocketNotificationDecoder {
         if (data == null) return WebSocketNotificationDecodeOutcome.ContractFailure
         val dto =
             try {
-                CompanionJson.decodeFromJsonElement<SnapshotRevisionDataDto>(data)
+                CompanionJsonCodec.decodeFromJsonElement(SnapshotRevisionDataDto.serializer(), data)
             } catch (_: SerializationException) {
                 return WebSocketNotificationDecodeOutcome.ContractFailure
             }
@@ -79,7 +78,7 @@ internal object WebSocketNotificationDecoder {
         if (data == null) return WebSocketNotificationDecodeOutcome.ContractFailure
         val dto =
             try {
-                CompanionJson.decodeFromJsonElement<RefreshOperationDataDto>(data)
+                CompanionJsonCodec.decodeFromJsonElement(RefreshOperationDataDto.serializer(), data)
             } catch (_: SerializationException) {
                 return WebSocketNotificationDecodeOutcome.ContractFailure
             }

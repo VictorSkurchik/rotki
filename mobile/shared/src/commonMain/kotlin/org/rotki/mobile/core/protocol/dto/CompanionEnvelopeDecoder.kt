@@ -5,8 +5,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.decodeFromJsonElement
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
 import org.rotki.mobile.core.protocol.hasValidJsonSyntax
@@ -42,7 +41,7 @@ internal object CompanionEnvelopeDecoder {
         }
         val decoded =
             try {
-                CompanionJson.decodeFromJsonElement(deserializer, envelope)
+                CompanionJsonCodec.decodeFromJsonElement(deserializer, envelope)
             } catch (_: SerializationException) {
                 return CompanionEnvelopeDecodeOutcome.ContractFailure
             } catch (_: IllegalArgumentException) {
@@ -59,7 +58,7 @@ internal object CompanionEnvelopeDecoder {
             return null
         }
         return try {
-            CompanionJson.parseToJsonElement(text) as? JsonObject
+            CompanionJsonCodec.parseToJsonElement(text) as? JsonObject
         } catch (_: SerializationException) {
             null
         } catch (_: IllegalArgumentException) {

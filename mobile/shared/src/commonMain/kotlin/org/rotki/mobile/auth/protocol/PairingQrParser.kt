@@ -5,10 +5,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import org.rotki.mobile.core.ports.Clock
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.EngineOrigin
 import org.rotki.mobile.core.protocol.EngineOriginParseOutcome
 import org.rotki.mobile.core.protocol.PairingCredential
@@ -40,11 +39,11 @@ internal class PairingQrParser(
         }
         val dto =
             try {
-                val element = CompanionJson.parseToJsonElement(text).jsonObject
+                val element = CompanionJsonCodec.parseToJsonElement(text).jsonObject
                 if (!element.hasStrictPairingQrTypes()) {
                     return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
                 }
-                CompanionJson.decodeFromJsonElement<PairingQrDto>(element)
+                CompanionJsonCodec.decodeFromJsonElement(PairingQrDto.serializer(), element)
             } catch (_: SerializationException) {
                 return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
             } catch (_: IllegalArgumentException) {

@@ -67,18 +67,21 @@ class CompanionErrorMapperTest {
                 .toDomain(400),
         )
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<CompanionFailureEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 """{"result":null,"message":"redacted","error":{"code":"invalid_request","retryable":false}}""",
+                CompanionFailureEnvelopeDto.serializer(),
             )
         }
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<CompanionFailureEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 """{"message":"redacted","error":{"code":"invalid_request","retryable":false,"action":"none"}}""",
+                CompanionFailureEnvelopeDto.serializer(),
             )
         }
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<CompanionFailureEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 """{"result":null,"message":"redacted","error":{"code":"invalid_request","retryable":"false","action":"none"}}""",
+                CompanionFailureEnvelopeDto.serializer(),
             )
         }
     }

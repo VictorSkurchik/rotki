@@ -510,9 +510,13 @@ vertical remains the reference slice. Strict QR decoding, registration transport
 Ktor boundaries, and the remaining protocol-dependent security contracts are still physically
 located inside `:shared`. Protocol now owns the strict JSON configuration and generic envelopes, while
 auth owns its success envelopes, removing the former protocol-to-network/auth package edges without
-claiming module extraction. Next add a non-exported codec boundary, move coherent protocol and network
-leaves, then complete the security API; only after those edges are available should the decoder and
-registration implementation move into a real
+claiming module extraction. Raw `Json` is now private behind a Kotlin-only codec hidden from
+Objective-C and Swift. Ktor wraps the sensitive encoded bytes in content with a constant, redacted
+diagnostic representation and no longer installs `ContentNegotiation`, so transport does not consume
+the serializer configuration directly. Neither `:core:protocol` nor `:core:network` exists as a
+physical module yet. Next extract the real `:core:protocol` leaf, then the network leaf and the
+remaining security API; only after those edges are available should the decoder and registration
+implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed
 Navigation Compose.

@@ -87,8 +87,11 @@ The stable Swift-facing `PairingFlow` and `PairingConnection` consume those port
 `CompanionFacade`; a non-exported adapter scoped to one facade supplies their current implementation.
 Strict protocol decoding and transport remain in `:shared` until their lower-level dependencies move.
 Their package direction is already untangled: protocol owns strict JSON and generic envelopes, while
-auth owns auth-specific success envelopes. Physical protocol/network extraction still requires a
-non-exported codec boundary so network does not consume protocol's internal `Json` instance directly.
+auth owns auth-specific success envelopes. Raw `Json` is now sealed behind a Kotlin-only protocol
+codec hidden from Objective-C and Swift. The Ktor transport wraps its sensitive encoded bytes in
+`OutgoingContent` with a constant, redacted diagnostic representation and no longer installs
+`ContentNegotiation`. Protocol and network are still packages inside `:shared`, not physical Gradle
+modules; the next extraction is the real `:core:protocol` module.
 
 ```text
 mobile/

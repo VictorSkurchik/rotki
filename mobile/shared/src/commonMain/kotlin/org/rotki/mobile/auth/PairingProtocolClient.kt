@@ -7,11 +7,13 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.content.OutgoingContent
 import org.rotki.mobile.auth.protocol.AuthContractOutcome
 import org.rotki.mobile.auth.protocol.DeviceLabel
 import org.rotki.mobile.auth.protocol.DeviceSession
 import org.rotki.mobile.auth.protocol.DeviceSessionEnvelopeDto
 import org.rotki.mobile.auth.protocol.RegisterDeviceSessionRequestDto
+import org.rotki.mobile.auth.protocol.encodeCompanionJson
 import org.rotki.mobile.auth.protocol.matchesRegistration
 import org.rotki.mobile.core.network.CompanionHttpResponseOutcome
 import org.rotki.mobile.core.network.executeCompanionResponse
@@ -41,6 +43,7 @@ internal class PairingProtocolClient(
                     "${origin.restApiBase}/companion${PairingProtocolRoutes.Discovery.path}",
                 ) {
                     method = PairingProtocolRoutes.Discovery.method
+                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
                 }.executeCompanionResponse(
                     expectedSuccessStatusCode = PairingProtocolRoutes.Discovery.successStatusCode,
                     deserializer = ProtocolDiscoveryEnvelopeDto.serializer(),
@@ -110,16 +113,19 @@ internal class PairingProtocolClient(
                     "${request.engineOrigin.restApiBase}/companion${PairingProtocolRoutes.Registration.path}",
                 ) {
                     method = PairingProtocolRoutes.Registration.method
-                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header(HttpHeaders.Accept, ContentType.Application.Json.toString())
                     header(ProtocolHeaders.Protocol, request.selectedProtocolVersion.toString())
                     header(HttpHeaders.Authorization, "Bearer ${request.pairingCredential.encoded}")
                     header(ProtocolHeaders.IdempotencyKey, request.idempotencyKey.encoded)
                     setBody(
-                        RegisterDeviceSessionRequestDto.create(
-                            pairingId = request.pairingId,
-                            deviceLabel = request.deviceLabel,
-                            platform = request.platform,
-                            publicKey = request.publicKey,
+                        CompanionJsonContent.create(
+                            RegisterDeviceSessionRequestDto
+                                .create(
+                                    pairingId = request.pairingId,
+                                    deviceLabel = request.deviceLabel,
+                                    platform = request.platform,
+                                    publicKey = request.publicKey,
+                                ).encodeCompanionJson(),
                         ),
                     )
                 }.executeCompanionResponse(
@@ -177,6 +183,26 @@ internal class PairingProtocolClient(
     }
 
     internal fun close(): Unit = client.close()
+}
+
+private class CompanionJsonContent private constructor(
+    private val content: ByteArray,
+) : OutgoingContent.ByteArrayContent() {
+    override val contentType: ContentType = ContentType.Application.Json
+    override val contentLength: Long = content.size.toLong()
+
+    override fun bytes(): ByteArray = content.copyOf()
+
+    override fun toString(): String = "CompanionJsonContent(redacted)"
+
+    companion object {
+        internal fun create(bytes: ByteArray): CompanionJsonContent =
+            try {
+                CompanionJsonContent(bytes.copyOf())
+            } finally {
+                bytes.fill(0)
+            }
+    }
 }
 
 internal class PairingRegistrationRequest(

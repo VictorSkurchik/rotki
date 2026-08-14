@@ -29,9 +29,12 @@ in this umbrella for now. Protocol-dependent device-proof, Pairing-record, and i
 remain here until the protocol leaf exists. The next extractions are coherent protocol and network
 leaves, followed by completion of the security API. Inside `:shared`, strict JSON configuration is
 already protocol-owned and auth-specific success envelopes are auth-owned, so protocol no longer
-imports network or auth packages. A non-exported codec boundary must still replace the network
-layer's direct use of the internal JSON instance before those packages become separate modules. Only
-then can a real `:feature:pairing:data` implementation depend on the leaves without introducing
+imports network or auth packages. Raw `Json` is sealed behind a Kotlin-only codec hidden from
+Objective-C and Swift; Ktor wraps its sensitive encoded bytes in content with a constant, redacted
+diagnostic representation and does not install `ContentNegotiation`. Protocol and network
+nevertheless remain packages in this umbrella rather than physical Gradle modules. The next step is
+the real `:core:protocol` extraction, followed by `:core:network`. Only then can a real
+`:feature:pairing:data` implementation depend on the leaves without introducing
 `shared <-> data` cycles; no data module is declared yet.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,

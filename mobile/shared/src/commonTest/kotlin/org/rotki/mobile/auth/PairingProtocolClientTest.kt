@@ -27,7 +27,9 @@ import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.protocol.generated.ProtocolHeaders
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -60,6 +62,11 @@ class PairingProtocolClientTest {
                 MockEngine { request ->
                     assertEquals(HttpMethod.Get, request.method)
                     assertEquals("/api/1/companion/protocol", request.url.encodedPath)
+                    assertEquals(
+                        listOf(ContentType.Application.Json.toString()),
+                        request.headers.getAll(HttpHeaders.Accept),
+                    )
+                    assertNull(request.headers.getAll(HttpHeaders.ContentType))
                     assertNull(request.headers[HttpHeaders.Authorization])
                     assertNull(request.headers[ProtocolHeaders.Protocol])
                     assertNull(request.headers[ProtocolHeaders.IdempotencyKey])
@@ -108,8 +115,28 @@ class PairingProtocolClientTest {
                     assertEquals("Bearer $PAIRING_CREDENTIAL", request.headers[HttpHeaders.Authorization])
                     assertEquals("1", request.headers[ProtocolHeaders.Protocol])
                     assertEquals(IDEMPOTENCY_KEY, request.headers[ProtocolHeaders.IdempotencyKey])
-                    assertEquals(ContentType.Application.Json, request.body.contentType)
-                    assertEquals(REGISTRATION_REQUEST, request.body.bodyText())
+                    assertEquals(
+                        listOf(ContentType.Application.Json.toString()),
+                        request.headers.getAll(HttpHeaders.Accept),
+                    )
+                    val body = assertIs<OutgoingContent.ByteArrayContent>(request.body)
+                    val contentTypeSources =
+                        request.headers.getAll(HttpHeaders.ContentType).orEmpty() +
+                            listOfNotNull(body.contentType?.toString())
+                    assertEquals(
+                        listOf(ContentType.Application.Json.toString()),
+                        contentTypeSources,
+                    )
+                    val expectedBody = REGISTRATION_REQUEST.encodeToByteArray()
+                    assertEquals(ContentType.Application.Json, body.contentType)
+                    assertEquals(expectedBody.size.toLong(), body.contentLength)
+                    assertContentEquals(expectedBody, body.bytes())
+                    val renderedBody = body.toString()
+                    assertEquals("CompanionJsonContent(redacted)", renderedBody)
+                    listOf(PAIRING_ID, PAIRING_CREDENTIAL, "Victor's iPhone", PUBLIC_KEY)
+                        .forEach { sensitiveValue ->
+                            assertFalse(renderedBody.contains(sensitiveValue))
+                        }
                     respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
                 }
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
@@ -314,9 +341,6 @@ class PairingProtocolClientTest {
     private fun <T> parsed(outcome: ProtocolValueParseOutcome<T>): T =
         assertIs<ProtocolValueParseOutcome.Accepted<T>>(outcome).value
 }
-
-private fun OutgoingContent.bodyText(): String =
-    assertIs<OutgoingContent.ByteArrayContent>(this).bytes().decodeToString()
 
 private fun io.ktor.client.engine.mock.MockRequestHandleScope.respondJson(
     body: String,

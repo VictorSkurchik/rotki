@@ -1,12 +1,12 @@
 package org.rotki.mobile.auth.protocol
 
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,48 +18,57 @@ class AuthDtoContractTest {
     @Test
     fun `five auth success examples decode through auth-owned envelopes`() {
         assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<DeviceSessionEnvelopeDto>("register_device_session")
+            decodeResponse("register_device_session", DeviceSessionEnvelopeDto.serializer())
                 .result.deviceSession
                 .toDomain(),
         )
         assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<DeviceSessionEnvelopeDto>("rename_current_device_session")
+            decodeResponse("rename_current_device_session", DeviceSessionEnvelopeDto.serializer())
                 .result.deviceSession
                 .toDomain(),
         )
-        assertTrue(decodeResponse<RevokedEnvelopeDto>("revoke_current_device_session").result.revoked)
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<ChallengeEnvelopeDto>("create_challenge").result.toDomain(),
+        assertTrue(
+            decodeResponse("revoke_current_device_session", RevokedEnvelopeDto.serializer())
+                .result.revoked,
         )
         assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<AccessSessionEnvelopeDto>("create_access_session").result.toDomain(),
+            decodeResponse("create_challenge", ChallengeEnvelopeDto.serializer()).result.toDomain(),
+        )
+        assertIs<AuthContractOutcome.Accepted<*>>(
+            decodeResponse("create_access_session", AccessSessionEnvelopeDto.serializer())
+                .result
+                .toDomain(),
         )
     }
 
     @Test
     fun `quoted JSON scalars are rejected across auth responses`() {
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<DeviceSessionEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 responseText("register_device_session")
                     .replace("\"paired_at\":1786550300", "\"paired_at\":\"1786550300\""),
+                DeviceSessionEnvelopeDto.serializer(),
             )
         }
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<RevokedEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 responseText("revoke_current_device_session")
                     .replace("\"revoked\":true", "\"revoked\":\"true\""),
+                RevokedEnvelopeDto.serializer(),
             )
         }
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<ChallengeEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 responseText("create_challenge")
                     .replace("\"expires_at\":1786550400", "\"expires_at\":\"1786550400\""),
+                ChallengeEnvelopeDto.serializer(),
             )
         }
         assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<AccessSessionEnvelopeDto>(
+            ProtocolFixtureData.decodeCompanionJson(
                 responseText("create_access_session")
                     .replace("\"expires_at\":1786551300", "\"expires_at\":\"1786551300\""),
+                AccessSessionEnvelopeDto.serializer(),
             )
         }
     }
@@ -96,13 +105,16 @@ class AuthDtoContractTest {
         )
     }
 
-    private inline fun <reified T> decodeResponse(id: String): T {
+    private fun <T> decodeResponse(
+        id: String,
+        deserializer: DeserializationStrategy<T>,
+    ): T {
         val response: JsonObject =
             ProtocolFixtureData
                 .successExample(id)
                 .getValue("response")
                 .jsonObject
-        return CompanionJson.decodeFromJsonElement(response)
+        return CompanionJsonCodec.decodeFromJsonElement(deserializer, response)
     }
 
     private fun responseText(id: String): String =

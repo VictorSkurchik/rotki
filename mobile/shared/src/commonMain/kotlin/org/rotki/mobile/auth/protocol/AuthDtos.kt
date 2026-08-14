@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import org.rotki.mobile.core.protocol.AccessSessionCredential
 import org.rotki.mobile.core.protocol.ChallengeId
 import org.rotki.mobile.core.protocol.ChallengeNonce
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.DeviceSessionId
 import org.rotki.mobile.core.protocol.P1363Signature
 import org.rotki.mobile.core.protocol.PairingId
@@ -45,6 +46,9 @@ internal class RegisterDeviceSessionRequestDto(
             )
     }
 }
+
+internal fun RegisterDeviceSessionRequestDto.encodeCompanionJson(): ByteArray =
+    CompanionJsonCodec.encodeToByteArray(RegisterDeviceSessionRequestDto.serializer(), this)
 
 @Serializable
 internal class RenameCurrentDeviceSessionRequestDto(

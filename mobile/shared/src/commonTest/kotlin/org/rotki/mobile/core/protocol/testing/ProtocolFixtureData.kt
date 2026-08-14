@@ -1,10 +1,11 @@
 package org.rotki.mobile.core.protocol.testing
 
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.core.protocol.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_CLIENT_POLICY_CASES_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_GENERATED_NAMES_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_GOLDEN_VECTORS_JSON
@@ -25,5 +26,14 @@ internal object ProtocolFixtureData {
             .map { element -> element.jsonObject }
             .single { example -> example.getValue("id").jsonPrimitive.content == id }
 
-    private fun parse(raw: String): JsonObject = CompanionJson.parseToJsonElement(raw).jsonObject
+    internal fun <T> decodeCompanionJson(
+        text: String,
+        deserializer: DeserializationStrategy<T>,
+    ): T =
+        CompanionJsonCodec.decodeFromJsonElement(
+            deserializer,
+            CompanionJsonCodec.parseToJsonElement(text),
+        )
+
+    private fun parse(raw: String): JsonObject = CompanionJsonCodec.parseToJsonElement(raw).jsonObject
 }
