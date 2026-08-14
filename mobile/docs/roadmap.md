@@ -489,16 +489,23 @@ unregistered modules, forbidden project edges, infrastructure dependencies, and 
 the extracted Clean Architecture boundaries.
 
 The first Auth/Pairing boundary is also extracted without changing the native API:
-`:feature:pairing:domain` owns the one-shot submission contract and coarse outcomes, while
-`:feature:pairing:presentation` owns the synchronous UDF state/action/reducer. `:shared` keeps the
-existing Swift-facing `PairingFlow` as an adapter over those modules and retains QR decoding,
-registration transport, and facade-owned attempt coordination until their domain ports remove the
-current dependency cycles. Neither feature module stores QR material or creates an Apple framework.
+`:feature:pairing:domain` owns the one-shot submission contract, coarse outcomes, and opaque
+session/attempt ports, while `:feature:pairing:presentation` owns the synchronous UDF
+state/action/reducer. The existing Swift-facing `PairingFlow` and `PairingConnection` consume those
+ports and no longer depend directly on `CompanionFacade`. One non-exported adapter scoped to the
+facade implements admission, single-flight attempt ownership, durability, and cleanup. Recovered
+cleanup now claims its facade barrier before deleting key or record material, so a concurrent QR
+admission cannot be mistaken for stale material and silently removed. Neither feature module stores
+QR material or creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical remains the reference slice: next extract its decoder/registration data boundary and
-facade-owned attempt port, then replace manual Android composition and tab selection with Koin and
-typed Navigation Compose.
+vertical remains the reference slice. Strict QR decoding, registration transport, protocol DTOs,
+Ktor boundaries, and platform security contracts are still physically coupled inside `:shared`.
+Next extract coherent core common, protocol, network, and security leaves; only after those edges are
+available should the decoder and registration implementation move into a real
+`:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
+is planned. Afterward replace manual Android composition and tab selection with Koin and typed
+Navigation Compose.
 Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
 remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
 component system is deliberately deferred to Phase 7 and Claude Design.

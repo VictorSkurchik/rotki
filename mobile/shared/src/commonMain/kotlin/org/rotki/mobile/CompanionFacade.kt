@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
+import org.rotki.mobile.auth.CompanionPairingSessionAdapter
 import org.rotki.mobile.auth.PairingConnection
 import org.rotki.mobile.auth.PairingConnectionConfiguration
 import org.rotki.mobile.auth.PairingFlow
@@ -31,6 +32,8 @@ public class CompanionFacade internal constructor(
         MutableStateFlow(null)
     private val pendingPairingCleanup: MutableStateFlow<Any?> = MutableStateFlow(null)
     private val pairingConnectionMutex: Mutex = Mutex()
+    private val pairingSessionAdapter: CompanionPairingSessionAdapter =
+        CompanionPairingSessionAdapter(this)
 
     public val status: StateFlow<CompanionStatus> = coordinator.status
 
@@ -53,11 +56,23 @@ public class CompanionFacade internal constructor(
     internal fun beginPairing(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.ACCEPT_PAIRING_QR)
 
-    internal fun acceptPairing(pairingQr: PairingQr): CompanionTransitionOutcome = acceptPairing(pairingQr) {}
+    internal fun acceptPairing(pairingQr: PairingQr): CompanionTransitionOutcome =
+        acceptPairing(pairingQr, afterPendingStored = {})
 
     internal fun acceptPairing(
         pairingQr: PairingQr,
         afterPendingStored: () -> Unit,
+    ): CompanionTransitionOutcome =
+        acceptPairing(
+            pairingQr = pairingQr,
+            afterPendingStored = afterPendingStored,
+            beforeFinalOwnershipCheck = {},
+        )
+
+    internal fun acceptPairing(
+        pairingQr: PairingQr,
+        afterPendingStored: () -> Unit,
+        beforeFinalOwnershipCheck: () -> Unit,
     ): CompanionTransitionOutcome {
         if (pendingPairingCleanup.value != null) {
             return rejectedPairingAcceptance()
@@ -76,7 +91,11 @@ public class CompanionFacade internal constructor(
             clearPendingPairing(attempt.token)
             return outcome
         }
-        if (pendingPairingAttempt.value?.token !== attempt.token) {
+        beforeFinalOwnershipCheck()
+        if (pendingPairingCleanup.value != null ||
+            pendingPairingAttempt.value?.token !== attempt.token
+        ) {
+            clearPendingPairing(attempt.token)
             coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
             return rejectedPairingAcceptance()
         }
@@ -166,9 +185,6 @@ public class CompanionFacade internal constructor(
 
     internal fun hasPendingPairingCleanup(): Boolean = pendingPairingCleanup.value != null
 
-    internal fun pendingPairingCleanupHandle(): PairingCleanupHandle? =
-        pendingPairingCleanup.value?.let(::PairingCleanupHandle)
-
     internal fun completePendingPairingCleanup(handle: PairingCleanupHandle): Boolean {
         if (pendingPairingCleanup.value !== handle.token) return false
         clearPendingPairing(handle.token)
@@ -178,22 +194,39 @@ public class CompanionFacade internal constructor(
 
     internal fun abandonPendingPairingCleanup(handle: PairingCleanupHandle): Boolean {
         if (pendingPairingCleanup.value !== handle.token) return false
-        clearPendingPairing(handle.token)
-        coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+        if (clearPendingPairing(handle.token)) {
+            coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+        }
         return clearPairingCleanup(handle.token)
     }
 
-    internal fun completeRecoveredPairingCleanup(): Unit = discardAllPendingPairing()
+    /**
+     * Establishes a non-destructive cleanup barrier before recovery state is inspected.
+     *
+     * A concurrent admission either loses its final ownership check or observes this marker, so
+     * recovered cleanup can never silently delete a replacement attempt after the barrier exists.
+     * Existing root authority is changed only after the journal proves cleanup is required, or
+     * when abandoning an attempt that was already pending when the barrier was claimed.
+     */
+    internal fun claimRecoveredPairingCleanup(): PairingCleanupHandle? =
+        claimRecoveredPairingCleanup(afterPendingObservedAbsent = {})
 
-    internal fun discardPendingPairingWithoutMaterial(): Boolean {
-        val discarded = clearPendingPairingAttempt()
-        if (discarded) coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
-        return discarded
-    }
-
-    private fun discardAllPendingPairing() {
-        clearPendingPairing()
-        coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+    internal fun claimRecoveredPairingCleanup(afterPendingObservedAbsent: () -> Unit): PairingCleanupHandle? {
+        while (true) {
+            pendingPairingCleanup.value?.let { token ->
+                return PairingCleanupHandle(token)
+            }
+            if (pendingPairingAttempt.value != null) return null
+            afterPendingObservedAbsent()
+            val token = Any()
+            if (pendingPairingCleanup.compareAndSet(expect = null, update = token)) {
+                if (pendingPairingAttempt.value == null) {
+                    return PairingCleanupHandle(token)
+                }
+                clearPairingCleanup(token)
+                return null
+            }
+        }
     }
 
     internal suspend fun <T> withPairingConnectionOwnership(operation: suspend () -> T): T {
@@ -205,12 +238,12 @@ public class CompanionFacade internal constructor(
         }
     }
 
-    public fun pairingFlow(): PairingFlow = PairingFlow(this)
+    public fun pairingFlow(): PairingFlow = PairingFlow(pairingSessionAdapter)
 
-    public fun pairingFlow(clock: Clock): PairingFlow = PairingFlow(this, clock)
+    public fun pairingFlow(clock: Clock): PairingFlow = PairingFlow(pairingSessionAdapter, clock)
 
     public fun pairingConnection(configuration: PairingConnectionConfiguration): PairingConnection =
-        PairingConnection.create(this, configuration)
+        PairingConnection.create(pairingSessionAdapter, configuration)
 
     public fun lock(): CompanionTransitionOutcome {
         val cancelledUnregisteredPairing = clearPendingPairingAttempt()

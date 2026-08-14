@@ -77,16 +77,19 @@ rules without carrying private configuration.
 The current `:core:model`, `:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and
 `:androidApp` modules are the first migration state, not the final boundary. Create target modules
 only when moving or adding real production code. `:core:model` owns `ExactDecimal` plus its
-characterization assets. The first feature extraction places secret-free Pairing submission
-contracts in domain and the pure UDF reducer in presentation, while `:shared` retains its stable
-Swift-facing adapter, strict decoder, and orchestration until the data seams are ready.
+characterization assets. Pairing domain owns the secret-free submission contract plus opaque
+session/attempt ports, and presentation owns the pure UDF reducer. The stable Swift-facing
+`PairingFlow` and `PairingConnection` consume those ports rather than depending directly on
+`CompanionFacade`; a non-exported adapter scoped to one facade supplies their current implementation.
+Strict decoding and transport remain in `:shared` until their lower-level dependencies move.
 
 ```text
 mobile/
 ├── core/
 │   ├── common/              # KMP primitives, clocks, result/error contracts
 │   ├── model/               # KMP cross-feature domain value types
-│   ├── network/             # KMP Ktor boundary and protocol infrastructure
+│   ├── protocol/            # strict wire vocabulary, DTO envelopes, boundary mapping
+│   ├── network/             # KMP Ktor execution and platform-engine boundary
 │   ├── database/            # KMP Room database, migrations, internal entities/DAOs
 │   ├── security-api/        # KMP ports; no platform implementation
 │   └── testing/             # reusable test fixtures, never a production dependency
@@ -134,6 +137,10 @@ Rules:
   feature's data, DI, ViewModel, or internal UI package is forbidden.
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
   placed there merely because both platforms need them.
+- Pairing session and attempt capabilities are opaque and scoped to the adapter instance that issued
+  them. They have no material getter, are never persisted or logged, and stale or foreign
+  capabilities fail closed. Recovery claims its cleanup barrier before deleting key or record
+  material so a concurrently admitted replacement attempt cannot be removed silently.
 - Dependency cycles are forbidden. A new exception requires an ADR rather than a Gradle workaround.
 
 ## Clean Architecture layers
@@ -335,12 +342,15 @@ Rules for the final system and its implementation:
 
 Do not perform a big-bang package move. Use this order:
 
-1. Add convention plugins and extract stable core model/network/security contracts. The reusable
-   KMP library convention and first `:core:model` leaf are in place; network and security contracts
-   remain in the umbrella until their own coherent slices move.
+1. Add convention plugins and extract stable core common/model/protocol/network/security contracts.
+   The reusable KMP library convention and first `:core:model` leaf are in place; common, protocol,
+   network, and security boundaries remain in the umbrella until their own coherent slices move.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
-   first domain contracts and pure presentation reducer are extracted; QR decoding, remote
-   registration, and facade-owned attempt coordination remain the next bounded seams.
+   submission/session/attempt domain contracts and pure presentation reducer are extracted.
+   `PairingFlow` and `PairingConnection` now use a facade-scoped port adapter, including the recovered
+   cleanup barrier. Extract the core leaves from step 1 before moving QR decoding and remote
+   registration into a real Pairing data module; do not add a placeholder module or a dependency on
+   `:shared` from data.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. Do not build the full component catalog yet.

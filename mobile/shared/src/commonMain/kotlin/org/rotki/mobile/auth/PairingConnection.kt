@@ -15,7 +15,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.PendingPairingLease
 import org.rotki.mobile.auth.protocol.DeviceLabel
@@ -48,6 +47,7 @@ import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolErrorAction
 import org.rotki.mobile.core.protocol.generated.ProtocolLifetimesSeconds
+import org.rotki.mobile.feature.pairing.domain.PairingAttemptPort
 
 public enum class PairingDevicePlatform(
     public val code: String,
@@ -94,51 +94,38 @@ public enum class PairingConnectionOutcome(
  * Calls are single-flight. Structured cancellation is always rethrown.
  */
 public class PairingConnection internal constructor(
-    private val facade: CompanionFacade,
+    private val attempts: PairingAttemptPort<PendingPairingLease, PairingCleanupHandle>,
     private val configuration: PairingConnectionConfiguration,
     private val protocolClient: PairingProtocolClient,
     private val retryPolicy: RetryPolicy,
     private val retryDelay: PairingRetryDelay,
 ) {
     public suspend fun connectPendingPairing(): PairingConnectionOutcome =
-        facade.withPairingConnectionOwnership(::connectSerialized)
+        attempts.withConnectionOwnership(::connectSerialized)
 
     /** Retries an incomplete fail-closed cleanup without starting any network request. */
     public suspend fun retryIncompleteCleanup(): PairingConnectionOutcome =
-        facade.withPairingConnectionOwnership {
-            val cleanup = facade.pendingPairingCleanupHandle()
+        attempts.withConnectionOwnership {
+            val cleanup =
+                attempts.claimRecoveredCleanup()
+                    ?: return@withConnectionOwnership PairingConnectionOutcome.NO_PENDING_PAIRING
             val journal = readCleanupJournal()
-            if (cleanup == null) {
-                return@withPairingConnectionOwnership when (journal) {
-                    PairingCleanupJournalReadOutcome.Clear -> {
-                        facade.discardPendingPairingWithoutMaterial()
-                        PairingConnectionOutcome.NO_PENDING_PAIRING
-                    }
-
-                    PairingCleanupJournalReadOutcome.CleanupRequired -> {
-                        if (cleanupAttemptMaterial()) {
-                            facade.completeRecoveredPairingCleanup()
-                            PairingConnectionOutcome.NO_PENDING_PAIRING
-                        } else {
-                            PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
-                        }
-                    }
-
-                    PairingCleanupJournalReadOutcome.Unavailable -> {
-                        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
-                    }
-                }
-            }
             when (journal) {
                 PairingCleanupJournalReadOutcome.Clear -> {
-                    facade.abandonPendingPairingCleanup(cleanup)
-                    PairingConnectionOutcome.NO_PENDING_PAIRING
+                    if (attempts.abandonCleanup(cleanup)) {
+                        PairingConnectionOutcome.NO_PENDING_PAIRING
+                    } else {
+                        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                    }
                 }
 
                 PairingCleanupJournalReadOutcome.CleanupRequired -> {
                     if (cleanupAttemptMaterial()) {
-                        facade.completePendingPairingCleanup(cleanup)
-                        PairingConnectionOutcome.NO_PENDING_PAIRING
+                        if (attempts.completeCleanup(cleanup)) {
+                            PairingConnectionOutcome.NO_PENDING_PAIRING
+                        } else {
+                            PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                        }
                     } else {
                         PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
                     }
@@ -155,19 +142,25 @@ public class PairingConnection internal constructor(
     override fun toString(): String = "PairingConnection(redacted)"
 
     private suspend fun connectSerialized(): PairingConnectionOutcome {
-        if (facade.hasPendingPairingCleanup()) {
+        if (attempts.hasPendingCleanup()) {
             return PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
         }
-        when (readCleanupJournal()) {
-            PairingCleanupJournalReadOutcome.Clear -> Unit
-
-            PairingCleanupJournalReadOutcome.CleanupRequired,
-            PairingCleanupJournalReadOutcome.Unavailable,
-            -> return PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
-        }
         val lease =
-            facade.takePendingPairingForConnection()
+            attempts.takePending()
                 ?: return PairingConnectionOutcome.NO_PENDING_PAIRING
+        val cleanupJournal =
+            try {
+                readCleanupJournal()
+            } catch (cancellation: CancellationException) {
+                withContext(NonCancellable) {
+                    attempts.abort(lease)
+                }
+                throw cancellation
+            }
+        if (cleanupJournal != PairingCleanupJournalReadOutcome.Clear) {
+            attempts.markCleanupRequired(lease)
+            return PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+        }
         var cleanupHandle: PairingCleanupHandle? = null
         var cleanupJournalStored = false
         var committed = false
@@ -178,7 +171,7 @@ public class PairingConnection internal constructor(
                     performRegistration(
                         lease = lease,
                         markCleanupRequired = {
-                            facade.markPairingCleanupRequired(lease)?.also { cleanup ->
+                            attempts.markCleanupRequired(lease)?.also { cleanup ->
                                 cleanupHandle = cleanup
                             } != null
                         },
@@ -200,13 +193,12 @@ public class PairingConnection internal constructor(
                         val cleanup = cleanupHandle
                         if (cleanup != null && cleanupJournalStored) {
                             if (cleanupAttemptMaterial()) {
-                                facade.completePendingPairingCleanup(cleanup)
-                                true
+                                attempts.completeCleanup(cleanup)
                             } else {
                                 false
                             }
                         } else if (cleanup == null) {
-                            facade.abortPendingPairing(lease)
+                            attempts.abort(lease)
                             true
                         } else {
                             false
@@ -422,7 +414,7 @@ public class PairingConnection internal constructor(
         if (configuration.pairingRecordStore.write(record) != PairingRecordWriteOutcome.Stored) {
             return PairingConnectionOutcome.LOCAL_STORAGE_UNAVAILABLE
         }
-        if (!gateAttempt(lease) || !facade.markPendingPairingDurable(lease)) {
+        if (!gateAttempt(lease) || !attempts.markDurable(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
         if (configuration.pairingCleanupJournal.clear() !=
@@ -430,7 +422,7 @@ public class PairingConnection internal constructor(
         ) {
             return PairingConnectionOutcome.LOCAL_STORAGE_UNAVAILABLE
         }
-        if (!facade.commitPendingPairing(lease)) {
+        if (!attempts.commit(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
         return PairingConnectionOutcome.REGISTERED
@@ -439,7 +431,7 @@ public class PairingConnection internal constructor(
     private suspend fun discoverWithRetry(lease: PendingPairingLease): DiscoverySequenceOutcome {
         var completedAttempts = 0
         while (true) {
-            if (!facade.isPendingPairing(lease)) {
+            if (!attempts.isCurrent(lease)) {
                 return DiscoverySequenceOutcome.AttemptUnavailable
             }
             if (lease.pairingQr.expiresAtEpochSeconds <= configuration.clock.nowEpochSeconds()) {
@@ -479,7 +471,7 @@ public class PairingConnection internal constructor(
                     completedAttempts = completedAttempts,
                     failure = retryFailure,
                     isActiveForeground = true,
-                    isCredentialAvailable = facade.isPendingPairing(lease),
+                    isCredentialAvailable = attempts.isCurrent(lease),
                 )
             when (decision) {
                 is RetryDecision.RetryAfter -> {
@@ -513,7 +505,7 @@ public class PairingConnection internal constructor(
     ): RegistrationSequenceOutcome {
         var completedAttempts = 0
         while (true) {
-            if (!facade.isPendingPairing(lease)) {
+            if (!attempts.isCurrent(lease)) {
                 return RegistrationSequenceOutcome.AttemptUnavailable
             }
             if (lease.pairingQr.expiresAtEpochSeconds <= configuration.clock.nowEpochSeconds()) {
@@ -551,7 +543,7 @@ public class PairingConnection internal constructor(
                     completedAttempts = completedAttempts,
                     failure = retryFailure,
                     isActiveForeground = true,
-                    isCredentialAvailable = facade.isPendingPairing(lease),
+                    isCredentialAvailable = attempts.isCurrent(lease),
                 )
             when (decision) {
                 is RetryDecision.RetryAfter -> {
@@ -595,17 +587,17 @@ public class PairingConnection internal constructor(
                 }
             val ownershipLoss =
                 async(start = CoroutineStart.UNDISPATCHED) {
-                    facade.awaitPendingPairingLoss(lease)
+                    attempts.awaitLoss(lease)
                 }
             val inFlight = async(start = CoroutineStart.UNDISPATCHED) { operation() }
             select {
                 inFlight.onAwait { value ->
                     visibilityChange.cancelAndJoin()
                     ownershipLoss.cancelAndJoin()
-                    if (isActiveForeground() && facade.isPendingPairing(lease)) {
+                    if (isActiveForeground() && attempts.isCurrent(lease)) {
                         LifecycleOperationOutcome.Completed(value)
                     } else {
-                        if (!facade.isPendingPairing(lease)) {
+                        if (!attempts.isCurrent(lease)) {
                             LifecycleOperationOutcome.Backgrounded
                         } else {
                             when (configuration.applicationVisibility.state.value) {
@@ -671,7 +663,7 @@ public class PairingConnection internal constructor(
 
     private suspend fun awaitActiveOrUnavailable(lease: PendingPairingLease): LifecycleGate {
         currentCoroutineContext().ensureActive()
-        if (!facade.isPendingPairing(lease)) return LifecycleGate.Unavailable
+        if (!attempts.isCurrent(lease)) return LifecycleGate.Unavailable
         return when (configuration.applicationVisibility.state.value) {
             ApplicationVisibilityState.ACTIVE_FOREGROUND -> {
                 LifecycleGate.Active
@@ -691,13 +683,13 @@ public class PairingConnection internal constructor(
                         }
                     val ownershipLoss =
                         async(start = CoroutineStart.UNDISPATCHED) {
-                            facade.awaitPendingPairingLoss(lease)
+                            attempts.awaitLoss(lease)
                         }
                     select {
                         visibility.onAwait { next ->
                             ownershipLoss.cancelAndJoin()
                             if (next == ApplicationVisibilityState.ACTIVE_FOREGROUND &&
-                                facade.isPendingPairing(lease)
+                                attempts.isCurrent(lease)
                             ) {
                                 LifecycleGate.Active
                             } else {
@@ -752,11 +744,11 @@ public class PairingConnection internal constructor(
 
     public companion object {
         internal fun create(
-            facade: CompanionFacade,
+            attempts: PairingAttemptPort<PendingPairingLease, PairingCleanupHandle>,
             configuration: PairingConnectionConfiguration,
         ): PairingConnection =
             PairingConnection(
-                facade = facade,
+                attempts = attempts,
                 configuration = configuration,
                 protocolClient = PairingProtocolClient(createPlatformCompanionHttpClient()),
                 retryPolicy = RetryPolicy(),

@@ -8,6 +8,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,7 @@ import org.rotki.mobile.core.protocol.ProtocolValueParseOutcome
 import org.rotki.mobile.core.protocol.X963PublicKey
 import org.rotki.mobile.core.protocol.generated.ProtocolHeaders
 import org.rotki.mobile.core.state.CompanionRootState
+import org.rotki.mobile.core.state.SnapshotCoverage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -96,6 +98,99 @@ class PairingConnectionTest {
                 assertEquals(0, fixture.store.deleteCalls)
             } finally {
                 connection.close()
+            }
+        }
+
+    @Test
+    fun `concurrent connections serialize one Pairing registration`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val postStarted = CompletableDeferred<Unit>()
+            val releasePost = CompletableDeferred<Unit>()
+            var discoveryCalls = 0
+            var registrationCalls = 0
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        discoveryCalls += 1
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        registrationCalls += 1
+                        postStarted.complete(Unit)
+                        releasePost.await()
+                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                    }
+                }
+            val ownerConnection = fixture.connection(engine)
+            val waiterConnection = fixture.connection(engine)
+            try {
+                val owner = async { ownerConnection.connectPendingPairing() }
+                postStarted.await()
+                val waiter = async { waiterConnection.connectPendingPairing() }
+                yield()
+
+                assertFalse(waiter.isCompleted)
+                assertEquals(1, discoveryCalls)
+                assertEquals(1, registrationCalls)
+
+                releasePost.complete(Unit)
+
+                assertEquals(PairingConnectionOutcome.REGISTERED, owner.await())
+                assertEquals(PairingConnectionOutcome.NO_PENDING_PAIRING, waiter.await())
+                assertEquals(1, discoveryCalls)
+                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.signer.createCalls)
+                assertEquals(1, fixture.events.count { event -> event == "write" })
+            } finally {
+                ownerConnection.close()
+                waiterConnection.close()
+            }
+        }
+
+    @Test
+    fun `cancelling a connection waiter does not affect its owner`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val postStarted = CompletableDeferred<Unit>()
+            val releasePost = CompletableDeferred<Unit>()
+            var discoveryCalls = 0
+            var registrationCalls = 0
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        discoveryCalls += 1
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        registrationCalls += 1
+                        postStarted.complete(Unit)
+                        releasePost.await()
+                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                    }
+                }
+            val ownerConnection = fixture.connection(engine)
+            val waiterConnection = fixture.connection(engine)
+            try {
+                val owner = async { ownerConnection.connectPendingPairing() }
+                postStarted.await()
+                val waiter = async { waiterConnection.connectPendingPairing() }
+                yield()
+
+                assertFalse(owner.isCompleted)
+                assertFalse(waiter.isCompleted)
+                waiter.cancelAndJoin()
+                assertTrue(waiter.isCancelled)
+                assertFalse(owner.isCompleted)
+
+                releasePost.complete(Unit)
+
+                assertEquals(PairingConnectionOutcome.REGISTERED, owner.await())
+                assertEquals(1, discoveryCalls)
+                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.signer.createCalls)
+                assertEquals(1, fixture.events.count { event -> event == "write" })
+            } finally {
+                ownerConnection.close()
+                waiterConnection.close()
             }
         }
 
@@ -530,6 +625,31 @@ class PairingConnectionTest {
         }
 
     @Test
+    fun `cancellation during journal preflight aborts the claimed attempt`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val readStarted = CompletableDeferred<Unit>()
+            fixture.cleanupJournal.beforeRead = {
+                readStarted.complete(Unit)
+                awaitCancellation()
+            }
+            val connection = fixture.connection(MockEngine { error("No network expected") })
+            try {
+                val operation = launch { connection.connectPendingPairing() }
+                readStarted.await()
+
+                operation.cancelAndJoin()
+
+                assertTrue(operation.isCancelled)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+                assertNull(fixture.facade.takePendingPairingForConnection())
+                assertFalse(fixture.facade.hasPendingPairingCleanup())
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
     fun `preflight cleanup recovery clears stale accepted qr and permits a fresh scan`(): Unit =
         runTest {
             val fixture = Fixture()
@@ -552,6 +672,92 @@ class PairingConnectionTest {
 
                 assertEquals(CompanionRootState.Connecting, fixture.facade.status.value.rootState)
                 assertNotNull(fixture.facade.takePendingPairingForConnection())
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
+    fun `cleanup retry claims its barrier before suspending journal inspection`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            fixture.facade.lock()
+            fixture.cleanupJournal.cleanupRequired = true
+            val readStarted = CompletableDeferred<Unit>()
+            val releaseRead = CompletableDeferred<Unit>()
+            fixture.cleanupJournal.beforeRead = {
+                readStarted.complete(Unit)
+                releaseRead.await()
+            }
+            val connection = fixture.connection(MockEngine { error("No network expected") })
+            try {
+                val recovery = async { connection.retryIncompleteCleanup() }
+                readStarted.await()
+
+                val fresh = fixture.facade.pairingFlow(fixture.clock)
+                fresh.startScanning()
+                fresh.submitQr(validQr())
+
+                assertEquals(PairingUiState.SCANNING, fresh.presentation.value.state)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+                assertNull(fixture.facade.takePendingPairingForConnection())
+
+                releaseRead.complete(Unit)
+                assertEquals(PairingConnectionOutcome.NO_PENDING_PAIRING, recovery.await())
+
+                fresh.submitQr(validQr())
+                assertEquals(PairingUiState.CONNECTING, fresh.presentation.value.state)
+                assertEquals(CompanionRootState.Connecting, fixture.facade.status.value.rootState)
+                assertNotNull(fixture.facade.takePendingPairingForConnection())
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
+    fun `clear cleanup journal leaves restored pairing authority unchanged`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val restored = CompanionFacade.restorePaired(SnapshotCoverage.Complete)
+            val connection = fixture.connection(MockEngine { error("No network expected") }, restored)
+            try {
+                assertEquals(
+                    PairingConnectionOutcome.NO_PENDING_PAIRING,
+                    connection.retryIncompleteCleanup(),
+                )
+                assertEquals(CompanionRootState.DeviceLocked, restored.status.value.rootState)
+                assertFalse(restored.hasPendingPairingCleanup())
+                assertEquals(0, fixture.signer.deleteCalls)
+                assertEquals(0, fixture.store.deleteCalls)
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
+    fun `unavailable cleanup journal keeps restored pairing authority fail closed`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            fixture.cleanupJournal.readOutcomeOverride = PairingCleanupJournalReadOutcome.Unavailable
+            val restored = CompanionFacade.restorePaired(SnapshotCoverage.Degraded)
+            val connection = fixture.connection(MockEngine { error("No network expected") }, restored)
+            try {
+                assertEquals(
+                    PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
+                    connection.retryIncompleteCleanup(),
+                )
+                assertEquals(CompanionRootState.DeviceLocked, restored.status.value.rootState)
+                assertTrue(restored.hasPendingPairingCleanup())
+                assertEquals(0, fixture.signer.deleteCalls)
+                assertEquals(0, fixture.store.deleteCalls)
+
+                fixture.cleanupJournal.readOutcomeOverride = PairingCleanupJournalReadOutcome.Clear
+                assertEquals(
+                    PairingConnectionOutcome.NO_PENDING_PAIRING,
+                    connection.retryIncompleteCleanup(),
+                )
+                assertEquals(CompanionRootState.DeviceLocked, restored.status.value.rootState)
+                assertFalse(restored.hasPendingPairingCleanup())
             } finally {
                 connection.close()
             }
@@ -706,9 +912,12 @@ class PairingConnectionTest {
             assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
         }
 
-        fun connection(engine: MockEngine): PairingConnection =
+        fun connection(
+            engine: MockEngine,
+            facade: CompanionFacade = this.facade,
+        ): PairingConnection =
             PairingConnection(
-                facade = facade,
+                attempts = CompanionPairingSessionAdapter(facade),
                 configuration = configuration(),
                 protocolClient = PairingProtocolClient(createCompanionHttpClient(engine)),
                 retryPolicy = RetryPolicy { 0L },
@@ -814,13 +1023,16 @@ class PairingConnectionTest {
             PairingCleanupJournalWriteOutcome.Stored
         var clearOutcome: PairingCleanupJournalClearOutcome =
             PairingCleanupJournalClearOutcome.Cleared
+        var beforeRead: suspend () -> Unit = {}
 
-        override suspend fun read(): PairingCleanupJournalReadOutcome =
-            readOutcomeOverride ?: if (cleanupRequired) {
+        override suspend fun read(): PairingCleanupJournalReadOutcome {
+            beforeRead()
+            return readOutcomeOverride ?: if (cleanupRequired) {
                 PairingCleanupJournalReadOutcome.CleanupRequired
             } else {
                 PairingCleanupJournalReadOutcome.Clear
             }
+        }
 
         override suspend fun markCleanupRequired(): PairingCleanupJournalWriteOutcome {
             events += "mark_cleanup"

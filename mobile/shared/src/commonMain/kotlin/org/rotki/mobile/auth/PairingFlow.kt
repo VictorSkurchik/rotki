@@ -4,14 +4,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.auth.protocol.PairingQr
 import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
 import org.rotki.mobile.auth.protocol.PairingQrParser
 import org.rotki.mobile.auth.protocol.PairingQrRejection
 import org.rotki.mobile.core.ports.Clock
-import org.rotki.mobile.core.state.CompanionRootState
-import org.rotki.mobile.core.state.CompanionTransitionOutcome
+import org.rotki.mobile.feature.pairing.domain.PairingAdmission
+import org.rotki.mobile.feature.pairing.domain.PairingSessionPort
 import org.rotki.mobile.feature.pairing.domain.PairingSubmissionGateway
 import org.rotki.mobile.feature.pairing.domain.PairingSubmissionOutcome
 import org.rotki.mobile.feature.pairing.domain.PairingSubmissionRejection
@@ -65,16 +64,16 @@ public class PairingPresentation internal constructor(
  * context. It never becomes part of the public presentation state.
  */
 public class PairingFlow internal constructor(
-    private val facade: CompanionFacade,
+    private val session: PairingSessionPort<PairingQr>,
     private val parser: PairingQrParser,
 ) {
-    internal constructor(facade: CompanionFacade, clock: Clock) : this(
-        facade = facade,
+    internal constructor(session: PairingSessionPort<PairingQr>, clock: Clock) : this(
+        session = session,
         parser = PairingQrParser(clock),
     )
 
-    internal constructor(facade: CompanionFacade) : this(
-        facade = facade,
+    internal constructor(session: PairingSessionPort<PairingQr>) : this(
+        session = session,
         clock = Clock { KotlinClock.System.now().epochSeconds },
     )
 
@@ -84,7 +83,7 @@ public class PairingFlow internal constructor(
         MutableStateFlow(
             PairingReducer
                 .initial(
-                    sessionIsConnecting = facade.status.value.rootState == CompanionRootState.Connecting,
+                    sessionIsConnecting = session.isConnecting(),
                 ).toPublicPresentation(),
         )
 
@@ -111,7 +110,7 @@ public class PairingFlow internal constructor(
     public fun reset(): Unit =
         dispatch(
             PairingAction.Reset(
-                sessionIsUnpaired = facade.status.value.rootState == CompanionRootState.Unpaired,
+                sessionIsUnpaired = session.isUnpaired(),
             ),
         )
 
@@ -137,10 +136,9 @@ public class PairingFlow internal constructor(
         }
 
     private fun acceptQr(pairingQr: PairingQr): PairingSubmissionOutcome =
-        if (facade.acceptPairing(pairingQr) is CompanionTransitionOutcome.Applied) {
-            PairingSubmissionOutcome.Accepted
-        } else {
-            PairingSubmissionOutcome.Ignored
+        when (session.admit(pairingQr)) {
+            PairingAdmission.ACCEPTED -> PairingSubmissionOutcome.Accepted
+            PairingAdmission.IGNORED -> PairingSubmissionOutcome.Ignored
         }
 }
 
