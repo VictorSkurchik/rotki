@@ -21,7 +21,7 @@ class AndroidSnapshotStorageInstrumentedTest {
     private lateinit var keyStore: AndroidSnapshotKeyStore
 
     @Before
-    fun setUp(): Unit {
+    fun setUp() {
         snapshotFile = AtomicSnapshotFile(context)
         keyStore = AndroidSnapshotKeyStore(context)
         snapshotFile.delete()
@@ -29,51 +29,55 @@ class AndroidSnapshotStorageInstrumentedTest {
     }
 
     @After
-    fun tearDown(): Unit {
+    fun tearDown() {
         snapshotFile.delete()
         keyStore.delete()
     }
 
     @Test
-    fun noBackupFileContainsOnlyBoundedVersionedCiphertext(): Unit {
+    fun noBackupFileContainsOnlyBoundedVersionedCiphertext() {
         val knownPlaintext = "known portfolio plaintext must not be stored".toByteArray()
-        val envelope = SnapshotEnvelope(
-            initializationVector = ByteArray(12) { index -> (index + 1).toByte() },
-            ciphertextAndTag = ByteArray(48) { index -> (index + 70).toByte() },
-        )
+        val envelope =
+            SnapshotEnvelope(
+                initializationVector = ByteArray(12) { index -> (index + 1).toByte() },
+                ciphertextAndTag = ByteArray(48) { index -> (index + 70).toByte() },
+            )
         assertTrue(snapshotFile.replace(SnapshotEnvelopeCodec.encode(envelope)))
 
         val path = snapshotFile.baseFileForTest().canonicalPath
         assertTrue(path.startsWith(context.noBackupFilesDir.canonicalPath))
         assertFalse(snapshotFile.baseFileForTest().readBytes().containsSubsequence(knownPlaintext))
-        val decoded = SnapshotEnvelopeCodec.decode(
-            (snapshotFile.read() as AtomicSnapshotReadOutcome.Present).bytesCopy(),
-        )
+        val decoded =
+            SnapshotEnvelopeCodec.decode(
+                (snapshotFile.read() as AtomicSnapshotReadOutcome.Present).bytesCopy(),
+            )
         assertArrayEquals(envelope.initializationVectorCopy(), decoded.initializationVectorCopy())
         assertArrayEquals(envelope.ciphertextAndTagCopy(), decoded.ciphertextAndTagCopy())
     }
 
     @Test
-    fun interruptedReplacementRetainsLastGoodEnvelope(): Unit {
+    fun interruptedReplacementRetainsLastGoodEnvelope() {
         val lastGood = SnapshotEnvelope(ByteArray(12) { 1 }, ByteArray(48) { 2 })
         val interrupted = SnapshotEnvelope(ByteArray(12) { 3 }, ByteArray(48) { 4 })
         assertTrue(snapshotFile.replace(SnapshotEnvelopeCodec.encode(lastGood)))
 
         snapshotFile.leaveInterruptedWriteForTest(SnapshotEnvelopeCodec.encode(interrupted))
 
-        val recovered = SnapshotEnvelopeCodec.decode(
-            (snapshotFile.read() as AtomicSnapshotReadOutcome.Present).bytesCopy(),
-        )
+        val recovered =
+            SnapshotEnvelopeCodec.decode(
+                (snapshotFile.read() as AtomicSnapshotReadOutcome.Present).bytesCopy(),
+            )
         assertArrayEquals(lastGood.initializationVectorCopy(), recovered.initializationVectorCopy())
         assertArrayEquals(lastGood.ciphertextAndTagCopy(), recovered.ciphertextAndTagCopy())
     }
 
     @Test
-    fun corruptStoredEnvelopeIsRejectedWithoutReturningBytes(): Unit {
+    fun corruptStoredEnvelopeIsRejectedWithoutReturningBytes() {
         val valid = SnapshotEnvelope(ByteArray(12) { 1 }, ByteArray(48) { 2 })
-        val corrupt = SnapshotEnvelopeCodec.encode(valid).also { bytes ->
-            bytes[0] = 'X'.code.toByte()
-        }
+        val corrupt =
+            SnapshotEnvelopeCodec.encode(valid).also { bytes ->
+                bytes[0] = 'X'.code.toByte()
+            }
         assertTrue(snapshotFile.replace(corrupt))
 
         val stored = snapshotFile.read() as AtomicSnapshotReadOutcome.Present
@@ -84,10 +88,11 @@ class AndroidSnapshotStorageInstrumentedTest {
     }
 
     @Test
-    fun cleanDeviceWithoutStrongEnrollmentRefusesKeyCreation(): Unit {
-        val availability = BiometricManager.from(context).canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG,
-        )
+    fun cleanDeviceWithoutStrongEnrollmentRefusesKeyCreation() {
+        val availability =
+            BiometricManager.from(context).canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG,
+            )
         assertTrue(Build.VERSION.SDK_INT >= 28)
         assertTrue(availability != BiometricManager.BIOMETRIC_SUCCESS)
         assertFalse(keyStore.createForPairing())

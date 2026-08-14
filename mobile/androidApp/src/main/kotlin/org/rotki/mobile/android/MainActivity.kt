@@ -33,47 +33,51 @@ class MainActivity : FragmentActivity() {
     private lateinit var securityComposition: AndroidSecurityComposition
     private lateinit var pairingViewModel: PairingViewModel
 
-    private val cameraPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
-            pairingViewModel.startScanning()
-        } else {
-            pairingViewModel.cameraPermissionDenied()
+    private val cameraPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                pairingViewModel.startScanning()
+            } else {
+                pairingViewModel.cameraPermissionDenied()
+            }
         }
-    }
 
-    private val localNetworkPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) {
-            pairingViewModel.localNetworkPermissionGranted()
-        } else {
-            pairingViewModel.localNetworkPermissionRequired()
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                pairingViewModel.localNetworkPermissionGranted()
+            } else {
+                pairingViewModel.localNetworkPermissionRequired()
+            }
         }
-    }
 
-    override fun onCreate(savedInstanceState: Bundle?): Unit {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         securityComposition = AndroidSecurityComposition.get(applicationContext)
-        pairingViewModel = ViewModelProvider(
-            this,
-            PairingViewModel.Factory(
-                facade = securityComposition.facade,
-                clock = AndroidEpochClock,
-                pairingConnection = securityComposition.pairingConnection,
-                cleanupConnector = securityComposition::retryIncompletePairingCleanup,
-                initialConnectionState =
-                    securityComposition.initialPairingConnectionState,
-            ),
-        )[PairingViewModel::class.java]
+        pairingViewModel =
+            ViewModelProvider(
+                this,
+                PairingViewModel.Factory(
+                    facade = securityComposition.facade,
+                    clock = AndroidEpochClock,
+                    pairingConnection = securityComposition.pairingConnection,
+                    cleanupConnector = securityComposition::retryIncompletePairingCleanup,
+                    initialConnectionState =
+                        securityComposition.initialPairingConnectionState,
+                ),
+            )[PairingViewModel::class.java]
         securityComposition.attachActivity(
             activity = this,
-            promptCopy = AndroidBiometricPromptCopy(
-                title = getString(R.string.biometric_snapshot_title),
-                subtitle = getString(R.string.biometric_snapshot_subtitle),
-                cancel = getString(R.string.biometric_cancel),
-            ),
+            promptCopy =
+                AndroidBiometricPromptCopy(
+                    title = getString(R.string.biometric_snapshot_title),
+                    subtitle = getString(R.string.biometric_snapshot_subtitle),
+                    cancel = getString(R.string.biometric_cancel),
+                ),
         )
         setContent {
             val status by securityComposition.facade.status.collectAsStateWithLifecycle()
@@ -127,21 +131,21 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    override fun onResume(): Unit {
+    override fun onResume() {
         super.onResume()
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         securityComposition.lifecycleController.onResume()
         pairingViewModel.onForeground()
     }
 
-    override fun onPause(): Unit {
+    override fun onPause() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         securityComposition.lifecycleController.onPause()
         pairingViewModel.onInactive()
         super.onPause()
     }
 
-    override fun onStop(): Unit {
+    override fun onStop() {
         if (!isChangingConfigurations) {
             securityComposition.lifecycleController.onBackgroundOrSystemLock()
             pairingViewModel.onBackground()
@@ -149,14 +153,14 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
-    override fun onDestroy(): Unit {
+    override fun onDestroy() {
         if (::securityComposition.isInitialized) {
             securityComposition.detachActivity(this)
         }
         super.onDestroy()
     }
 
-    private fun requestCameraAndScan(): Unit {
+    private fun requestCameraAndScan() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -167,7 +171,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun submitQrWithLocalNetworkPermission(rawPayload: String): Unit {
+    private fun submitQrWithLocalNetworkPermission(rawPayload: String) {
         if (requiresLocalNetworkPermission()) {
             pairingViewModel.localNetworkPermissionRequired()
             localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
@@ -176,7 +180,7 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun requestLocalNetworkPermission(): Unit {
+    private fun requestLocalNetworkPermission() {
         if (requiresLocalNetworkPermission()) {
             localNetworkPermissionLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
         } else {
@@ -187,13 +191,14 @@ class MainActivity : FragmentActivity() {
     private fun requiresLocalNetworkPermission(): Boolean =
         AndroidLocalNetworkPermissionPolicy.requiresRuntimePermission(
             sdkInt = Build.VERSION.SDK_INT,
-            permissionGranted = ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_LOCAL_NETWORK,
-            ) == PackageManager.PERMISSION_GRANTED,
+            permissionGranted =
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_LOCAL_NETWORK,
+                ) == PackageManager.PERMISSION_GRANTED,
         )
 
-    private fun openApplicationSettings(): Unit {
+    private fun openApplicationSettings() {
         startActivity(
             Intent(
                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,

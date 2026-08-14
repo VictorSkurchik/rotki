@@ -10,7 +10,7 @@ import org.rotki.mobile.core.ports.SecureSnapshotWriteOutcome
 
 class CompanionLifecycleControllerTest {
     @Test
-    fun `inactive suspends without discarding local data`(): Unit {
+    fun `inactive suspends without discarding local data`() {
         val fixture = Fixture()
 
         fixture.controller.onResume()
@@ -21,7 +21,7 @@ class CompanionLifecycleControllerTest {
     }
 
     @Test
-    fun `background locks and discards before returning`(): Unit {
+    fun `background locks and discards before returning`() {
         val fixture = Fixture()
         fixture.controller.onResume()
 
@@ -40,13 +40,14 @@ class CompanionLifecycleControllerTest {
     private class Fixture {
         val effects = mutableListOf<String>()
         val visibility = AndroidApplicationVisibility()
-        val controller = CompanionLifecycleController(
-            visibility = visibility,
-            snapshotStore = RecordingSnapshotStore(effects),
-            lockCompanion = { effects += "lock" },
-            cancelPendingAuthentication = { effects += "cancel_authentication" },
-            discardAdditionalPlaintext = { effects += "discard_ui" },
-        )
+        val controller =
+            CompanionLifecycleController(
+                visibility = visibility,
+                snapshotStore = RecordingSnapshotStore(effects),
+                lockCompanion = { effects += "lock" },
+                cancelPendingAuthentication = { effects += "cancel_authentication" },
+                discardAdditionalPlaintext = { effects += "discard_ui" },
+            )
     }
 
     private class RecordingSnapshotStore(
@@ -58,10 +59,9 @@ class CompanionLifecycleControllerTest {
         override suspend fun replace(document: ByteArray): SecureSnapshotWriteOutcome =
             SecureSnapshotWriteOutcome.Unavailable
 
-        override suspend fun delete(): SecureSnapshotDeleteOutcome =
-            SecureSnapshotDeleteOutcome.Deleted
+        override suspend fun delete(): SecureSnapshotDeleteOutcome = SecureSnapshotDeleteOutcome.Deleted
 
-        override fun discardPlaintext(): Unit {
+        override fun discardPlaintext() {
             effects += "discard_snapshot"
         }
     }

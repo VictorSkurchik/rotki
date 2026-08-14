@@ -4,7 +4,9 @@ import org.rotki.mobile.core.protocol.P1363Signature
 import org.rotki.mobile.core.protocol.X963PublicKey
 
 public sealed interface DeviceProofPublicKeyOutcome {
-    public data class PublicKey(public val value: X963PublicKey) : DeviceProofPublicKeyOutcome
+    public data class PublicKey(
+        public val value: X963PublicKey,
+    ) : DeviceProofPublicKeyOutcome
 
     public data object PairingRequired : DeviceProofPublicKeyOutcome
 
@@ -12,7 +14,9 @@ public sealed interface DeviceProofPublicKeyOutcome {
 }
 
 public sealed interface DeviceProofSigningOutcome {
-    public data class Signed(public val signature: P1363Signature) : DeviceProofSigningOutcome
+    public data class Signed(
+        public val signature: P1363Signature,
+    ) : DeviceProofSigningOutcome
 
     public data object DeviceAuthenticationCancelled : DeviceProofSigningOutcome
 

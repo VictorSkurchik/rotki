@@ -11,9 +11,10 @@ public object ExactDecimalStringSerializer : KSerializer<ExactDecimal> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("ExactDecimal", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: ExactDecimal): Unit =
-        encoder.encodeString(value.toString())
+    override fun serialize(
+        encoder: Encoder,
+        value: ExactDecimal,
+    ): Unit = encoder.encodeString(value.toString())
 
-    override fun deserialize(decoder: Decoder): ExactDecimal =
-        ExactDecimal.parse(decoder.decodeString())
+    override fun deserialize(decoder: Decoder): ExactDecimal = ExactDecimal.parse(decoder.decodeString())
 }

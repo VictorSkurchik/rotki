@@ -7,25 +7,27 @@ import kotlin.test.assertIs
 
 class EngineOriginTest {
     @Test
-    fun acceptsCanonicalHttpsOriginsAndDerivesBothEndpoints(): Unit {
-        val defaultPort = assertIs<EngineOriginParseOutcome.Accepted>(
-            EngineOrigin.parse("https://rotki.example"),
-        ).origin
+    fun acceptsCanonicalHttpsOriginsAndDerivesBothEndpoints() {
+        val defaultPort =
+            assertIs<EngineOriginParseOutcome.Accepted>(
+                EngineOrigin.parse("https://rotki.example"),
+            ).origin
         assertEquals("https://rotki.example", defaultPort.canonical)
         assertEquals("https://rotki.example/api/1", defaultPort.restApiBase)
         assertEquals("wss://rotki.example/ws", defaultPort.webSocketEndpoint)
         assertEquals("EngineOrigin(redacted)", defaultPort.toString())
         assertFalse(defaultPort.toString().contains("rotki.example"))
 
-        val explicitPort = assertIs<EngineOriginParseOutcome.Accepted>(
-            EngineOrigin.parse("https://192.0.2.1:8443"),
-        ).origin
+        val explicitPort =
+            assertIs<EngineOriginParseOutcome.Accepted>(
+                EngineOrigin.parse("https://192.0.2.1:8443"),
+            ).origin
         assertEquals("https://192.0.2.1:8443/api/1", explicitPort.restApiBase)
         assertEquals("wss://192.0.2.1:8443/ws", explicitPort.webSocketEndpoint)
     }
 
     @Test
-    fun rejectsAnythingOtherThanAnExactCanonicalOrigin(): Unit {
+    fun rejectsAnythingOtherThanAnExactCanonicalOrigin() {
         listOf(
             "",
             "http://rotki.example",
@@ -55,7 +57,7 @@ class EngineOriginTest {
     }
 
     @Test
-    fun reportsSecurityRelevantRejectionCategoriesWithoutEchoingInput(): Unit {
+    fun reportsSecurityRelevantRejectionCategoriesWithoutEchoingInput() {
         assertEquals(
             EngineOriginRejection.DEFAULT_PORT_FORBIDDEN,
             assertIs<EngineOriginParseOutcome.Rejected>(

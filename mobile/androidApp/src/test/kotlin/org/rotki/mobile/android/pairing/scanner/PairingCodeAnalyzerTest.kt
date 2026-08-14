@@ -1,13 +1,13 @@
 package org.rotki.mobile.android.pairing.scanner
 
 import androidx.camera.core.ImageProxy
-import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.lang.reflect.Proxy
 
 class PairingCodeAnalyzerTest {
     @Test
-    fun `keeps frame open until asynchronous decoding completes`(): Unit {
+    fun `keeps frame open until asynchronous decoding completes`() {
         val decoder = FakeFrameDecoder()
         val fixture = Fixture(decoder)
 
@@ -19,7 +19,7 @@ class PairingCodeAnalyzerTest {
     }
 
     @Test
-    fun `closes a frame exactly once when a decoder completes more than once`(): Unit {
+    fun `closes a frame exactly once when a decoder completes more than once`() {
         val decoder = FakeFrameDecoder()
         val fixture = Fixture(decoder)
         fixture.analyzer.analyze(fixture.image)
@@ -33,7 +33,7 @@ class PairingCodeAnalyzerTest {
     }
 
     @Test
-    fun `closes a frame and reports a redacted failure when decoder throws`(): Unit {
+    fun `closes a frame and reports a redacted failure when decoder throws`() {
         val fixture = Fixture(ThrowingFrameDecoder())
 
         fixture.analyzer.analyze(fixture.image)
@@ -54,26 +54,28 @@ class PairingCodeAnalyzerTest {
         val failures = mutableListOf<PairingCodeScannerFailure>()
         val image: ImageProxy = recordingImageProxy { closeCount += 1 }
         private val deliveryGate = PairingCodeDeliveryGate().apply { activate() }
-        val analyzer = PairingCodeAnalyzer(
-            decoder = decoder,
-            deliveryGate = deliveryGate,
-            onPairingCode = delivered::add,
-            onFailure = failures::add,
-        )
+        val analyzer =
+            PairingCodeAnalyzer(
+                decoder = decoder,
+                deliveryGate = deliveryGate,
+                onPairingCode = delivered::add,
+                onFailure = failures::add,
+            )
     }
 
     @Test
-    fun `late asynchronous result after scanner stop is discarded and frame closes`(): Unit {
+    fun `late asynchronous result after scanner stop is discarded and frame closes`() {
         val decoder = FakeFrameDecoder()
         val gate = PairingCodeDeliveryGate().apply { activate() }
         var closeCount = 0
         val delivered = mutableListOf<String>()
-        val analyzer = PairingCodeAnalyzer(
-            decoder = decoder,
-            deliveryGate = gate,
-            onPairingCode = delivered::add,
-            onFailure = {},
-        )
+        val analyzer =
+            PairingCodeAnalyzer(
+                decoder = decoder,
+                deliveryGate = gate,
+                onPairingCode = delivered::add,
+                onFailure = {},
+            )
 
         analyzer.analyze(recordingImageProxy { closeCount += 1 })
         gate.deactivate()
@@ -84,17 +86,18 @@ class PairingCodeAnalyzerTest {
     }
 
     @Test
-    fun `late decoder failure after scanner stop is discarded and frame closes`(): Unit {
+    fun `late decoder failure after scanner stop is discarded and frame closes`() {
         val decoder = FakeFrameDecoder()
         val gate = PairingCodeDeliveryGate().apply { activate() }
         var closeCount = 0
         val failures = mutableListOf<PairingCodeScannerFailure>()
-        val analyzer = PairingCodeAnalyzer(
-            decoder = decoder,
-            deliveryGate = gate,
-            onPairingCode = {},
-            onFailure = failures::add,
-        )
+        val analyzer =
+            PairingCodeAnalyzer(
+                decoder = decoder,
+                deliveryGate = gate,
+                onPairingCode = {},
+                onFailure = failures::add,
+            )
 
         analyzer.analyze(recordingImageProxy { closeCount += 1 })
         gate.deactivate()
@@ -110,11 +113,11 @@ class PairingCodeAnalyzerTest {
         override fun decode(
             frame: ImageProxy,
             complete: (PairingFrameDecodeResult) -> Unit,
-        ): Unit {
+        ) {
             completion = complete
         }
 
-        fun complete(result: PairingFrameDecodeResult): Unit {
+        fun complete(result: PairingFrameDecodeResult) {
             checkNotNull(completion)(result)
         }
 
@@ -132,18 +135,19 @@ class PairingCodeAnalyzerTest {
 
     private companion object {
         fun recordingImageProxy(onClose: () -> Unit): ImageProxy {
-            val proxy = Proxy.newProxyInstance(
-                ImageProxy::class.java.classLoader,
-                arrayOf(ImageProxy::class.java),
-            ) { instance, method, arguments ->
-                when (method.name) {
-                    "close" -> onClose()
-                    "toString" -> "RecordingImageProxy"
-                    "hashCode" -> System.identityHashCode(instance)
-                    "equals" -> instance === arguments?.firstOrNull()
-                    else -> error("Unexpected ImageProxy call: ${method.name}")
+            val proxy =
+                Proxy.newProxyInstance(
+                    ImageProxy::class.java.classLoader,
+                    arrayOf(ImageProxy::class.java),
+                ) { instance, method, arguments ->
+                    when (method.name) {
+                        "close" -> onClose()
+                        "toString" -> "RecordingImageProxy"
+                        "hashCode" -> System.identityHashCode(instance)
+                        "equals" -> instance === arguments?.firstOrNull()
+                        else -> error("Unexpected ImageProxy call: ${method.name}")
+                    }
                 }
-            }
             return checkNotNull(ImageProxy::class.java.cast(proxy))
         }
     }

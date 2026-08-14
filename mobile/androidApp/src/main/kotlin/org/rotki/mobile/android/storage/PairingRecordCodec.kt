@@ -1,15 +1,17 @@
 package org.rotki.mobile.android.storage
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import org.rotki.mobile.core.ports.PairingRecord
 import org.rotki.mobile.core.protocol.DeviceSessionId
 import org.rotki.mobile.core.protocol.EngineOrigin
 import org.rotki.mobile.core.protocol.EngineOriginParseOutcome
 import org.rotki.mobile.core.protocol.ProtocolValueParseOutcome
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 internal sealed interface PairingRecordDecodeOutcome {
-    data class Accepted(val record: PairingRecord) : PairingRecordDecodeOutcome
+    data class Accepted(
+        val record: PairingRecord,
+    ) : PairingRecordDecodeOutcome
 
     data object Rejected : PairingRecordDecodeOutcome
 }
@@ -22,12 +24,13 @@ internal object PairingRecordCodec {
     private const val HEADER_BYTES: Int = 4 + 1 + Short.SIZE_BYTES + 1
     private const val MAX_ORIGIN_BYTES: Int = 2_048
     private const val DEVICE_SESSION_ID_BYTES: Int = 43
-    private val magic: ByteArray = byteArrayOf(
-        'R'.code.toByte(),
-        'K'.code.toByte(),
-        'P'.code.toByte(),
-        'R'.code.toByte(),
-    )
+    private val magic: ByteArray =
+        byteArrayOf(
+            'R'.code.toByte(),
+            'K'.code.toByte(),
+            'P'.code.toByte(),
+            'R'.code.toByte(),
+        )
 
     fun encode(record: PairingRecord): ByteArray {
         val origin = record.engineOrigin.canonical.toByteArray(Charsets.US_ASCII)
@@ -36,7 +39,8 @@ internal object PairingRecordCodec {
         require(deviceSessionId.size == DEVICE_SESSION_ID_BYTES) {
             "Device Session ID has an invalid encoded length"
         }
-        return ByteBuffer.allocate(HEADER_BYTES + origin.size + deviceSessionId.size)
+        return ByteBuffer
+            .allocate(HEADER_BYTES + origin.size + deviceSessionId.size)
             .order(ByteOrder.BIG_ENDIAN)
             .put(magic)
             .put(VERSION.toByte())
@@ -67,16 +71,19 @@ internal object PairingRecordCodec {
         val originBytes = ByteArray(originSize).also(input::get)
         val deviceSessionIdBytes = ByteArray(deviceSessionIdSize).also(input::get)
         val originText = originBytes.strictAsciiOrNull() ?: return PairingRecordDecodeOutcome.Rejected
-        val deviceSessionIdText = deviceSessionIdBytes.strictAsciiOrNull()
-            ?: return PairingRecordDecodeOutcome.Rejected
-        val origin = when (val parsed = EngineOrigin.parse(originText)) {
-            is EngineOriginParseOutcome.Accepted -> parsed.origin
-            is EngineOriginParseOutcome.Rejected -> return PairingRecordDecodeOutcome.Rejected
-        }
-        val deviceSessionId = when (val parsed = DeviceSessionId.parse(deviceSessionIdText)) {
-            is ProtocolValueParseOutcome.Accepted -> parsed.value
-            is ProtocolValueParseOutcome.Rejected -> return PairingRecordDecodeOutcome.Rejected
-        }
+        val deviceSessionIdText =
+            deviceSessionIdBytes.strictAsciiOrNull()
+                ?: return PairingRecordDecodeOutcome.Rejected
+        val origin =
+            when (val parsed = EngineOrigin.parse(originText)) {
+                is EngineOriginParseOutcome.Accepted -> parsed.origin
+                is EngineOriginParseOutcome.Rejected -> return PairingRecordDecodeOutcome.Rejected
+            }
+        val deviceSessionId =
+            when (val parsed = DeviceSessionId.parse(deviceSessionIdText)) {
+                is ProtocolValueParseOutcome.Accepted -> parsed.value
+                is ProtocolValueParseOutcome.Rejected -> return PairingRecordDecodeOutcome.Rejected
+            }
         return PairingRecordDecodeOutcome.Accepted(PairingRecord(origin, deviceSessionId))
     }
 

@@ -14,22 +14,32 @@ internal object StrictJsonIntSerializer : KSerializer<Int> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("StrictJsonInt", PrimitiveKind.INT)
 
-    override fun deserialize(decoder: Decoder): Int = decoder.strictJsonInteger()
-        .toIntOrNull()
-        ?: throw SerializationException("Integer is outside the Int range")
+    override fun deserialize(decoder: Decoder): Int =
+        decoder
+            .strictJsonInteger()
+            .toIntOrNull()
+            ?: throw SerializationException("Integer is outside the Int range")
 
-    override fun serialize(encoder: Encoder, value: Int): Unit = encoder.encodeInt(value)
+    override fun serialize(
+        encoder: Encoder,
+        value: Int,
+    ): Unit = encoder.encodeInt(value)
 }
 
 internal object StrictJsonLongSerializer : KSerializer<Long> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("StrictJsonLong", PrimitiveKind.LONG)
 
-    override fun deserialize(decoder: Decoder): Long = decoder.strictJsonInteger()
-        .toLongOrNull()
-        ?: throw SerializationException("Integer is outside the Long range")
+    override fun deserialize(decoder: Decoder): Long =
+        decoder
+            .strictJsonInteger()
+            .toLongOrNull()
+            ?: throw SerializationException("Integer is outside the Long range")
 
-    override fun serialize(encoder: Encoder, value: Long): Unit = encoder.encodeLong(value)
+    override fun serialize(
+        encoder: Encoder,
+        value: Long,
+    ): Unit = encoder.encodeLong(value)
 }
 
 internal object StrictJsonBooleanSerializer : KSerializer<Boolean> {
@@ -46,7 +56,10 @@ internal object StrictJsonBooleanSerializer : KSerializer<Boolean> {
         }
     }
 
-    override fun serialize(encoder: Encoder, value: Boolean): Unit = encoder.encodeBoolean(value)
+    override fun serialize(
+        encoder: Encoder,
+        value: Boolean,
+    ): Unit = encoder.encodeBoolean(value)
 }
 
 private fun Decoder.strictJsonInteger(): String {

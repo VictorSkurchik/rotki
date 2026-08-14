@@ -21,35 +21,42 @@ class CompanionTransitionFixtureTest {
         transitions.forEach { element ->
             val case = element.jsonObject
             val id = case.string("id")
-            val event = assertNotNull(
-                CompanionTransitionEvent.fromCode(case.string("stimulus")),
-                id,
-            )
+            val event =
+                assertNotNull(
+                    CompanionTransitionEvent.fromCode(case.string("stimulus")),
+                    id,
+                )
             observedEvents += event
             val expectedTarget = rootState(case.string("to"))
-            val expectedEffects = CompanionTransitionEffects(
-                deviceSession = DeviceSessionEffect.entries.single {
-                    effect -> effect.code == case.string("device_session_effect")
-                },
-                snapshot = SnapshotEffect.entries.single {
-                    effect -> effect.code == case.string("snapshot_effect")
-                },
-                bearer = BearerEffect.entries.single {
-                    effect -> effect.code == case.string("bearer_effect")
-                },
-            )
+            val expectedEffects =
+                CompanionTransitionEffects(
+                    deviceSession =
+                        DeviceSessionEffect.entries.single { effect ->
+                            effect.code == case.string("device_session_effect")
+                        },
+                    snapshot =
+                        SnapshotEffect.entries.single { effect ->
+                            effect.code == case.string("snapshot_effect")
+                        },
+                    bearer =
+                        BearerEffect.entries.single { effect ->
+                            effect.code == case.string("bearer_effect")
+                        },
+                )
             assertTrue(case.string("recovery") in RECOVERY_CODES, "$id recovery")
 
             case.getValue("from").jsonArray.forEach { sourceElement ->
                 val source = rootState(sourceElement.jsonPrimitive.content)
-                val coordinator = CompanionCoordinator(
-                    CompanionStatus(source, initialCoverage(source)),
-                )
+                val coordinator =
+                    CompanionCoordinator(
+                        CompanionStatus(source, initialCoverage(source)),
+                    )
 
-                val applied = assertIs<CompanionTransitionOutcome.Applied>(
-                    coordinator.transition(event),
-                    "$id from ${source.code}",
-                )
+                val applied =
+                    assertIs<CompanionTransitionOutcome.Applied>(
+                        coordinator.transition(event),
+                        "$id from ${source.code}",
+                    )
 
                 assertEquals(expectedTarget, applied.status.rootState, id)
                 assertEquals(expectedEffects, applied.effects, id)
@@ -67,32 +74,36 @@ class CompanionTransitionFixtureTest {
 private fun rootState(code: String): CompanionRootState =
     CompanionRootState.entries.single { state -> state.code == code }
 
-private fun initialCoverage(state: CompanionRootState): SnapshotCoverage = when (state) {
-    CompanionRootState.Unpaired,
-    CompanionRootState.Revoked,
-    -> SnapshotCoverage.Absent
-    CompanionRootState.Degraded -> SnapshotCoverage.Degraded
-    else -> SnapshotCoverage.Complete
-}
+private fun initialCoverage(state: CompanionRootState): SnapshotCoverage =
+    when (state) {
+        CompanionRootState.Unpaired,
+        CompanionRootState.Revoked,
+        -> SnapshotCoverage.Absent
+
+        CompanionRootState.Degraded -> SnapshotCoverage.Degraded
+
+        else -> SnapshotCoverage.Complete
+    }
 
 private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
 
-private val RECOVERY_CODES: Set<String> = setOf(
-    "authenticate_device",
-    "complete_pairing",
-    "discover_and_prove",
-    "discover_prove_and_reconcile",
-    "none",
-    "observe_refresh",
-    "open_bound_profile",
-    "pair_again",
-    "prove_device",
-    "prove_device_to_classify",
-    "refresh_or_use_full_client",
-    "renew_and_reconcile",
-    "request_challenge",
-    "retry_transport",
-    "scan_pairing",
-    "unlock_full_client",
-    "upgrade_engine",
-)
+private val RECOVERY_CODES: Set<String> =
+    setOf(
+        "authenticate_device",
+        "complete_pairing",
+        "discover_and_prove",
+        "discover_prove_and_reconcile",
+        "none",
+        "observe_refresh",
+        "open_bound_profile",
+        "pair_again",
+        "prove_device",
+        "prove_device_to_classify",
+        "refresh_or_use_full_client",
+        "renew_and_reconcile",
+        "request_challenge",
+        "retry_transport",
+        "scan_pairing",
+        "unlock_full_client",
+        "upgrade_engine",
+    )

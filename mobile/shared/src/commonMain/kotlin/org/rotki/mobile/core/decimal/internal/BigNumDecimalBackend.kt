@@ -9,7 +9,6 @@ import kotlin.math.absoluteValue
 internal class BigNumDecimalBackend private constructor(
     private val value: BigDecimal,
 ) : Comparable<BigNumDecimalBackend> {
-
     internal fun add(other: BigNumDecimalBackend): BigNumDecimalBackend =
         checked(value.add(other.value, DecimalMode.DEFAULT))
 
@@ -34,17 +33,17 @@ internal class BigNumDecimalBackend private constructor(
 
     internal fun canonicalString(): String = canonicalize(value)
 
-    internal fun canonicalScale(): Int =
-        canonicalString().substringAfter('.', missingDelimiterValue = "").length
+    internal fun canonicalScale(): Int = canonicalString().substringAfter('.', missingDelimiterValue = "").length
 
     internal fun toDisplayString(fractionDigits: Int): String {
         if (fractionDigits !in 0..MAX_DISPLAY_FRACTION_DIGITS) {
             fail(ExactDecimalErrorCode.INVALID_SCALE)
         }
-        val rounded = value.roundToDigitPositionAfterDecimalPoint(
-            fractionDigits.toLong(),
-            RoundingMode.ROUND_HALF_TO_EVEN,
-        )
+        val rounded =
+            value.roundToDigitPositionAfterDecimalPoint(
+                fractionDigits.toLong(),
+                RoundingMode.ROUND_HALF_TO_EVEN,
+            )
         val canonical = canonicalize(rounded)
         if (fractionDigits == 0) {
             return canonical.substringBefore('.')
@@ -56,8 +55,7 @@ internal class BigNumDecimalBackend private constructor(
 
     override fun compareTo(other: BigNumDecimalBackend): Int = value.compare(other.value)
 
-    override fun equals(other: Any?): Boolean =
-        other is BigNumDecimalBackend && compareTo(other) == 0
+    override fun equals(other: Any?): Boolean = other is BigNumDecimalBackend && compareTo(other) == 0
 
     override fun hashCode(): Int = value.hashCode()
 
@@ -68,13 +66,15 @@ internal class BigNumDecimalBackend private constructor(
         private const val MAX_CANONICAL_LENGTH: Int = 2048
         private const val MAX_DISPLAY_FRACTION_DIGITS: Int = 30
 
-        private val DECIMAL_PATTERN = Regex(
-            pattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?",
-        )
-        private val NON_FINITE_PATTERN = Regex(
-            pattern = "[+-]?(?:nan|snan|inf|infinity)",
-            option = RegexOption.IGNORE_CASE,
-        )
+        private val DECIMAL_PATTERN =
+            Regex(
+                pattern = "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?",
+            )
+        private val NON_FINITE_PATTERN =
+            Regex(
+                pattern = "[+-]?(?:nan|snan|inf|infinity)",
+                option = RegexOption.IGNORE_CASE,
+            )
 
         internal fun parse(raw: String): BigNumDecimalBackend {
             if (raw.length > MAX_INPUT_LENGTH) {
@@ -88,11 +88,12 @@ internal class BigNumDecimalBackend private constructor(
             }
             enforceExponentRange(raw)
 
-            val parsed = try {
-                BigDecimal.parseStringWithMode(raw)
-            } catch (_: ArithmeticException) {
-                fail(ExactDecimalErrorCode.INVALID_SYNTAX)
-            }
+            val parsed =
+                try {
+                    BigDecimal.parseStringWithMode(raw)
+                } catch (_: ArithmeticException) {
+                    fail(ExactDecimalErrorCode.INVALID_SYNTAX)
+                }
             return checked(parsed)
         }
 
@@ -101,8 +102,9 @@ internal class BigNumDecimalBackend private constructor(
             if (marker < 0) {
                 return
             }
-            val exponent = raw.substring(marker + 1).toLongOrNull()
-                ?: fail(ExactDecimalErrorCode.RANGE_EXCEEDED)
+            val exponent =
+                raw.substring(marker + 1).toLongOrNull()
+                    ?: fail(ExactDecimalErrorCode.RANGE_EXCEEDED)
             if (exponent == Long.MIN_VALUE || exponent.absoluteValue > MAX_ABSOLUTE_EXPONENT) {
                 fail(ExactDecimalErrorCode.RANGE_EXCEEDED)
             }
@@ -128,7 +130,10 @@ internal class BigNumDecimalBackend private constructor(
          * Keep this candidate bug behind the backend and calculate the 78-digit quotient
          * from the exact integer ratio instead.
          */
-        private fun divideHalfEven(dividend: BigDecimal, divisor: BigDecimal): BigDecimal {
+        private fun divideHalfEven(
+            dividend: BigDecimal,
+            divisor: BigDecimal,
+        ): BigDecimal {
             if (dividend.isZero()) {
                 return BigDecimal.ZERO
             }
@@ -137,11 +142,12 @@ internal class BigNumDecimalBackend private constructor(
             val numeratorDigits = numerator.numberOfDecimalDigits()
             val denominatorDigits = denominator.numberOfDecimalDigits()
             val digitDelta = numeratorDigits - denominatorDigits
-            val normalizedComparison = if (digitDelta >= 0) {
-                numerator.compare(denominator * BigInteger.TEN.pow(digitDelta))
-            } else {
-                (numerator * BigInteger.TEN.pow(-digitDelta)).compare(denominator)
-            }
+            val normalizedComparison =
+                if (digitDelta >= 0) {
+                    numerator.compare(denominator * BigInteger.TEN.pow(digitDelta))
+                } else {
+                    (numerator * BigInteger.TEN.pow(-digitDelta)).compare(denominator)
+                }
             val ratioExponent = if (normalizedComparison < 0) digitDelta - 1 else digitDelta
             val scalePower = MAX_SIGNIFICANT_DIGITS.toLong() - 1 - ratioExponent
             check(scalePower >= 0) { "ExactDecimal division scale unexpectedly became negative" }
@@ -149,8 +155,9 @@ internal class BigNumDecimalBackend private constructor(
             val scaledNumerator = numerator * BigInteger.TEN.pow(scalePower)
             val quotientAndRemainder = scaledNumerator divrem denominator
             var quotient = quotientAndRemainder.quotient
-            val remainderComparison = (quotientAndRemainder.remainder * BigInteger.TWO)
-                .compare(denominator)
+            val remainderComparison =
+                (quotientAndRemainder.remainder * BigInteger.TWO)
+                    .compare(denominator)
             val quotientIsOdd = !(quotient % BigInteger.TWO).isZero()
             if (remainderComparison > 0 || (remainderComparison == 0 && quotientIsOdd)) {
                 quotient++
@@ -194,12 +201,13 @@ internal class BigNumDecimalBackend private constructor(
             return if (digits.isEmpty()) 1 else digits.length
         }
 
-        private fun fail(code: ExactDecimalErrorCode): Nothing =
-            throw ExactDecimalException(code)
+        private fun fail(code: ExactDecimalErrorCode): Nothing = throw ExactDecimalException(code)
     }
 }
 
-internal enum class ExactDecimalErrorCode(internal val wireValue: String) {
+internal enum class ExactDecimalErrorCode(
+    internal val wireValue: String,
+) {
     DIVISION_BY_ZERO("division_by_zero"),
     INVALID_SCALE("invalid_scale"),
     INVALID_SYNTAX("invalid_syntax"),

@@ -1,8 +1,8 @@
 package org.rotki.mobile.core.network
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,10 +12,11 @@ import kotlin.test.assertNull
 
 class CompanionJsonTest {
     @Test
-    fun ignoresAdditiveMembersButRequiresEveryDeclaredMember(): Unit {
-        val decoded = CompanionJson.decodeFromString<StrictFixture>(
-            """{"required":"present","required_nullable":null,"future":true}""",
-        )
+    fun ignoresAdditiveMembersButRequiresEveryDeclaredMember() {
+        val decoded =
+            CompanionJson.decodeFromString<StrictFixture>(
+                """{"required":"present","required_nullable":null,"future":true}""",
+            )
         assertEquals("present", decoded.required)
         assertNull(decoded.requiredNullable)
 
@@ -25,13 +26,14 @@ class CompanionJsonTest {
     }
 
     @Test
-    fun rejectsLenientJsonAndDoesNotEmbedSourceInDiagnostics(): Unit {
+    fun rejectsLenientJsonAndDoesNotEmbedSourceInDiagnostics() {
         val secretMarker = "must-not-enter-diagnostics"
-        val failure = assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<StrictFixture>(
-                """{"required":"$secretMarker","required_nullable":null,}""",
-            )
-        }
+        val failure =
+            assertFailsWith<SerializationException> {
+                CompanionJson.decodeFromString<StrictFixture>(
+                    """{"required":"$secretMarker","required_nullable":null,}""",
+                )
+            }
         assertFalse(failure.message.orEmpty().contains(secretMarker))
     }
 

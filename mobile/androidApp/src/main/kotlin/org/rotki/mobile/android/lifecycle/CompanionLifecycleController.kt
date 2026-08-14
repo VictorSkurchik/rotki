@@ -9,15 +9,15 @@ internal class CompanionLifecycleController(
     private val cancelPendingAuthentication: () -> Unit,
     private val discardAdditionalPlaintext: () -> Unit,
 ) {
-    fun onResume(): Unit {
+    fun onResume() {
         visibility.onActiveForeground()
     }
 
-    fun onPause(): Unit {
+    fun onPause() {
         visibility.onInactive()
     }
 
-    fun onBackgroundOrSystemLock(): Unit {
+    fun onBackgroundOrSystemLock() {
         visibility.onBackgroundOrLocked()
         lockCompanion()
         cancelPendingAuthentication()

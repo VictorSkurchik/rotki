@@ -14,10 +14,11 @@ internal fun encodeDeviceProofTranscript(
     val deviceBytes = deviceSessionId.bytesCopy()
     val challengeBytes = challenge.id.bytesCopy()
     val nonceBytes = challenge.nonce.bytesCopy()
-    val result = ByteArray(
-        DEVICE_PROOF_DOMAIN.size + 1 + 2 + origin.size +
-            deviceBytes.size + challengeBytes.size + nonceBytes.size + Long.SIZE_BYTES,
-    )
+    val result =
+        ByteArray(
+            DEVICE_PROOF_DOMAIN.size + 1 + 2 + origin.size +
+                deviceBytes.size + challengeBytes.size + nonceBytes.size + Long.SIZE_BYTES,
+        )
     var offset = 0
     offset = result.put(DEVICE_PROOF_DOMAIN, offset)
     result[offset++] = 0
@@ -34,7 +35,10 @@ internal fun encodeDeviceProofTranscript(
     return result
 }
 
-private fun ByteArray.put(value: ByteArray, at: Int): Int {
+private fun ByteArray.put(
+    value: ByteArray,
+    at: Int,
+): Int {
     value.copyInto(this, destinationOffset = at)
     return at + value.size
 }

@@ -24,23 +24,26 @@ internal class CameraXPairingCodeSource(
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val deliveryGate = PairingCodeDeliveryGate()
     private val decoder = MlKitQrFrameDecoder(mainExecutor)
-    private val preview = Preview.Builder().build().apply {
-        surfaceProvider = previewView.surfaceProvider
-    }
-    private val analysis = ImageAnalysis.Builder()
-        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .build()
-        .apply {
-            setAnalyzer(
-                analysisExecutor,
-                PairingCodeAnalyzer(
-                    decoder = decoder,
-                    deliveryGate = deliveryGate,
-                    onPairingCode = onPairingCode,
-                    onFailure = onFailure,
-                ),
-            )
+    private val preview =
+        Preview.Builder().build().apply {
+            surfaceProvider = previewView.surfaceProvider
         }
+    private val analysis =
+        ImageAnalysis
+            .Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .apply {
+                setAnalyzer(
+                    analysisExecutor,
+                    PairingCodeAnalyzer(
+                        decoder = decoder,
+                        deliveryGate = deliveryGate,
+                        onPairingCode = onPairingCode,
+                        onFailure = onFailure,
+                    ),
+                )
+            }
     private val providerFuture = ProcessCameraProvider.getInstance(context)
 
     private var provider: ProcessCameraProvider? = null
@@ -52,12 +55,13 @@ internal class CameraXPairingCodeSource(
         providerFuture.addListener(
             {
                 if (closed) return@addListener
-                provider = try {
-                    providerFuture.get()
-                } catch (_: Exception) {
-                    onFailure(PairingCodeScannerFailure.CAMERA_UNAVAILABLE)
-                    return@addListener
-                }
+                provider =
+                    try {
+                        providerFuture.get()
+                    } catch (_: Exception) {
+                        onFailure(PairingCodeScannerFailure.CAMERA_UNAVAILABLE)
+                        return@addListener
+                    }
                 if (startRequested) {
                     bindIfPossible()
                 }
@@ -66,20 +70,20 @@ internal class CameraXPairingCodeSource(
         )
     }
 
-    override fun start(): Unit {
+    override fun start() {
         if (closed || startRequested) return
         startRequested = true
         bindIfPossible()
     }
 
-    override fun stop(): Unit {
+    override fun stop() {
         if (!startRequested) return
         startRequested = false
         deliveryGate.deactivate()
         unbind()
     }
 
-    override fun restart(): Unit {
+    override fun restart() {
         if (closed) return
         deliveryGate.restart()
         if (startRequested && !bound) {
@@ -87,7 +91,7 @@ internal class CameraXPairingCodeSource(
         }
     }
 
-    override fun close(): Unit {
+    override fun close() {
         if (closed) return
         stop()
         closed = true
@@ -96,7 +100,7 @@ internal class CameraXPairingCodeSource(
         analysisExecutor.shutdown()
     }
 
-    private fun bindIfPossible(): Unit {
+    private fun bindIfPossible() {
         if (closed || !startRequested || bound) return
         if (
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
@@ -121,7 +125,7 @@ internal class CameraXPairingCodeSource(
         }
     }
 
-    private fun unbind(): Unit {
+    private fun unbind() {
         if (!bound) return
         provider?.unbind(preview, analysis)
         bound = false

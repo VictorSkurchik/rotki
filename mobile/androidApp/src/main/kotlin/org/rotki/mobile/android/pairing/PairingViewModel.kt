@@ -5,8 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.rotki.mobile.CompanionFacade
@@ -63,7 +63,7 @@ internal class PairingViewModel(
     val scannerRestartGeneration: StateFlow<Long> =
         mutableScannerRestartGeneration.asStateFlow()
 
-    fun startScanning(): Unit {
+    fun startScanning() {
         if (connectionJob?.isActive == true) return
         mutableConnectionState.value = PairingConnectionUiState.IDLE
         if (facade.status.value.rootState == CompanionRootState.Unpaired) {
@@ -76,12 +76,12 @@ internal class PairingViewModel(
 
     fun scannerUnavailable(): Unit = flow.scannerUnavailable()
 
-    fun localNetworkPermissionRequired(): Unit {
+    fun localNetworkPermissionRequired() {
         if (connectionJob?.isActive == true) return
         mutableConnectionState.value = PairingConnectionUiState.LOCAL_NETWORK_PERMISSION_REQUIRED
     }
 
-    fun localNetworkPermissionGranted(): Unit {
+    fun localNetworkPermissionGranted() {
         retryScanning()
         if (mutableConnectionState.value == PairingConnectionUiState.IDLE &&
             flow.presentation.value.state == PairingUiState.SCANNING
@@ -90,7 +90,7 @@ internal class PairingViewModel(
         }
     }
 
-    fun submitQr(rawPayload: String): Unit {
+    fun submitQr(rawPayload: String) {
         if (connectionJob?.isActive == true) return
         val previousState = flow.presentation.value.state
         flow.submitQr(rawPayload)
@@ -101,7 +101,7 @@ internal class PairingViewModel(
         }
     }
 
-    fun retryScanning(): Unit {
+    fun retryScanning() {
         if (connectionJob?.isActive == true) return
         mutableConnectionState.value = PairingConnectionUiState.IDLE
         if (facade.status.value.rootState == CompanionRootState.Unpaired) {
@@ -112,14 +112,14 @@ internal class PairingViewModel(
         }
     }
 
-    fun reset(): Unit {
+    fun reset() {
         if (connectionJob?.isActive == true) return
         cancelConnection()
         mutableConnectionState.value = PairingConnectionUiState.IDLE
         flow.reset()
     }
 
-    fun onForeground(): Unit {
+    fun onForeground() {
         if (connectionJob?.isActive == true) return
         if (mutableConnectionState.value == PairingConnectionUiState.REGISTERED ||
             mutableConnectionState.value == PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE ||
@@ -135,7 +135,7 @@ internal class PairingViewModel(
     // Keep the shared connection coroutine alive; it suspends network work at visibility loss.
     fun onInactive(): Unit = Unit
 
-    fun onBackground(): Unit {
+    fun onBackground() {
         // Visibility and facade lock are applied first. Keep an active shared job alive so it can
         // finish rollback and distinguish verified cleanup from a fail-closed cleanup outcome.
         if (connectionJob?.isActive == true) return
@@ -146,18 +146,20 @@ internal class PairingViewModel(
         flow.reset()
     }
 
-    fun retryConnection(): Unit {
+    fun retryConnection() {
         when (facade.status.value.rootState) {
             CompanionRootState.Unreachable -> facade.transportRestored()
+
             CompanionRootState.EngineLocked,
             CompanionRootState.Incompatible,
             CompanionRootState.ProfileMismatch,
             -> facade.retryResolvedEngineState()
+
             else -> Unit
         }
     }
 
-    fun retryIncompleteCleanup(): Unit {
+    fun retryIncompleteCleanup() {
         if (connectionJob?.isActive == true ||
             mutableConnectionState.value != PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
         ) {
@@ -165,53 +167,56 @@ internal class PairingViewModel(
         }
         val generation = ++connectionGeneration
         mutableConnectionState.value = PairingConnectionUiState.CLEANING_UP
-        connectionJob = viewModelScope.launch {
-            val outcome = try {
-                cleanupConnector.retry()
-            } catch (cancellation: CancellationException) {
-                if (connectionGeneration == generation) {
-                    mutableConnectionState.value =
-                        PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
+        connectionJob =
+            viewModelScope.launch {
+                val outcome =
+                    try {
+                        cleanupConnector.retry()
+                    } catch (cancellation: CancellationException) {
+                        if (connectionGeneration == generation) {
+                            mutableConnectionState.value =
+                                PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
+                        }
+                        throw cancellation
+                    } catch (_: Exception) {
+                        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                    }
+                if (connectionGeneration != generation) return@launch
+                if (outcome == PairingConnectionOutcome.NO_PENDING_PAIRING) {
+                    mutableConnectionState.value = PairingConnectionUiState.IDLE
+                    flow.reset()
+                } else {
+                    mutableConnectionState.value = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
                 }
-                throw cancellation
-            } catch (_: Exception) {
-                PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
             }
-            if (connectionGeneration != generation) return@launch
-            if (outcome == PairingConnectionOutcome.NO_PENDING_PAIRING) {
-                mutableConnectionState.value = PairingConnectionUiState.IDLE
-                flow.reset()
-            } else {
-                mutableConnectionState.value = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
-            }
-        }
     }
 
-    private fun launchPendingConnection(): Unit {
+    private fun launchPendingConnection() {
         if (connectionJob?.isActive == true) return
         val generation = ++connectionGeneration
         mutableConnectionState.value = PairingConnectionUiState.CONNECTING
-        connectionJob = viewModelScope.launch {
-            try {
-                val outcome = connector.connect()
-                if (connectionGeneration != generation) return@launch
-                mutableConnectionState.value = outcome.toUiState()
-                if (outcome != PairingConnectionOutcome.REGISTERED) {
-                    flow.reset()
+        connectionJob =
+            viewModelScope.launch {
+                try {
+                    val outcome = connector.connect()
+                    if (connectionGeneration != generation) return@launch
+                    mutableConnectionState.value = outcome.toUiState()
+                    if (outcome != PairingConnectionOutcome.REGISTERED) {
+                        flow.reset()
+                    }
+                } catch (cancellation: CancellationException) {
+                    if (connectionGeneration == generation &&
+                        facade.status.value.rootState == CompanionRootState.Unpaired
+                    ) {
+                        mutableConnectionState.value = PairingConnectionUiState.IDLE
+                        flow.reset()
+                    }
+                    throw cancellation
                 }
-            } catch (cancellation: CancellationException) {
-                if (connectionGeneration == generation &&
-                    facade.status.value.rootState == CompanionRootState.Unpaired
-                ) {
-                    mutableConnectionState.value = PairingConnectionUiState.IDLE
-                    flow.reset()
-                }
-                throw cancellation
             }
-        }
     }
 
-    private fun cancelConnection(): Unit {
+    private fun cancelConnection() {
         connectionGeneration += 1
         connectionJob?.cancel()
         connectionJob = null
@@ -238,26 +243,56 @@ internal class PairingViewModel(
     }
 }
 
-private fun PairingConnectionOutcome.toUiState(): PairingConnectionUiState = when (this) {
-    PairingConnectionOutcome.REGISTERED -> PairingConnectionUiState.REGISTERED
-    PairingConnectionOutcome.NO_PENDING_PAIRING,
-    PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND,
-    -> PairingConnectionUiState.IDLE
-    PairingConnectionOutcome.PAIRING_EXPIRED -> PairingConnectionUiState.PAIRING_EXPIRED
-    PairingConnectionOutcome.PAIRING_UNAVAILABLE -> PairingConnectionUiState.PAIRING_UNAVAILABLE
-    PairingConnectionOutcome.INCOMPATIBLE -> PairingConnectionUiState.INCOMPATIBLE
-    PairingConnectionOutcome.RATE_LIMITED -> PairingConnectionUiState.RATE_LIMITED
-    PairingConnectionOutcome.NETWORK_UNAVAILABLE -> PairingConnectionUiState.NETWORK_UNAVAILABLE
-    PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE ->
-        PairingConnectionUiState.LOCAL_SECURITY_UNAVAILABLE
-    PairingConnectionOutcome.LOCAL_STORAGE_UNAVAILABLE ->
-        PairingConnectionUiState.LOCAL_STORAGE_UNAVAILABLE
-    PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE ->
-        PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
-    PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE,
-    PairingConnectionOutcome.UNEXPECTED_FAILURE,
-    -> PairingConnectionUiState.UNEXPECTED
-}
+private fun PairingConnectionOutcome.toUiState(): PairingConnectionUiState =
+    when (this) {
+        PairingConnectionOutcome.REGISTERED -> {
+            PairingConnectionUiState.REGISTERED
+        }
+
+        PairingConnectionOutcome.NO_PENDING_PAIRING,
+        PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND,
+        -> {
+            PairingConnectionUiState.IDLE
+        }
+
+        PairingConnectionOutcome.PAIRING_EXPIRED -> {
+            PairingConnectionUiState.PAIRING_EXPIRED
+        }
+
+        PairingConnectionOutcome.PAIRING_UNAVAILABLE -> {
+            PairingConnectionUiState.PAIRING_UNAVAILABLE
+        }
+
+        PairingConnectionOutcome.INCOMPATIBLE -> {
+            PairingConnectionUiState.INCOMPATIBLE
+        }
+
+        PairingConnectionOutcome.RATE_LIMITED -> {
+            PairingConnectionUiState.RATE_LIMITED
+        }
+
+        PairingConnectionOutcome.NETWORK_UNAVAILABLE -> {
+            PairingConnectionUiState.NETWORK_UNAVAILABLE
+        }
+
+        PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE -> {
+            PairingConnectionUiState.LOCAL_SECURITY_UNAVAILABLE
+        }
+
+        PairingConnectionOutcome.LOCAL_STORAGE_UNAVAILABLE -> {
+            PairingConnectionUiState.LOCAL_STORAGE_UNAVAILABLE
+        }
+
+        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE -> {
+            PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE
+        }
+
+        PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE,
+        PairingConnectionOutcome.UNEXPECTED_FAILURE,
+        -> {
+            PairingConnectionUiState.UNEXPECTED
+        }
+    }
 
 internal object AndroidEpochClock : Clock {
     override fun nowEpochSeconds(): Long = System.currentTimeMillis() / 1_000L

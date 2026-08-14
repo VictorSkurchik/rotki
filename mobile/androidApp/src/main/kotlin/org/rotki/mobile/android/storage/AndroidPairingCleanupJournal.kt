@@ -2,10 +2,6 @@ package org.rotki.mobile.android.storage
 
 import android.content.Context
 import android.util.AtomicFile
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileNotFoundException
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -14,6 +10,10 @@ import org.rotki.mobile.core.ports.PairingCleanupJournal
 import org.rotki.mobile.core.ports.PairingCleanupJournalClearOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalReadOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalWriteOutcome
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
 
 /** Atomic, backup-excluded, secret-free journal for unfinished Pairing cleanup. */
 internal class AndroidPairingCleanupJournal private constructor(
@@ -25,20 +25,24 @@ internal class AndroidPairingCleanupJournal private constructor(
         AtomicFile(File(context.noBackupFilesDir, FILE_NAME)),
     )
 
-    override suspend fun read(): PairingCleanupJournalReadOutcome = operationMutex.withLock {
-        withContext(Dispatchers.IO) { readUnlocked() }
-    }
+    override suspend fun read(): PairingCleanupJournalReadOutcome =
+        operationMutex.withLock {
+            withContext(Dispatchers.IO) { readUnlocked() }
+        }
 
+    // AtomicFile must roll back its temporary write before propagating any unexpected runtime failure.
+    @Suppress("TooGenericExceptionCaught")
     override suspend fun markCleanupRequired(): PairingCleanupJournalWriteOutcome =
         operationMutex.withLock {
             withContext(Dispatchers.IO) {
-                val output = try {
-                    file.startWrite()
-                } catch (_: IOException) {
-                    return@withContext PairingCleanupJournalWriteOutcome.Unavailable
-                } catch (_: SecurityException) {
-                    return@withContext PairingCleanupJournalWriteOutcome.Unavailable
-                }
+                val output =
+                    try {
+                        file.startWrite()
+                    } catch (_: IOException) {
+                        return@withContext PairingCleanupJournalWriteOutcome.Unavailable
+                    } catch (_: SecurityException) {
+                        return@withContext PairingCleanupJournalWriteOutcome.Unavailable
+                    }
                 try {
                     output.write(MARKER)
                     file.finishWrite(output)
@@ -60,20 +64,21 @@ internal class AndroidPairingCleanupJournal private constructor(
             }
         }
 
-    override suspend fun clear(): PairingCleanupJournalClearOutcome = operationMutex.withLock {
-        withContext(Dispatchers.IO) {
-            try {
-                file.delete()
-            } catch (_: SecurityException) {
-                return@withContext PairingCleanupJournalClearOutcome.Unavailable
-            }
-            if (readUnlocked() == PairingCleanupJournalReadOutcome.Clear) {
-                PairingCleanupJournalClearOutcome.Cleared
-            } else {
-                PairingCleanupJournalClearOutcome.Unavailable
+    override suspend fun clear(): PairingCleanupJournalClearOutcome =
+        operationMutex.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    file.delete()
+                } catch (_: SecurityException) {
+                    return@withContext PairingCleanupJournalClearOutcome.Unavailable
+                }
+                if (readUnlocked() == PairingCleanupJournalReadOutcome.Clear) {
+                    PairingCleanupJournalClearOutcome.Cleared
+                } else {
+                    PairingCleanupJournalClearOutcome.Unavailable
+                }
             }
         }
-    }
 
     private fun readUnlocked(): PairingCleanupJournalReadOutcome {
         try {
@@ -89,18 +94,19 @@ internal class AndroidPairingCleanupJournal private constructor(
         return PairingCleanupJournalReadOutcome.CleanupRequired
     }
 
-    private fun readBounded(): ByteArray? = file.openRead().use { input ->
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        while (true) {
-            val count = input.read(buffer)
-            if (count == -1) break
-            if (count == 0) continue
-            if (output.size() > MAX_MARKER_BYTES - count) return null
-            output.write(buffer, 0, count)
+    private fun readBounded(): ByteArray? =
+        file.openRead().use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count == -1) break
+                if (count == 0) continue
+                if (output.size() > MAX_MARKER_BYTES - count) return null
+                output.write(buffer, 0, count)
+            }
+            output.toByteArray()
         }
-        output.toByteArray()
-    }
 
     internal fun baseFileForTest(): File = file.baseFile
 

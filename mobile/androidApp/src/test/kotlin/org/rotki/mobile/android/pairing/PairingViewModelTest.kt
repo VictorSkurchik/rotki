@@ -22,26 +22,28 @@ class PairingViewModelTest {
     private val mainDispatcher = UnconfinedTestDispatcher()
 
     @Before
-    fun setUp(): Unit {
+    fun setUp() {
         Dispatchers.setMain(mainDispatcher)
     }
 
     @After
-    fun tearDown(): Unit {
+    fun tearDown() {
         Dispatchers.resetMain()
     }
 
     @Test
-    fun `valid QR starts one connection and reports durable registration only`(): Unit {
+    fun `valid QR starts one connection and reports durable registration only`() {
         val facade = CompanionFacade()
         var connectionCalls = 0
-        val viewModel = viewModel(
-            facade = facade,
-            connector = PendingPairingConnector {
-                connectionCalls += 1
-                PairingConnectionOutcome.REGISTERED
-            },
-        )
+        val viewModel =
+            viewModel(
+                facade = facade,
+                connector =
+                    PendingPairingConnector {
+                        connectionCalls += 1
+                        PairingConnectionOutcome.REGISTERED
+                    },
+            )
 
         viewModel.startScanning()
         viewModel.submitQr(validQr())
@@ -54,7 +56,7 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `permission denial and retry remain explicit presentation states`(): Unit {
+    fun `permission denial and retry remain explicit presentation states`() {
         val viewModel = viewModel()
 
         viewModel.startScanning()
@@ -72,14 +74,16 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `local network permission gate retains no QR and starts a fresh scan`(): Unit {
+    fun `local network permission gate retains no QR and starts a fresh scan`() {
         var connectionCalls = 0
-        val viewModel = viewModel(
-            connector = PendingPairingConnector {
-                connectionCalls += 1
-                PairingConnectionOutcome.REGISTERED
-            },
-        )
+        val viewModel =
+            viewModel(
+                connector =
+                    PendingPairingConnector {
+                        connectionCalls += 1
+                        PairingConnectionOutcome.REGISTERED
+                    },
+            )
         viewModel.startScanning()
 
         viewModel.localNetworkPermissionRequired()
@@ -100,7 +104,7 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `foreground after camera permission dialog preserves denial UI`(): Unit {
+    fun `foreground after camera permission dialog preserves denial UI`() {
         val viewModel = viewModel()
         viewModel.startScanning()
         viewModel.cameraPermissionDenied()
@@ -113,7 +117,7 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `foreground after local network permission dialog preserves rescan UI`(): Unit {
+    fun `foreground after local network permission dialog preserves rescan UI`() {
         val viewModel = viewModel()
         viewModel.startScanning()
         viewModel.localNetworkPermissionRequired()
@@ -135,14 +139,16 @@ class PairingViewModelTest {
             val started = CompletableDeferred<Unit>()
             val resumedOutcome = CompletableDeferred<PairingConnectionOutcome>()
             var connectionCalls = 0
-            val viewModel = viewModel(
-                facade = facade,
-                connector = PendingPairingConnector {
-                    connectionCalls += 1
-                    started.complete(Unit)
-                    resumedOutcome.await()
-                },
-            )
+            val viewModel =
+                viewModel(
+                    facade = facade,
+                    connector =
+                        PendingPairingConnector {
+                            connectionCalls += 1
+                            started.complete(Unit)
+                            resumedOutcome.await()
+                        },
+                )
             viewModel.startScanning()
             viewModel.submitQr(validQr())
             started.await()
@@ -165,43 +171,47 @@ class PairingViewModelTest {
         }
 
     @Test
-    fun `background after lifecycle lock returns an unfinished attempt to intro`() = runTest {
-        val facade = CompanionFacade()
-        val started = CompletableDeferred<Unit>()
-        val backgroundOutcome = CompletableDeferred<PairingConnectionOutcome>()
-        var connectionCalls = 0
-        val viewModel = viewModel(
-            facade = facade,
-            connector = PendingPairingConnector {
-                connectionCalls += 1
-                started.complete(Unit)
-                backgroundOutcome.await()
-            },
-        )
-        viewModel.startScanning()
-        viewModel.submitQr(validQr())
-        started.await()
+    fun `background after lifecycle lock returns an unfinished attempt to intro`() =
+        runTest {
+            val facade = CompanionFacade()
+            val started = CompletableDeferred<Unit>()
+            val backgroundOutcome = CompletableDeferred<PairingConnectionOutcome>()
+            var connectionCalls = 0
+            val viewModel =
+                viewModel(
+                    facade = facade,
+                    connector =
+                        PendingPairingConnector {
+                            connectionCalls += 1
+                            started.complete(Unit)
+                            backgroundOutcome.await()
+                        },
+                )
+            viewModel.startScanning()
+            viewModel.submitQr(validQr())
+            started.await()
 
-        facade.lock()
-        viewModel.onBackground()
-        assertEquals(PairingConnectionUiState.CONNECTING, viewModel.connectionState.value)
+            facade.lock()
+            viewModel.onBackground()
+            assertEquals(PairingConnectionUiState.CONNECTING, viewModel.connectionState.value)
 
-        backgroundOutcome.complete(PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND)
-        viewModel.onForeground()
+            backgroundOutcome.complete(PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND)
+            viewModel.onForeground()
 
-        assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)
-        assertEquals(PairingUiState.INTRO, viewModel.presentation.value.state)
-        assertEquals(PairingConnectionUiState.IDLE, viewModel.connectionState.value)
-        assertEquals(1, connectionCalls)
-    }
+            assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)
+            assertEquals(PairingUiState.INTRO, viewModel.presentation.value.state)
+            assertEquals(PairingConnectionUiState.IDLE, viewModel.connectionState.value)
+            assertEquals(1, connectionCalls)
+        }
 
     @Test
-    fun `registered result survives inactive cover but is cleared after background lock`(): Unit {
+    fun `registered result survives inactive cover but is cleared after background lock`() {
         val facade = CompanionFacade()
-        val viewModel = viewModel(
-            facade = facade,
-            connector = PendingPairingConnector { PairingConnectionOutcome.REGISTERED },
-        )
+        val viewModel =
+            viewModel(
+                facade = facade,
+                connector = PendingPairingConnector { PairingConnectionOutcome.REGISTERED },
+            )
         viewModel.startScanning()
         viewModel.submitQr(validQr())
 
@@ -218,44 +228,49 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `incomplete cleanup stays fail closed through background and foreground`() = runTest {
-        val facade = CompanionFacade()
-        val started = CompletableDeferred<Unit>()
-        val backgroundOutcome = CompletableDeferred<PairingConnectionOutcome>()
-        val viewModel = viewModel(
-            facade = facade,
-            connector = PendingPairingConnector {
-                started.complete(Unit)
-                backgroundOutcome.await()
-            },
-        )
-        viewModel.startScanning()
-        viewModel.submitQr(validQr())
-        started.await()
+    fun `incomplete cleanup stays fail closed through background and foreground`() =
+        runTest {
+            val facade = CompanionFacade()
+            val started = CompletableDeferred<Unit>()
+            val backgroundOutcome = CompletableDeferred<PairingConnectionOutcome>()
+            val viewModel =
+                viewModel(
+                    facade = facade,
+                    connector =
+                        PendingPairingConnector {
+                            started.complete(Unit)
+                            backgroundOutcome.await()
+                        },
+                )
+            viewModel.startScanning()
+            viewModel.submitQr(validQr())
+            started.await()
 
-        facade.lock()
-        viewModel.onBackground()
-        assertEquals(PairingConnectionUiState.CONNECTING, viewModel.connectionState.value)
+            facade.lock()
+            viewModel.onBackground()
+            assertEquals(PairingConnectionUiState.CONNECTING, viewModel.connectionState.value)
 
-        backgroundOutcome.complete(PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE)
-        viewModel.onForeground()
+            backgroundOutcome.complete(PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE)
+            viewModel.onForeground()
 
-        assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)
-        assertEquals(
-            PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
-            viewModel.connectionState.value,
-        )
-        assertEquals(PairingUiState.INTRO, viewModel.presentation.value.state)
-    }
+            assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)
+            assertEquals(
+                PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
+                viewModel.connectionState.value,
+            )
+            assertEquals(PairingUiState.INTRO, viewModel.presentation.value.state)
+        }
 
     @Test
-    fun `cleanup retry unlocks only after shared proves local material absent`(): Unit {
-        val viewModel = viewModel(
-            cleanupConnector = PendingPairingCleanupConnector {
-                PairingConnectionOutcome.NO_PENDING_PAIRING
-            },
-            initialConnectionState = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
-        )
+    fun `cleanup retry unlocks only after shared proves local material absent`() {
+        val viewModel =
+            viewModel(
+                cleanupConnector =
+                    PendingPairingCleanupConnector {
+                        PairingConnectionOutcome.NO_PENDING_PAIRING
+                    },
+                initialConnectionState = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
+            )
 
         viewModel.retryIncompleteCleanup()
 
@@ -264,13 +279,15 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `failed cleanup retry remains fail closed`(): Unit {
-        val viewModel = viewModel(
-            cleanupConnector = PendingPairingCleanupConnector {
-                PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
-            },
-            initialConnectionState = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
-        )
+    fun `failed cleanup retry remains fail closed`() {
+        val viewModel =
+            viewModel(
+                cleanupConnector =
+                    PendingPairingCleanupConnector {
+                        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                    },
+                initialConnectionState = PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE,
+            )
 
         viewModel.retryIncompleteCleanup()
 
@@ -281,7 +298,7 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `connection outcomes map to coarse redacted UI states`(): Unit {
+    fun `connection outcomes map to coarse redacted UI states`() {
         listOf(
             PairingConnectionOutcome.PAIRING_EXPIRED to PairingConnectionUiState.PAIRING_EXPIRED,
             PairingConnectionOutcome.PAIRING_UNAVAILABLE to
@@ -310,7 +327,7 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `retry routes unreachable state through transport restoration`(): Unit {
+    fun `retry routes unreachable state through transport restoration`() {
         val facade = CompanionFacade()
         val pairing = facade.pairingFlow(Clock { NOW })
         pairing.startScanning()
@@ -324,15 +341,17 @@ class PairingViewModelTest {
     }
 
     @Test
-    fun `new scan recovers from a terminal connection failure without a spinner loop`(): Unit {
+    fun `new scan recovers from a terminal connection failure without a spinner loop`() {
         val facade = CompanionFacade()
-        val viewModel = viewModel(
-            facade = facade,
-            connector = PendingPairingConnector {
-                facade.lock()
-                PairingConnectionOutcome.NETWORK_UNAVAILABLE
-            },
-        )
+        val viewModel =
+            viewModel(
+                facade = facade,
+                connector =
+                    PendingPairingConnector {
+                        facade.lock()
+                        PairingConnectionOutcome.NETWORK_UNAVAILABLE
+                    },
+            )
         viewModel.startScanning()
         viewModel.submitQr(validQr())
         assertEquals(PairingConnectionUiState.NETWORK_UNAVAILABLE, viewModel.connectionState.value)
@@ -346,20 +365,23 @@ class PairingViewModelTest {
 
     private fun viewModel(
         facade: CompanionFacade = CompanionFacade(),
-        connector: PendingPairingConnector = PendingPairingConnector {
-            PairingConnectionOutcome.NO_PENDING_PAIRING
-        },
-        cleanupConnector: PendingPairingCleanupConnector = PendingPairingCleanupConnector {
-            PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
-        },
+        connector: PendingPairingConnector =
+            PendingPairingConnector {
+                PairingConnectionOutcome.NO_PENDING_PAIRING
+            },
+        cleanupConnector: PendingPairingCleanupConnector =
+            PendingPairingCleanupConnector {
+                PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+            },
         initialConnectionState: PairingConnectionUiState = PairingConnectionUiState.IDLE,
-    ): PairingViewModel = PairingViewModel(
-        facade = facade,
-        clock = Clock { NOW },
-        connector = connector,
-        cleanupConnector = cleanupConnector,
-        initialConnectionState = initialConnectionState,
-    )
+    ): PairingViewModel =
+        PairingViewModel(
+            facade = facade,
+            clock = Clock { NOW },
+            connector = connector,
+            cleanupConnector = cleanupConnector,
+            initialConnectionState = initialConnectionState,
+        )
 }
 
 private const val NOW: Long = 1_786_550_300L

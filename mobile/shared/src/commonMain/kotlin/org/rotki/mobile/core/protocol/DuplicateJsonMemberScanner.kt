@@ -2,35 +2,39 @@ package org.rotki.mobile.core.protocol
 
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 
-internal fun hasDuplicateJsonMember(text: String): Boolean = try {
-    DuplicateJsonMemberScanner(text).scan()
-    false
-} catch (_: DuplicateJsonMember) {
-    true
-} catch (_: IllegalArgumentException) {
-    false
-}
+internal fun hasDuplicateJsonMember(text: String): Boolean =
+    try {
+        DuplicateJsonMemberScanner(text).scan()
+        false
+    } catch (_: DuplicateJsonMember) {
+        true
+    } catch (_: IllegalArgumentException) {
+        false
+    }
 
-internal fun hasValidJsonSyntax(text: String): Boolean = try {
-    DuplicateJsonMemberScanner(text).scan()
-    true
-} catch (_: DuplicateJsonMember) {
-    true
-} catch (_: IllegalArgumentException) {
-    false
-}
+internal fun hasValidJsonSyntax(text: String): Boolean =
+    try {
+        DuplicateJsonMemberScanner(text).scan()
+        true
+    } catch (_: DuplicateJsonMember) {
+        true
+    } catch (_: IllegalArgumentException) {
+        false
+    }
 
-private class DuplicateJsonMemberScanner(private val text: String) {
+private class DuplicateJsonMemberScanner(
+    private val text: String,
+) {
     private var index: Int = 0
 
-    fun scan(): Unit {
+    fun scan() {
         skipWhitespace()
         scanValue(depth = 0)
         skipWhitespace()
         require(index == text.length)
     }
 
-    private fun scanValue(depth: Int): Unit {
+    private fun scanValue(depth: Int) {
         require(index < text.length)
         when (text[index]) {
             '{' -> scanObject(depth + 1)
@@ -43,7 +47,7 @@ private class DuplicateJsonMemberScanner(private val text: String) {
         }
     }
 
-    private fun scanObject(depth: Int): Unit {
+    private fun scanObject(depth: Int) {
         require(depth <= ProtocolClientInputLimits.MaximumJsonNestingDepth)
         index += 1
         skipWhitespace()
@@ -64,7 +68,7 @@ private class DuplicateJsonMemberScanner(private val text: String) {
         }
     }
 
-    private fun scanArray(depth: Int): Unit {
+    private fun scanArray(depth: Int) {
         require(depth <= ProtocolClientInputLimits.MaximumJsonNestingDepth)
         index += 1
         skipWhitespace()
@@ -86,11 +90,11 @@ private class DuplicateJsonMemberScanner(private val text: String) {
             when {
                 character == '"' -> return result.toString()
                 character == '\\' -> result.append(scanEscape())
-                character.code < 0x20 -> throw IllegalArgumentException()
+                character.code < 0x20 -> throw IllegalArgumentException("Unescaped JSON control character")
                 else -> result.append(character)
             }
         }
-        throw IllegalArgumentException()
+        throw IllegalArgumentException("Unterminated JSON string")
     }
 
     private fun scanEscape(): Char {
@@ -103,7 +107,7 @@ private class DuplicateJsonMemberScanner(private val text: String) {
             'r' -> '\r'
             't' -> '\t'
             'u' -> scanUnicodeEscape()
-            else -> throw IllegalArgumentException()
+            else -> throw IllegalArgumentException("Unsupported JSON escape sequence")
         }
     }
 
@@ -116,12 +120,12 @@ private class DuplicateJsonMemberScanner(private val text: String) {
         return value.toChar()
     }
 
-    private fun scanLiteral(literal: String): Unit {
+    private fun scanLiteral(literal: String) {
         require(text.regionMatches(index, literal, 0, literal.length))
         index += literal.length
     }
 
-    private fun scanNumber(): Unit {
+    private fun scanNumber() {
         val start = index
         consume('-')
         if (consume('0')) {
@@ -143,7 +147,7 @@ private class DuplicateJsonMemberScanner(private val text: String) {
         require(index > start)
     }
 
-    private fun skipWhitespace(): Unit {
+    private fun skipWhitespace() {
         while (index < text.length && text[index] in JSON_WHITESPACE) index += 1
     }
 
@@ -154,7 +158,7 @@ private class DuplicateJsonMemberScanner(private val text: String) {
     }
 }
 
-private fun Int?.orInvalidJson(): Int = this ?: throw IllegalArgumentException()
+private fun Int?.orInvalidJson(): Int = this ?: throw IllegalArgumentException("Invalid JSON Unicode escape")
 
 private data object DuplicateJsonMember : Throwable()
 

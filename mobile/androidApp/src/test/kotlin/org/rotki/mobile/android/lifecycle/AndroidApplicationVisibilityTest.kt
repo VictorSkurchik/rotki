@@ -6,7 +6,7 @@ import org.rotki.mobile.core.ports.ApplicationVisibilityState
 
 class AndroidApplicationVisibilityTest {
     @Test
-    fun `starts fail closed and follows Android lifecycle signals`(): Unit {
+    fun `starts fail closed and follows Android lifecycle signals`() {
         val visibility = AndroidApplicationVisibility()
 
         assertEquals(
@@ -25,7 +25,7 @@ class AndroidApplicationVisibilityTest {
     }
 
     @Test
-    fun `inactive cannot reopen a locked application`(): Unit {
+    fun `inactive cannot reopen a locked application`() {
         val visibility = AndroidApplicationVisibility()
 
         visibility.onInactive()

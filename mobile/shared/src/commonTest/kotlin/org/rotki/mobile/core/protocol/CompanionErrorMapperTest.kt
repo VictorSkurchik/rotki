@@ -21,23 +21,25 @@ class CompanionErrorMapperTest {
         assertEquals(20, cases.size)
         cases.forEach { element ->
             val case = element.jsonObject
-            val failure = assertIs<CompanionFailure.Known>(
-                CompanionErrorDto(
-                    code = case.string("code"),
-                    retryable = case.boolean("retryable"),
-                    action = case.string("action"),
-                ).toDomain(case.int("status")),
-                case.string("code"),
-            )
+            val failure =
+                assertIs<CompanionFailure.Known>(
+                    CompanionErrorDto(
+                        code = case.string("code"),
+                        retryable = case.boolean("retryable"),
+                        action = case.string("action"),
+                    ).toDomain(case.int("status")),
+                    case.string("code"),
+                )
             assertEquals(case.string("code"), failure.code.wireValue)
             assertEquals(case.string("action"), failure.action.wireValue)
             assertEquals(case.boolean("retryable"), failure.retryable)
-            val expectedEffect = when (case.string("device_session_effect")) {
-                "delete" -> CompanionFailureLocalEffect.DELETE_PAIRING_AND_SNAPSHOT
-                "not_established" -> CompanionFailureLocalEffect.NOT_ESTABLISHED
-                "unchanged" -> CompanionFailureLocalEffect.UNCHANGED
-                else -> CompanionFailureLocalEffect.KEEP
-            }
+            val expectedEffect =
+                when (case.string("device_session_effect")) {
+                    "delete" -> CompanionFailureLocalEffect.DELETE_PAIRING_AND_SNAPSHOT
+                    "not_established" -> CompanionFailureLocalEffect.NOT_ESTABLISHED
+                    "unchanged" -> CompanionFailureLocalEffect.UNCHANGED
+                    else -> CompanionFailureLocalEffect.KEEP
+                }
             assertEquals(expectedEffect, failure.localEffect)
         }
     }
@@ -91,8 +93,8 @@ class CompanionErrorMapperTest {
     }
 }
 
-private fun kotlinx.serialization.json.JsonObject.string(name: String): String =
-    getValue(name).jsonPrimitive.content
+private fun kotlinx.serialization.json.JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
+
 private fun kotlinx.serialization.json.JsonObject.int(name: String): Int = string(name).toInt()
-private fun kotlinx.serialization.json.JsonObject.boolean(name: String): Boolean =
-    string(name).toBooleanStrict()
+
+private fun kotlinx.serialization.json.JsonObject.boolean(name: String): Boolean = string(name).toBooleanStrict()

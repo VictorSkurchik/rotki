@@ -29,19 +29,21 @@ internal fun RecoveryScreen(
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
-): Unit {
+) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .testTag(UiTags.ROOT_RECOVERY),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .testTag(UiTags.ROOT_RECOVERY),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -68,9 +70,10 @@ internal fun RecoveryScreen(
         if (actionLabel != null && onAction != null) {
             Button(
                 onClick = onAction,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp),
             ) {
                 Text(actionLabel)
             }

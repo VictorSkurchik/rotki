@@ -13,7 +13,9 @@ internal class CompanionErrorDto(
     @SerialName("code")
     internal val code: String,
     @SerialName("retryable")
-    internal val retryable: @Serializable(with = StrictJsonBooleanSerializer::class) Boolean,
+    internal val retryable:
+        @Serializable(with = StrictJsonBooleanSerializer::class)
+        Boolean,
     @SerialName("action")
     internal val action: String,
 )

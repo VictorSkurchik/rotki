@@ -14,19 +14,22 @@ class WebSocketNotificationDtoTest {
         val examples = ProtocolFixtureData.golden.getValue("websocket_examples").jsonArray
         assertEquals(2, examples.size)
 
-        val snapshot = WebSocketNotificationDecoder.decode(
-            examples[0].jsonObject.getValue("payload").toString(),
-        )
-        val refresh = WebSocketNotificationDecoder.decode(
-            examples[1].jsonObject.getValue("payload").toString(),
-        )
+        val snapshot =
+            WebSocketNotificationDecoder.decode(
+                examples[0].jsonObject.getValue("payload").toString(),
+            )
+        val refresh =
+            WebSocketNotificationDecoder.decode(
+                examples[1].jsonObject.getValue("payload").toString(),
+            )
 
         assertIs<CompanionNotification.SnapshotRevisionAvailable>(
             assertIs<WebSocketNotificationDecodeOutcome.Decoded>(snapshot).notification,
         )
-        val operation = assertIs<CompanionNotification.RefreshOperationChanged>(
-            assertIs<WebSocketNotificationDecodeOutcome.Decoded>(refresh).notification,
-        ).operation
+        val operation =
+            assertIs<CompanionNotification.RefreshOperationChanged>(
+                assertIs<WebSocketNotificationDecodeOutcome.Decoded>(refresh).notification,
+            ).operation
         assertEquals(RefreshOperationState.RUNNING, operation.state)
         assertEquals(3, operation.version)
         assertEquals(RefreshTarget.Global, operation.target)
@@ -62,17 +65,19 @@ class WebSocketNotificationDtoTest {
             Triple("source_authentication_failed", false, "use_full_client"),
             Triple("source_configuration_changed", false, "use_full_client"),
         ).forEach { (code, retryable, action) ->
-            val outcome = WebSocketNotificationDecoder.decode(
-                failedRefresh(
-                    target = SOURCE_TARGET,
-                    code = code,
-                    retryable = retryable,
-                    action = action,
-                ),
-            )
-            val operation = assertIs<CompanionNotification.RefreshOperationChanged>(
-                assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
-            ).operation
+            val outcome =
+                WebSocketNotificationDecoder.decode(
+                    failedRefresh(
+                        target = SOURCE_TARGET,
+                        code = code,
+                        retryable = retryable,
+                        action = action,
+                    ),
+                )
+            val operation =
+                assertIs<CompanionNotification.RefreshOperationChanged>(
+                    assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
+                ).operation
             val error = assertIs<RefreshOperationError.Source>(operation.error)
             assertEquals(
                 if (code == "source_authentication_failed") {
@@ -103,31 +108,36 @@ class WebSocketNotificationDtoTest {
     @Test
     fun `operation interrupted is valid for both refresh target kinds`() {
         listOf(GLOBAL_TARGET, SOURCE_TARGET).forEach { target ->
-            val payload = failedRefresh(target, "operation_interrupted", true, "retry").let {
-                if (target == GLOBAL_TARGET) {
-                    it.replace("\"progress\":null", "\"progress\":{\"completed\":1,\"total\":2}")
-                } else {
-                    it
+            val payload =
+                failedRefresh(target, "operation_interrupted", true, "retry").let {
+                    if (target == GLOBAL_TARGET) {
+                        it.replace("\"progress\":null", "\"progress\":{\"completed\":1,\"total\":2}")
+                    } else {
+                        it
+                    }
                 }
-            }
-            val outcome = WebSocketNotificationDecoder.decode(
-                payload,
-            )
-            val operation = assertIs<CompanionNotification.RefreshOperationChanged>(
-                assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
-            ).operation
+            val outcome =
+                WebSocketNotificationDecoder.decode(
+                    payload,
+                )
+            val operation =
+                assertIs<CompanionNotification.RefreshOperationChanged>(
+                    assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
+                ).operation
             assertIs<RefreshOperationError.Operation>(operation.error)
         }
     }
 
     @Test
     fun `unknown future source error degrades to safe unexpected source failure`() {
-        val outcome = WebSocketNotificationDecoder.decode(
-            failedRefresh(SOURCE_TARGET, "future_source_error", true, "future_action"),
-        )
-        val operation = assertIs<CompanionNotification.RefreshOperationChanged>(
-            assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
-        ).operation
+        val outcome =
+            WebSocketNotificationDecoder.decode(
+                failedRefresh(SOURCE_TARGET, "future_source_error", true, "future_action"),
+            )
+        val operation =
+            assertIs<CompanionNotification.RefreshOperationChanged>(
+                assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
+            ).operation
         val error = assertIs<RefreshOperationError.Source>(operation.error)
         assertEquals(SourceErrorCode.SourceUnexpectedError, error.code)
         assertEquals(false, error.retryable)
@@ -135,12 +145,14 @@ class WebSocketNotificationDtoTest {
 
     @Test
     fun `unknown future global error degrades to safe unexpected operation failure`() {
-        val payload = failedRefresh(GLOBAL_TARGET, "future_operation_error", true, "future_action")
-            .replace("\"progress\":null", "\"progress\":{\"completed\":1,\"total\":2}")
+        val payload =
+            failedRefresh(GLOBAL_TARGET, "future_operation_error", true, "future_action")
+                .replace("\"progress\":null", "\"progress\":{\"completed\":1,\"total\":2}")
         val outcome = WebSocketNotificationDecoder.decode(payload)
-        val operation = assertIs<CompanionNotification.RefreshOperationChanged>(
-            assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
-        ).operation
+        val operation =
+            assertIs<CompanionNotification.RefreshOperationChanged>(
+                assertIs<WebSocketNotificationDecodeOutcome.Decoded>(outcome).notification,
+            ).operation
 
         val error = assertIs<RefreshOperationError.UnexpectedOperation>(operation.error)
         assertEquals(false, error.retryable)
@@ -148,12 +160,13 @@ class WebSocketNotificationDtoTest {
 
     @Test
     fun `known events reject quoted numeric and boolean scalars`() {
-        val canonical = failedRefresh(
-            GLOBAL_TARGET,
-            "source_refresh_failed",
-            true,
-            "retry",
-        )
+        val canonical =
+            failedRefresh(
+                GLOBAL_TARGET,
+                "source_refresh_failed",
+                true,
+                "retry",
+            )
         listOf(
             canonical.replace("\"version\":2", "\"version\":\"2\""),
             canonical.replace("\"created_at\":1786550400", "\"created_at\":\"1786550400\""),
@@ -167,8 +180,13 @@ class WebSocketNotificationDtoTest {
 
     @Test
     fun `known refresh events enforce lifecycle and progress invariants`() {
-        val running = ProtocolFixtureData.golden.getValue("websocket_examples").jsonArray[1]
-            .jsonObject.getValue("payload").toString()
+        val running =
+            ProtocolFixtureData.golden
+                .getValue("websocket_examples")
+                .jsonArray[1]
+                .jsonObject
+                .getValue("payload")
+                .toString()
         listOf(
             running.replace("\"result_snapshot_revision\":null", REVISION_FIELD),
             running.replace("\"progress\":{\"completed\":1,\"total\":2}", "\"progress\":null"),
@@ -186,15 +204,16 @@ class WebSocketNotificationDtoTest {
             )
         }
 
-        val validPartialFailure = failedRefresh(
-            GLOBAL_TARGET,
-            "source_refresh_failed",
-            true,
-            "retry",
-        ).replace(
-            "\"progress\":null",
-            "\"progress\":{\"completed\":2,\"total\":2}",
-        ).replace("\"result_snapshot_revision\":null", REVISION_FIELD)
+        val validPartialFailure =
+            failedRefresh(
+                GLOBAL_TARGET,
+                "source_refresh_failed",
+                true,
+                "retry",
+            ).replace(
+                "\"progress\":null",
+                "\"progress\":{\"completed\":2,\"total\":2}",
+            ).replace("\"result_snapshot_revision\":null", REVISION_FIELD)
         assertIs<WebSocketNotificationDecodeOutcome.Decoded>(
             WebSocketNotificationDecoder.decode(validPartialFailure),
         )
@@ -211,10 +230,12 @@ class WebSocketNotificationDtoTest {
 
     @Test
     fun `oversized or excessively nested events fail closed`() {
-        val oversized = "{\"type\":\"future_event\",\"data\":\"" +
-            "x".repeat(65_536) + "\"}"
-        val nested = "{\"type\":\"future_event\",\"data\":" +
-            "[".repeat(65) + "0" + "]".repeat(65) + "}"
+        val oversized =
+            "{\"type\":\"future_event\",\"data\":\"" +
+                "x".repeat(65_536) + "\"}"
+        val nested =
+            "{\"type\":\"future_event\",\"data\":" +
+                "[".repeat(65) + "0" + "]".repeat(65) + "}"
         assertIs<WebSocketNotificationDecodeOutcome.ContractFailure>(
             WebSocketNotificationDecoder.decode(oversized),
         )
@@ -229,7 +250,8 @@ private fun failedRefresh(
     code: String,
     retryable: Boolean,
     action: String,
-): String = """{
+): String =
+    """{
   "type":"companion_refresh_operation",
   "data":{
     "operation_id":"oKGio6SlpqeoqaqrrK2urw",
@@ -249,7 +271,8 @@ private fun succeededRefresh(
     target: String,
     startedAt: String,
     progress: String,
-): String = """{
+): String =
+    """{
   "type":"companion_refresh_operation",
   "data":{
     "operation_id":"oKGio6SlpqeoqaqrrK2urw",

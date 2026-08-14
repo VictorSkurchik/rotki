@@ -15,37 +15,39 @@ internal object CompanionEnvelopeDecoder {
     internal fun <T> decodeSuccess(
         text: String,
         deserializer: DeserializationStrategy<T>,
-    ): CompanionEnvelopeDecodeOutcome<T> = decode(
-        text = text,
-        expectedShape = CompanionEnvelopeShape.SUCCESS,
-        deserializer = deserializer,
-    )
+    ): CompanionEnvelopeDecodeOutcome<T> =
+        decode(
+            text = text,
+            expectedShape = CompanionEnvelopeShape.SUCCESS,
+            deserializer = deserializer,
+        )
 
-    internal fun decodeFailure(
-        text: String,
-    ): CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> = decode(
-        text = text,
-        expectedShape = CompanionEnvelopeShape.FAILURE,
-        deserializer = CompanionFailureEnvelopeDto.serializer(),
-    )
+    internal fun decodeFailure(text: String): CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
+        decode(
+            text = text,
+            expectedShape = CompanionEnvelopeShape.FAILURE,
+            deserializer = CompanionFailureEnvelopeDto.serializer(),
+        )
 
     private fun <T> decode(
         text: String,
         expectedShape: CompanionEnvelopeShape,
         deserializer: DeserializationStrategy<T>,
     ): CompanionEnvelopeDecodeOutcome<T> {
-        val envelope = preflight(text)
-            ?: return CompanionEnvelopeDecodeOutcome.ContractFailure
+        val envelope =
+            preflight(text)
+                ?: return CompanionEnvelopeDecodeOutcome.ContractFailure
         if (!envelope.matches(expectedShape)) {
             return CompanionEnvelopeDecodeOutcome.ContractFailure
         }
-        val decoded = try {
-            CompanionJson.decodeFromJsonElement(deserializer, envelope)
-        } catch (_: SerializationException) {
-            return CompanionEnvelopeDecodeOutcome.ContractFailure
-        } catch (_: IllegalArgumentException) {
-            return CompanionEnvelopeDecodeOutcome.ContractFailure
-        }
+        val decoded =
+            try {
+                CompanionJson.decodeFromJsonElement(deserializer, envelope)
+            } catch (_: SerializationException) {
+                return CompanionEnvelopeDecodeOutcome.ContractFailure
+            } catch (_: IllegalArgumentException) {
+                return CompanionEnvelopeDecodeOutcome.ContractFailure
+            }
         return CompanionEnvelopeDecodeOutcome.Decoded(decoded)
     }
 
@@ -67,7 +69,9 @@ internal object CompanionEnvelopeDecoder {
 }
 
 internal sealed interface CompanionEnvelopeDecodeOutcome<out T> {
-    data class Decoded<T>(internal val value: T) : CompanionEnvelopeDecodeOutcome<T>
+    data class Decoded<T>(
+        internal val value: T,
+    ) : CompanionEnvelopeDecodeOutcome<T>
 
     data object ContractFailure : CompanionEnvelopeDecodeOutcome<Nothing>
 }
@@ -80,10 +84,14 @@ private enum class CompanionEnvelopeShape {
 private fun JsonObject.matches(shape: CompanionEnvelopeShape): Boolean {
     if (!containsKey("result")) return false
     return when (shape) {
-        CompanionEnvelopeShape.SUCCESS ->
+        CompanionEnvelopeShape.SUCCESS -> {
             this["result"] != JsonNull &&
                 !containsKey("error") &&
                 (this["message"] as? JsonPrimitive)?.takeIf { it.isString }?.content == ""
-        CompanionEnvelopeShape.FAILURE -> this["result"] == JsonNull && this["error"] is JsonObject
+        }
+
+        CompanionEnvelopeShape.FAILURE -> {
+            this["result"] == JsonNull && this["error"] is JsonObject
+        }
     }
 }

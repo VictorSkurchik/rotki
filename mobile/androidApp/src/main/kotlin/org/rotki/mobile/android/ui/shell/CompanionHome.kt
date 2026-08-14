@@ -77,7 +77,7 @@ private enum class HomeDestination(
 internal fun CompanionHome(
     status: CompanionStatus,
     modifier: Modifier = Modifier,
-): Unit {
+) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val destination = HomeDestination.entries[selectedIndex]
     Scaffold(
@@ -105,19 +105,21 @@ internal fun CompanionHome(
                             )
                         },
                         label = { Text(item.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
+                        colors =
+                            NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
                     )
                 }
             }
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             ConnectionBanner(status)
@@ -127,37 +129,50 @@ internal fun CompanionHome(
 }
 
 @Composable
-private fun ConnectionBanner(status: CompanionStatus): Unit {
-    val banner = when (status.rootState) {
-        CompanionRootState.Refreshing -> BannerCopy(
-            label = "Refreshing",
-            detail = if (status.snapshotCoverage == SnapshotCoverage.Complete) {
-                "Keeping your last complete portfolio visible."
-            } else {
-                "Keeping available last-known values visible."
-            },
-            container = MaterialTheme.colorScheme.primaryContainer,
-            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-        CompanionRootState.Degraded -> BannerCopy(
-            label = "Some sources need attention",
-            detail = "Last-known values are preserved where possible.",
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            foreground = MaterialTheme.colorScheme.onTertiaryContainer,
-        )
-        CompanionRootState.Unreachable -> BannerCopy(
-            label = "Showing offline snapshot",
-            detail = "Rotki will reconnect while this app is open.",
-            container = MaterialTheme.colorScheme.surfaceVariant,
-            foreground = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        else -> BannerCopy(
-            label = "Connected securely",
-            detail = "Your Engine remains authoritative.",
-            container = MaterialTheme.colorScheme.primaryContainer,
-            foreground = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
-    }
+private fun ConnectionBanner(status: CompanionStatus) {
+    val banner =
+        when (status.rootState) {
+            CompanionRootState.Refreshing -> {
+                BannerCopy(
+                    label = "Refreshing",
+                    detail =
+                        if (status.snapshotCoverage == SnapshotCoverage.Complete) {
+                            "Keeping your last complete portfolio visible."
+                        } else {
+                            "Keeping available last-known values visible."
+                        },
+                    container = MaterialTheme.colorScheme.primaryContainer,
+                    foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            CompanionRootState.Degraded -> {
+                BannerCopy(
+                    label = "Some sources need attention",
+                    detail = "Last-known values are preserved where possible.",
+                    container = MaterialTheme.colorScheme.tertiaryContainer,
+                    foreground = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+
+            CompanionRootState.Unreachable -> {
+                BannerCopy(
+                    label = "Showing offline snapshot",
+                    detail = "Rotki will reconnect while this app is open.",
+                    container = MaterialTheme.colorScheme.surfaceVariant,
+                    foreground = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            else -> {
+                BannerCopy(
+                    label = "Connected securely",
+                    detail = "Your Engine remains authoritative.",
+                    container = MaterialTheme.colorScheme.primaryContainer,
+                    foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = banner.container,
@@ -170,9 +185,10 @@ private fun ConnectionBanner(status: CompanionStatus): Unit {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .background(banner.foreground, CircleShape),
+                modifier =
+                    Modifier
+                        .size(10.dp)
+                        .background(banner.foreground, CircleShape),
             )
             Column {
                 Text(
@@ -190,16 +206,17 @@ private fun ConnectionBanner(status: CompanionStatus): Unit {
 }
 
 @Composable
-private fun DestinationPlaceholder(destination: HomeDestination): Unit {
+private fun DestinationPlaceholder(destination: HomeDestination) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(80.dp)
-                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+            modifier =
+                Modifier
+                    .size(80.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             DestinationIcon(destination = destination, selected = true, size = 34)
@@ -227,16 +244,18 @@ private fun DestinationIcon(
     destination: HomeDestination,
     selected: Boolean,
     size: Int = 24,
-): Unit {
-    val color = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
+) {
+    val color =
+        if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     Canvas(
-        modifier = Modifier
-            .size(size.dp)
-            .semantics { contentDescription = destination.label },
+        modifier =
+            Modifier
+                .size(size.dp)
+                .semantics { contentDescription = destination.label },
     ) {
         val stroke = Stroke(width = this.size.minDimension * 0.1f, cap = StrokeCap.Round)
         when (destination) {
@@ -250,22 +269,61 @@ private fun DestinationIcon(
                     cap = StrokeCap.Round,
                 )
             }
+
             HomeDestination.Portfolio -> {
                 val width = this.size.width
-                drawLine(color, Offset(width * 0.2f, this.size.height * 0.8f), Offset(width * 0.2f, this.size.height * 0.54f), stroke.width, StrokeCap.Round)
-                drawLine(color, Offset(width * 0.5f, this.size.height * 0.8f), Offset(width * 0.5f, this.size.height * 0.26f), stroke.width, StrokeCap.Round)
-                drawLine(color, Offset(width * 0.8f, this.size.height * 0.8f), Offset(width * 0.8f, this.size.height * 0.42f), stroke.width, StrokeCap.Round)
+                drawLine(
+                    color,
+                    Offset(width * 0.2f, this.size.height * 0.8f),
+                    Offset(
+                        width * 0.2f,
+                        this.size.height * 0.54f,
+                    ),
+                    stroke.width,
+                    StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(width * 0.5f, this.size.height * 0.8f),
+                    Offset(
+                        width * 0.5f,
+                        this.size.height * 0.26f,
+                    ),
+                    stroke.width,
+                    StrokeCap.Round,
+                )
+                drawLine(
+                    color,
+                    Offset(width * 0.8f, this.size.height * 0.8f),
+                    Offset(
+                        width * 0.8f,
+                        this.size.height * 0.42f,
+                    ),
+                    stroke.width,
+                    StrokeCap.Round,
+                )
             }
+
             HomeDestination.History -> {
                 drawArc(color, 35f, 300f, false, style = stroke)
                 drawLine(color, center, Offset(center.x, this.size.height * 0.27f), stroke.width, StrokeCap.Round)
                 drawLine(color, center, Offset(this.size.width * 0.72f, center.y), stroke.width, StrokeCap.Round)
             }
+
             HomeDestination.Sources -> {
                 val x = this.size.width * 0.28f
                 listOf(0.27f, 0.5f, 0.73f).forEach { y ->
                     drawCircle(color, radius = stroke.width * 0.65f, center = Offset(x, this.size.height * y))
-                    drawLine(color, Offset(x + stroke.width * 1.8f, this.size.height * y), Offset(this.size.width * 0.8f, this.size.height * y), stroke.width, StrokeCap.Round)
+                    drawLine(
+                        color,
+                        Offset(x + stroke.width * 1.8f, this.size.height * y),
+                        Offset(
+                            this.size.width * 0.8f,
+                            this.size.height * y,
+                        ),
+                        stroke.width,
+                        StrokeCap.Round,
+                    )
                 }
             }
         }

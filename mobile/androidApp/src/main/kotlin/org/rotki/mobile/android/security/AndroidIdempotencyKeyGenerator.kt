@@ -1,9 +1,9 @@
 package org.rotki.mobile.android.security
 
-import java.security.SecureRandom
 import org.rotki.mobile.core.ports.IdempotencyKeyGenerator
 import org.rotki.mobile.core.protocol.IdempotencyKey
 import org.rotki.mobile.core.protocol.ProtocolValueParseOutcome
+import java.security.SecureRandom
 
 internal fun interface IdempotencyRandomFill {
     fun fill(target: ByteArray): Unit
@@ -23,13 +23,17 @@ internal class AndroidIdempotencyKeyGenerator(
                     randomFill.fill(bytes)
                 }
             } catch (_: Exception) {
-                throw IllegalStateException(GENERATION_FAILURE_MESSAGE)
+                error(GENERATION_FAILURE_MESSAGE)
             }
 
             when (val parsed = IdempotencyKey.fromBytes(bytes)) {
-                is ProtocolValueParseOutcome.Accepted -> parsed.value
-                is ProtocolValueParseOutcome.Rejected ->
-                    throw IllegalStateException(GENERATION_FAILURE_MESSAGE)
+                is ProtocolValueParseOutcome.Accepted -> {
+                    parsed.value
+                }
+
+                is ProtocolValueParseOutcome.Rejected -> {
+                    error(GENERATION_FAILURE_MESSAGE)
+                }
             }
         } finally {
             bytes.fill(0)

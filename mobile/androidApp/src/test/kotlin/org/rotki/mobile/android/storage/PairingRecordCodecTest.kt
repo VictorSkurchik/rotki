@@ -11,7 +11,7 @@ import org.rotki.mobile.core.protocol.ProtocolValueParseOutcome
 
 class PairingRecordCodecTest {
     @Test
-    fun `canonical pairing record round trips`(): Unit {
+    fun `canonical pairing record round trips`() {
         val record = record()
         val outcome = PairingRecordCodec.decode(PairingRecordCodec.encode(record))
         assertTrue(outcome is PairingRecordDecodeOutcome.Accepted)
@@ -22,18 +22,19 @@ class PairingRecordCodecTest {
     }
 
     @Test
-    fun `strict decoder rejects every structural mutation`(): Unit {
+    fun `strict decoder rejects every structural mutation`() {
         val valid = PairingRecordCodec.encode(record())
-        val mutations = listOf(
-            valid.copyOf().also { bytes -> bytes[0] = 'X'.code.toByte() },
-            valid.copyOf().also { bytes -> bytes[4] = 2 },
-            valid.copyOf().also { bytes -> bytes[6] = 0 },
-            valid.copyOf().also { bytes -> bytes[7] = 42 },
-            valid + 0,
-            valid.copyOf(valid.lastIndex),
-            valid.copyOf().also { bytes -> bytes[8] = 0.toByte() },
-            valid.copyOf().also { bytes -> bytes[valid.lastIndex] = '='.code.toByte() },
-        )
+        val mutations =
+            listOf(
+                valid.copyOf().also { bytes -> bytes[0] = 'X'.code.toByte() },
+                valid.copyOf().also { bytes -> bytes[4] = 2 },
+                valid.copyOf().also { bytes -> bytes[6] = 0 },
+                valid.copyOf().also { bytes -> bytes[7] = 42 },
+                valid + 0,
+                valid.copyOf(valid.lastIndex),
+                valid.copyOf().also { bytes -> bytes[8] = 0.toByte() },
+                valid.copyOf().also { bytes -> bytes[valid.lastIndex] = '='.code.toByte() },
+            )
         mutations.forEachIndexed { index, encoded ->
             assertTrue(
                 "mutation $index was unexpectedly accepted",
@@ -43,7 +44,7 @@ class PairingRecordCodecTest {
     }
 
     @Test
-    fun `oversized input is rejected before parsing`(): Unit {
+    fun `oversized input is rejected before parsing`() {
         assertTrue(
             PairingRecordCodec.decode(ByteArray(PairingRecordCodec.MAX_ENCODED_BYTES + 1)) is
                 PairingRecordDecodeOutcome.Rejected,

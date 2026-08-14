@@ -34,9 +34,12 @@ import kotlin.test.assertNull
 class PairingProtocolClientTest {
     @Test
     fun `pairing route descriptors match the authored route matrix`() {
-        val authored = ProtocolFixtureData.cases.getValue("route_matrix").jsonArray
-            .map { element -> element.jsonObject }
-            .associateBy { route -> route.getValue("id").jsonPrimitive.content }
+        val authored =
+            ProtocolFixtureData.cases
+                .getValue("route_matrix")
+                .jsonArray
+                .map { element -> element.jsonObject }
+                .associateBy { route -> route.getValue("id").jsonPrimitive.content }
 
         listOf(PairingProtocolRoutes.Discovery, PairingProtocolRoutes.Registration)
             .forEach { route ->
@@ -53,14 +56,15 @@ class PairingProtocolClientTest {
     @Test
     fun `discovery is public and negotiates protocol one before key registration`(): Unit =
         runTest {
-            val engine = MockEngine { request ->
-                assertEquals(HttpMethod.Get, request.method)
-                assertEquals("/api/1/companion/protocol", request.url.encodedPath)
-                assertNull(request.headers[HttpHeaders.Authorization])
-                assertNull(request.headers[ProtocolHeaders.Protocol])
-                assertNull(request.headers[ProtocolHeaders.IdempotencyKey])
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            }
+            val engine =
+                MockEngine { request ->
+                    assertEquals(HttpMethod.Get, request.method)
+                    assertEquals("/api/1/companion/protocol", request.url.encodedPath)
+                    assertNull(request.headers[HttpHeaders.Authorization])
+                    assertNull(request.headers[ProtocolHeaders.Protocol])
+                    assertNull(request.headers[ProtocolHeaders.IdempotencyKey])
+                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                }
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
             try {
                 assertEquals(
@@ -76,35 +80,38 @@ class PairingProtocolClientTest {
         }
 
     @Test
-    fun `legacy discovery 404 and typed 426 are incompatible`(): Unit = runTest {
-        listOf(
-            HttpStatusCode.NotFound to "legacy",
-            HttpStatusCode.UpgradeRequired to INCOMPATIBLE_FAILURE,
-        ).forEach { (status, body) ->
-            val client = PairingProtocolClient(
-                createCompanionHttpClient(MockEngine { respondJson(body, status) }),
-            )
-            try {
-                assertIs<PairingDiscoveryOutcome.Incompatible>(client.discover(origin()))
-            } finally {
-                client.close()
+    fun `legacy discovery 404 and typed 426 are incompatible`(): Unit =
+        runTest {
+            listOf(
+                HttpStatusCode.NotFound to "legacy",
+                HttpStatusCode.UpgradeRequired to INCOMPATIBLE_FAILURE,
+            ).forEach { (status, body) ->
+                val client =
+                    PairingProtocolClient(
+                        createCompanionHttpClient(MockEngine { respondJson(body, status) }),
+                    )
+                try {
+                    assertIs<PairingDiscoveryOutcome.Incompatible>(client.discover(origin()))
+                } finally {
+                    client.close()
+                }
             }
         }
-    }
 
     @Test
     fun `registration sends fixed authority and rejects response binding mismatch`(): Unit =
         runTest {
-            val engine = MockEngine { request ->
-                assertEquals(HttpMethod.Post, request.method)
-                assertEquals("/api/1/companion/device-sessions", request.url.encodedPath)
-                assertEquals("Bearer $PAIRING_CREDENTIAL", request.headers[HttpHeaders.Authorization])
-                assertEquals("1", request.headers[ProtocolHeaders.Protocol])
-                assertEquals(IDEMPOTENCY_KEY, request.headers[ProtocolHeaders.IdempotencyKey])
-                assertEquals(ContentType.Application.Json, request.body.contentType)
-                assertEquals(REGISTRATION_REQUEST, request.body.bodyText())
-                respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-            }
+            val engine =
+                MockEngine { request ->
+                    assertEquals(HttpMethod.Post, request.method)
+                    assertEquals("/api/1/companion/device-sessions", request.url.encodedPath)
+                    assertEquals("Bearer $PAIRING_CREDENTIAL", request.headers[HttpHeaders.Authorization])
+                    assertEquals("1", request.headers[ProtocolHeaders.Protocol])
+                    assertEquals(IDEMPOTENCY_KEY, request.headers[ProtocolHeaders.IdempotencyKey])
+                    assertEquals(ContentType.Application.Json, request.body.contentType)
+                    assertEquals(REGISTRATION_REQUEST, request.body.bodyText())
+                    respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                }
             val client = PairingProtocolClient(createCompanionHttpClient(engine))
             try {
                 assertIs<PairingRegistrationRemoteOutcome.Registered>(
@@ -115,19 +122,20 @@ class PairingProtocolClientTest {
                 client.close()
             }
 
-            val mismatchClient = PairingProtocolClient(
-                createCompanionHttpClient(
-                    MockEngine {
-                        respondJson(
-                            REGISTRATION_SUCCESS.replace(
-                                "\"device_label\":\"Victor's iPhone\"",
-                                "\"device_label\":\"Other phone\"",
-                            ),
-                            HttpStatusCode.Created,
-                        )
-                    },
-                ),
-            )
+            val mismatchClient =
+                PairingProtocolClient(
+                    createCompanionHttpClient(
+                        MockEngine {
+                            respondJson(
+                                REGISTRATION_SUCCESS.replace(
+                                    "\"device_label\":\"Victor's iPhone\"",
+                                    "\"device_label\":\"Other phone\"",
+                                ),
+                                HttpStatusCode.Created,
+                            )
+                        },
+                    ),
+                )
             try {
                 assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
                     mismatchClient.register(registrationRequest()),
@@ -138,58 +146,64 @@ class PairingProtocolClientTest {
         }
 
     @Test
-    fun `redirect is decoded once as a contract failure and never followed`(): Unit = runTest {
-        val engine = MockEngine {
-            respond(
-                content = "",
-                status = HttpStatusCode.Found,
-                headers = headersOf(HttpHeaders.Location, "https://other.example/target"),
-            )
+    fun `redirect is decoded once as a contract failure and never followed`(): Unit =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = "",
+                        status = HttpStatusCode.Found,
+                        headers = headersOf(HttpHeaders.Location, "https://other.example/target"),
+                    )
+                }
+            val client = PairingProtocolClient(createCompanionHttpClient(engine))
+            try {
+                assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
+                    client.register(registrationRequest()),
+                )
+                assertEquals(1, engine.requestHistory.size)
+            } finally {
+                client.close()
+            }
         }
-        val client = PairingProtocolClient(createCompanionHttpClient(engine))
-        try {
-            assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                client.register(registrationRequest()),
-            )
-            assertEquals(1, engine.requestHistory.size)
-        } finally {
-            client.close()
-        }
-    }
 
     @Test
-    fun `malformed success is a strict contract failure`(): Unit = runTest {
-        val duplicate = REGISTRATION_SUCCESS.replace(
-            "\"state\":\"authorized\"",
-            "\"state\":\"authorized\",\"state\":\"authorized\"",
-        )
-        val client = PairingProtocolClient(
-            createCompanionHttpClient(
-                MockEngine { respondJson(duplicate, HttpStatusCode.Created) },
-            ),
-        )
-        try {
-            assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                client.register(registrationRequest()),
-            )
-        } finally {
-            client.close()
+    fun `malformed success is a strict contract failure`(): Unit =
+        runTest {
+            val duplicate =
+                REGISTRATION_SUCCESS.replace(
+                    "\"state\":\"authorized\"",
+                    "\"state\":\"authorized\",\"state\":\"authorized\"",
+                )
+            val client =
+                PairingProtocolClient(
+                    createCompanionHttpClient(
+                        MockEngine { respondJson(duplicate, HttpStatusCode.Created) },
+                    ),
+                )
+            try {
+                assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
+                    client.register(registrationRequest()),
+                )
+            } finally {
+                client.close()
+            }
         }
-    }
 
     @Test
     fun `success requires empty message and registration requires cache control no store`(): Unit =
         runTest {
-            val discovery = PairingProtocolClient(
-                createCompanionHttpClient(
-                    MockEngine {
-                        respondJson(
-                            DISCOVERY_SUCCESS.replace("\"message\":\"\"", "\"message\":\"ok\""),
-                            HttpStatusCode.OK,
-                        )
-                    },
-                ),
-            )
+            val discovery =
+                PairingProtocolClient(
+                    createCompanionHttpClient(
+                        MockEngine {
+                            respondJson(
+                                DISCOVERY_SUCCESS.replace("\"message\":\"\"", "\"message\":\"ok\""),
+                                HttpStatusCode.OK,
+                            )
+                        },
+                    ),
+                )
             try {
                 assertIs<PairingDiscoveryOutcome.ContractFailure>(discovery.discover(origin()))
             } finally {
@@ -207,17 +221,18 @@ class PairingProtocolClientTest {
                     HttpHeaders.CacheControl to listOf("no-store", "no-store"),
                 ),
             ).forEach { headers ->
-                val registration = PairingProtocolClient(
-                    createCompanionHttpClient(
-                        MockEngine {
-                            respond(
-                                content = REGISTRATION_SUCCESS,
-                                status = HttpStatusCode.Created,
-                                headers = headers,
-                            )
-                        },
-                    ),
-                )
+                val registration =
+                    PairingProtocolClient(
+                        createCompanionHttpClient(
+                            MockEngine {
+                                respond(
+                                    content = REGISTRATION_SUCCESS,
+                                    status = HttpStatusCode.Created,
+                                    headers = headers,
+                                )
+                            },
+                        ),
+                    )
                 try {
                     assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
                         registration.register(registrationRequest()),
@@ -229,64 +244,72 @@ class PairingProtocolClientTest {
         }
 
     @Test
-    fun `rate limit requires one canonical integer Retry-After`(): Unit = runTest {
-        val withoutHeader = PairingProtocolClient(
-            createCompanionHttpClient(
-                MockEngine { respondJson(RATE_LIMIT_FAILURE, HttpStatusCode.TooManyRequests) },
-            ),
-        )
-        try {
-            assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
-                withoutHeader.register(registrationRequest()),
-            )
-        } finally {
-            withoutHeader.close()
+    fun `rate limit requires one canonical integer Retry-After`(): Unit =
+        runTest {
+            val withoutHeader =
+                PairingProtocolClient(
+                    createCompanionHttpClient(
+                        MockEngine { respondJson(RATE_LIMIT_FAILURE, HttpStatusCode.TooManyRequests) },
+                    ),
+                )
+            try {
+                assertIs<PairingRegistrationRemoteOutcome.ContractFailure>(
+                    withoutHeader.register(registrationRequest()),
+                )
+            } finally {
+                withoutHeader.close()
+            }
+
+            val withHeader =
+                PairingProtocolClient(
+                    createCompanionHttpClient(
+                        MockEngine {
+                            respond(
+                                content = RATE_LIMIT_FAILURE,
+                                status = HttpStatusCode.TooManyRequests,
+                                headers =
+                                    headersOf(
+                                        HttpHeaders.ContentType to
+                                            listOf(
+                                                ContentType.Application.Json.toString(),
+                                            ),
+                                        HttpHeaders.RetryAfter to listOf("5"),
+                                    ),
+                            )
+                        },
+                    ),
+                )
+            try {
+                assertEquals(
+                    5L,
+                    assertIs<PairingRegistrationRemoteOutcome.Rejected>(
+                        withHeader.register(registrationRequest()),
+                    ).retryAfterSeconds,
+                )
+            } finally {
+                withHeader.close()
+            }
         }
 
-        val withHeader = PairingProtocolClient(
-            createCompanionHttpClient(
-                MockEngine {
-                    respond(
-                        content = RATE_LIMIT_FAILURE,
-                        status = HttpStatusCode.TooManyRequests,
-                        headers = headersOf(
-                            HttpHeaders.ContentType to listOf(
-                                ContentType.Application.Json.toString(),
-                            ),
-                            HttpHeaders.RetryAfter to listOf("5"),
-                        ),
-                    )
-                },
-            ),
+    private fun registrationRequest(): PairingRegistrationRequest =
+        PairingRegistrationRequest(
+            engineOrigin = origin(),
+            pairingId = parsed(PairingId.parse(PAIRING_ID)),
+            pairingCredential = parsed(PairingCredential.parse(PAIRING_CREDENTIAL)),
+            selectedProtocolVersion = 1,
+            idempotencyKey = parsed(IdempotencyKey.parse(IDEMPOTENCY_KEY)),
+            deviceLabel =
+                assertIs<DeviceLabelParseOutcome.Accepted>(
+                    DeviceLabel.parse("Victor's iPhone"),
+                ).value,
+            platform = CompanionPlatform.Ios,
+            publicKey = parsed(X963PublicKey.parse(PUBLIC_KEY)),
         )
-        try {
-            assertEquals(
-                5L,
-                assertIs<PairingRegistrationRemoteOutcome.Rejected>(
-                    withHeader.register(registrationRequest()),
-                ).retryAfterSeconds,
-            )
-        } finally {
-            withHeader.close()
-        }
-    }
 
-    private fun registrationRequest(): PairingRegistrationRequest = PairingRegistrationRequest(
-        engineOrigin = origin(),
-        pairingId = parsed(PairingId.parse(PAIRING_ID)),
-        pairingCredential = parsed(PairingCredential.parse(PAIRING_CREDENTIAL)),
-        selectedProtocolVersion = 1,
-        idempotencyKey = parsed(IdempotencyKey.parse(IDEMPOTENCY_KEY)),
-        deviceLabel = assertIs<DeviceLabelParseOutcome.Accepted>(
-            DeviceLabel.parse("Victor's iPhone"),
-        ).value,
-        platform = CompanionPlatform.Ios,
-        publicKey = parsed(X963PublicKey.parse(PUBLIC_KEY)),
-    )
-
-    private fun origin(): EngineOrigin = assertIs<EngineOriginParseOutcome.Accepted>(
-        EngineOrigin.parse("https://rotki.example"),
-    ).origin
+    private fun origin(): EngineOrigin =
+        assertIs<EngineOriginParseOutcome.Accepted>(
+            EngineOrigin.parse("https://rotki.example"),
+        ).origin
 
     private fun <T> parsed(outcome: ProtocolValueParseOutcome<T>): T =
         assertIs<ProtocolValueParseOutcome.Accepted<T>>(outcome).value
@@ -301,14 +324,15 @@ private fun io.ktor.client.engine.mock.MockRequestHandleScope.respondJson(
 ) = respond(
     content = body,
     status = status,
-    headers = if (status == HttpStatusCode.Created) {
-        headersOf(
-            HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
-            HttpHeaders.CacheControl to listOf("no-store"),
-        )
-    } else {
-        headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-    },
+    headers =
+        if (status == HttpStatusCode.Created) {
+            headersOf(
+                HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
+                HttpHeaders.CacheControl to listOf("no-store"),
+            )
+        } else {
+            headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+        },
 )
 
 private const val PAIRING_ID: String = "AAECAwQFBgcICQoLDA0ODw"

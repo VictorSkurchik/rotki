@@ -12,9 +12,9 @@ import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.auth.PairingPresentation
 import org.rotki.mobile.auth.PairingUiState
-import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionStatus
 import org.rotki.mobile.core.state.SnapshotCoverage
@@ -24,7 +24,7 @@ class RotkiCompanionAppTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun unpairedLandingStartsScanning(): Unit {
+    fun unpairedLandingStartsScanning() {
         var scanRequested = false
         composeRule.setContent {
             TestApp(
@@ -40,7 +40,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun scanningAndPairingErrorsHaveDeliberateScreens(): Unit {
+    fun scanningAndPairingErrorsHaveDeliberateScreens() {
         composeRule.setContent {
             TestApp(
                 status = status(CompanionRootState.Unpaired),
@@ -53,7 +53,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun unsupportedPairingFormatRecommendsAnUpdateInsteadOfRescanning(): Unit {
+    fun unsupportedPairingFormatRecommendsAnUpdateInsteadOfRescanning() {
         composeRule.setContent {
             TestApp(
                 status = status(CompanionRootState.Unpaired),
@@ -67,13 +67,14 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun snapshotStatesExposeAllFourDestinations(): Unit {
+    fun snapshotStatesExposeAllFourDestinations() {
         composeRule.setContent {
             TestApp(
-                status = CompanionStatus(
-                    rootState = CompanionRootState.Online,
-                    snapshotCoverage = SnapshotCoverage.Complete,
-                ),
+                status =
+                    CompanionStatus(
+                        rootState = CompanionRootState.Online,
+                        snapshotCoverage = SnapshotCoverage.Complete,
+                    ),
                 pairing = PairingPresentationForTest(PairingUiState.INTRO),
             )
         }
@@ -87,13 +88,14 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun privacyCoverObscuresEveryRootScreen(): Unit {
+    fun privacyCoverObscuresEveryRootScreen() {
         composeRule.setContent {
             TestApp(
-                status = CompanionStatus(
-                    rootState = CompanionRootState.Online,
-                    snapshotCoverage = SnapshotCoverage.Complete,
-                ),
+                status =
+                    CompanionStatus(
+                        rootState = CompanionRootState.Online,
+                        snapshotCoverage = SnapshotCoverage.Complete,
+                    ),
                 pairing = PairingPresentationForTest(PairingUiState.INTRO),
                 privacyCovered = true,
             )
@@ -106,7 +108,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun pairingConnectionShowsProgressWithoutClaimingSuccess(): Unit {
+    fun pairingConnectionShowsProgressWithoutClaimingSuccess() {
         composeRule.setContent {
             TestApp(
                 status = status(CompanionRootState.Connecting),
@@ -121,7 +123,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun registeredDeviceKeepsProofAndSyncAsTheNextStep(): Unit {
+    fun registeredDeviceKeepsProofAndSyncAsTheNextStep() {
         composeRule.setContent {
             TestApp(
                 status = status(CompanionRootState.Connecting),
@@ -132,14 +134,15 @@ class RotkiCompanionAppTest {
 
         composeRule.onNodeWithTag(UiTags.PAIRING_REGISTERED).assertIsDisplayed()
         composeRule.onNodeWithText("Device registered").assertIsDisplayed()
-        composeRule.onNodeWithText(
-            "The device key and Engine registration are saved. Device proof and portfolio sync are the next development step.",
-        ).assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                "The device key and Engine registration are saved. Device proof and portfolio sync are the next development step.",
+            ).assertIsDisplayed()
         composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertIsNotDisplayed()
     }
 
     @Test
-    fun networkFailureOffersARescanWithoutEngineMessage(): Unit {
+    fun networkFailureOffersARescanWithoutEngineMessage() {
         var scanRequested = false
         composeRule.setContent {
             TestApp(
@@ -156,7 +159,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun rateLimitIsPresentedAsBusyAndRequiresAFreshCode(): Unit {
+    fun rateLimitIsPresentedAsBusyAndRequiresAFreshCode() {
         var scanRequested = false
         composeRule.setContent {
             TestApp(
@@ -174,7 +177,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun incompleteLocalCleanupOverridesDeviceLockedAndOffersOnlyCleanupRetry(): Unit {
+    fun incompleteLocalCleanupOverridesDeviceLockedAndOffersOnlyCleanupRetry() {
         var cleanupRequested = false
         composeRule.setContent {
             TestApp(
@@ -186,10 +189,11 @@ class RotkiCompanionAppTest {
         }
 
         composeRule.onNodeWithText("Local cleanup could not be verified").assertIsDisplayed()
-        composeRule.onNodeWithText(
-            "Rotki Companion remains locked because removal of the local device key " +
-                "and registration record could not be confirmed. Do not pair again yet.",
-        ).assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                "Rotki Companion remains locked because removal of the local device key " +
+                    "and registration record could not be confirmed. Do not pair again yet.",
+            ).assertIsDisplayed()
         composeRule.onNodeWithText("Scan again").assertIsNotDisplayed()
         composeRule.onNodeWithText("Scan a new code").assertIsNotDisplayed()
         composeRule.onNodeWithText("Back").assertIsNotDisplayed()
@@ -199,7 +203,7 @@ class RotkiCompanionAppTest {
     }
 
     @Test
-    fun localNetworkPermissionExplainsThatTheCodeWasNotSaved(): Unit {
+    fun localNetworkPermissionExplainsThatTheCodeWasNotSaved() {
         var permissionRequested = false
         composeRule.setContent {
             TestApp(
@@ -212,9 +216,10 @@ class RotkiCompanionAppTest {
         }
 
         composeRule.onNodeWithText("Local network access needed").assertIsDisplayed()
-        composeRule.onNodeWithText(
-            "Allow nearby device access, then scan the pairing code again. The code was not saved.",
-        ).assertIsDisplayed()
+        composeRule
+            .onNodeWithText(
+                "Allow nearby device access, then scan the pairing code again. The code was not saved.",
+            ).assertIsDisplayed()
         composeRule.onNodeWithText("Allow access").performClick()
         composeRule.runOnIdle { assertTrue(permissionRequested) }
     }
@@ -230,48 +235,59 @@ private fun TestApp(
     onStartScanning: () -> Unit = {},
     onRequestLocalNetworkPermission: () -> Unit = {},
     onRetryCleanup: () -> Unit = {},
-): Unit = RotkiCompanionApp(
-    status = status,
-    pairing = pairing,
-    pairingConnectionState = pairingConnectionState,
-    privacyCovered = privacyCovered,
-    onStartScanning = onStartScanning,
-    onRetryScanning = onStartScanning,
-    onCancelScanning = {},
-    onOpenCameraSettings = {},
-    onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
-    onRetryCleanup = onRetryCleanup,
-    onRetryConnection = {},
-    scanner = { Box(modifier = Modifier) },
-)
+): Unit =
+    RotkiCompanionApp(
+        status = status,
+        pairing = pairing,
+        pairingConnectionState = pairingConnectionState,
+        privacyCovered = privacyCovered,
+        onStartScanning = onStartScanning,
+        onRetryScanning = onStartScanning,
+        onCancelScanning = {},
+        onOpenCameraSettings = {},
+        onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
+        onRetryCleanup = onRetryCleanup,
+        onRetryConnection = {},
+        scanner = { Box(modifier = Modifier) },
+    )
 
-private fun status(rootState: CompanionRootState): CompanionStatus = CompanionStatus(
-    rootState = rootState,
-    snapshotCoverage = SnapshotCoverage.Absent,
-)
+private fun status(rootState: CompanionRootState): CompanionStatus =
+    CompanionStatus(
+        rootState = rootState,
+        snapshotCoverage = SnapshotCoverage.Absent,
+    )
 
 private fun PairingPresentationForTest(state: PairingUiState): PairingPresentation =
     when (state) {
-        PairingUiState.INTRO -> org.rotki.mobile.CompanionFacade()
-            .pairingFlow { 0L }
-            .presentation.value
-        PairingUiState.INVALID_QR -> org.rotki.mobile.CompanionFacade()
-            .pairingFlow { 0L }
-            .also { flow ->
-                flow.startScanning()
-                flow.submitQr("invalid")
-            }
-            .presentation.value
-        else -> error("Test helper has no fixture for $state")
+        PairingUiState.INTRO -> {
+            org.rotki.mobile
+                .CompanionFacade()
+                .pairingFlow { 0L }
+                .presentation.value
+        }
+
+        PairingUiState.INVALID_QR -> {
+            org.rotki.mobile
+                .CompanionFacade()
+                .pairingFlow { 0L }
+                .also { flow ->
+                    flow.startScanning()
+                    flow.submitQr("invalid")
+                }.presentation.value
+        }
+
+        else -> {
+            error("Test helper has no fixture for $state")
+        }
     }
 
 private fun UnsupportedPresentationForTest(): PairingPresentation =
-    org.rotki.mobile.CompanionFacade()
+    org.rotki.mobile
+        .CompanionFacade()
         .pairingFlow { 0L }
         .also { flow ->
             flow.startScanning()
             flow.submitQr(
                 """{"kind":"rotki_companion_pairing","format_version":2,"engine_origin":"https://rotki.example","pairing_id":"AAECAwQFBgcICQoLDA0ODw","pairing_credential":"EBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8","expires_at":1}""",
             )
-        }
-        .presentation.value
+        }.presentation.value

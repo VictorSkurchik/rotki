@@ -22,14 +22,13 @@ class PairingCodeScannerController internal constructor() {
     internal var restartToken: Long by mutableLongStateOf(0L)
         private set
 
-    fun restart(): Unit {
+    fun restart() {
         restartToken += 1L
     }
 }
 
 @Composable
-fun rememberPairingCodeScannerController(): PairingCodeScannerController =
-    remember { PairingCodeScannerController() }
+fun rememberPairingCodeScannerController(): PairingCodeScannerController = remember { PairingCodeScannerController() }
 
 /**
  * Native camera preview that emits one opaque QR payload per explicit controller cycle.
@@ -42,26 +41,28 @@ fun PairingCodeScanner(
     modifier: Modifier = Modifier,
     controller: PairingCodeScannerController = rememberPairingCodeScannerController(),
     onFailure: (PairingCodeScannerFailure) -> Unit = {},
-): Unit {
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnPairingCode = rememberUpdatedState(onPairingCode)
     val currentOnFailure = rememberUpdatedState(onFailure)
-    val previewView = remember(context) {
-        PreviewView(context).apply {
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+    val previewView =
+        remember(context) {
+            PreviewView(context).apply {
+                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
         }
-    }
-    val source = remember(context, lifecycleOwner, previewView) {
-        CameraXPairingCodeSource(
-            context = context.applicationContext,
-            lifecycleOwner = lifecycleOwner,
-            previewView = previewView,
-            onPairingCode = { payload -> currentOnPairingCode.value(payload) },
-            onFailure = { failure -> currentOnFailure.value(failure) },
-        )
-    }
+    val source =
+        remember(context, lifecycleOwner, previewView) {
+            CameraXPairingCodeSource(
+                context = context.applicationContext,
+                lifecycleOwner = lifecycleOwner,
+                previewView = previewView,
+                onPairingCode = { payload -> currentOnPairingCode.value(payload) },
+                onFailure = { failure -> currentOnFailure.value(failure) },
+            )
+        }
 
     AndroidView(
         factory = { previewView },
@@ -69,15 +70,16 @@ fun PairingCodeScanner(
     )
 
     DisposableEffect(lifecycleOwner, source) {
-        val observer = object : DefaultLifecycleObserver {
-            override fun onResume(owner: LifecycleOwner): Unit {
-                source.start()
-            }
+        val observer =
+            object : DefaultLifecycleObserver {
+                override fun onResume(owner: LifecycleOwner) {
+                    source.start()
+                }
 
-            override fun onPause(owner: LifecycleOwner): Unit {
-                source.stop()
+                override fun onPause(owner: LifecycleOwner) {
+                    source.stop()
+                }
             }
-        }
         lifecycleOwner.lifecycle.addObserver(observer)
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             source.start()

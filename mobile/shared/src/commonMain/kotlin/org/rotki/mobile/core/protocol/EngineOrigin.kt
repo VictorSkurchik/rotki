@@ -1,7 +1,7 @@
 package org.rotki.mobile.core.protocol
 
-import io.ktor.http.Url
 import io.ktor.http.URLParserException
+import io.ktor.http.Url
 
 public class EngineOrigin private constructor(
     public val canonical: String,
@@ -12,8 +12,7 @@ public class EngineOrigin private constructor(
     public val webSocketEndpoint: String
         get() = "wss://${canonical.removePrefix(HTTPS_PREFIX)}/ws"
 
-    public override fun equals(other: Any?): Boolean =
-        other is EngineOrigin && canonical == other.canonical
+    public override fun equals(other: Any?): Boolean = other is EngineOrigin && canonical == other.canonical
 
     public override fun hashCode(): Int = canonical.hashCode()
 
@@ -41,9 +40,14 @@ public class EngineOrigin private constructor(
                 return EngineOriginParseOutcome.Rejected(EngineOriginRejection.ORIGIN_ONLY)
             }
             when (val explicitPort = candidate.explicitPort()) {
-                ExplicitPort.Absent -> Unit
-                ExplicitPort.Malformed ->
+                ExplicitPort.Absent -> {
+                    // The default HTTPS authority needs no port normalization.
+                }
+
+                ExplicitPort.Malformed -> {
                     return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
+                }
+
                 is ExplicitPort.Present -> {
                     if (explicitPort.value == 443) {
                         return EngineOriginParseOutcome.Rejected(
@@ -58,13 +62,14 @@ public class EngineOrigin private constructor(
                 }
             }
 
-            val parsed = try {
-                Url(candidate)
-            } catch (_: URLParserException) {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
-            } catch (_: IllegalArgumentException) {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
-            }
+            val parsed =
+                try {
+                    Url(candidate)
+                } catch (_: URLParserException) {
+                    return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
+                } catch (_: IllegalArgumentException) {
+                    return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
+                }
             if (parsed.protocol.name != "https") {
                 return EngineOriginParseOutcome.Rejected(EngineOriginRejection.HTTPS_REQUIRED)
             }
@@ -93,32 +98,38 @@ public class EngineOrigin private constructor(
 
         private fun String.explicitPort(): ExplicitPort {
             val authority = removePrefix(HTTPS_PREFIX)
-            val portSource = if (authority.startsWith('[')) {
-                val closingBracket = authority.indexOf(']')
-                if (closingBracket < 0) {
-                    return ExplicitPort.Malformed
+            val portSource =
+                if (authority.startsWith('[')) {
+                    val closingBracket = authority.indexOf(']')
+                    if (closingBracket < 0) {
+                        return ExplicitPort.Malformed
+                    }
+                    val suffix = authority.substring(closingBracket + 1)
+                    when {
+                        suffix.isEmpty() -> return ExplicitPort.Absent
+                        suffix.startsWith(':') -> suffix.drop(1)
+                        else -> return ExplicitPort.Malformed
+                    }
+                } else {
+                    when (authority.count { character -> character == ':' }) {
+                        0 -> return ExplicitPort.Absent
+                        1 -> authority.substringAfterLast(':')
+                        else -> return ExplicitPort.Malformed
+                    }
                 }
-                val suffix = authority.substring(closingBracket + 1)
-                when {
-                    suffix.isEmpty() -> return ExplicitPort.Absent
-                    suffix.startsWith(':') -> suffix.drop(1)
-                    else -> return ExplicitPort.Malformed
-                }
-            } else {
-                when (authority.count { character -> character == ':' }) {
-                    0 -> return ExplicitPort.Absent
-                    1 -> authority.substringAfterLast(':')
-                    else -> return ExplicitPort.Malformed
-                }
-            }
             val port = portSource.toIntOrNull() ?: return ExplicitPort.Malformed
             return ExplicitPort.Present(port, portSource)
         }
 
         private sealed interface ExplicitPort {
             data object Absent : ExplicitPort
+
             data object Malformed : ExplicitPort
-            data class Present(val value: Int, val source: String) : ExplicitPort
+
+            data class Present(
+                val value: Int,
+                val source: String,
+            ) : ExplicitPort
         }
     }
 }

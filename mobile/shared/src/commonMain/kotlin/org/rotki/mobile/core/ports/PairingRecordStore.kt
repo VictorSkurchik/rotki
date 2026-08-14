@@ -13,7 +13,9 @@ public data class PairingRecord(
 public sealed interface PairingRecordReadOutcome {
     public data object Missing : PairingRecordReadOutcome
 
-    public data class Present(public val record: PairingRecord) : PairingRecordReadOutcome
+    public data class Present(
+        public val record: PairingRecord,
+    ) : PairingRecordReadOutcome
 
     public data object Corrupt : PairingRecordReadOutcome
 

@@ -3,8 +3,8 @@ package org.rotki.mobile.core.network
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentLength
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.cancel
@@ -20,14 +20,16 @@ import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 
 internal suspend fun <T> HttpStatement.executeCompanionSuccessEnvelope(
     deserializer: DeserializationStrategy<T>,
-): CompanionEnvelopeDecodeOutcome<T> = execute { response ->
-    response.decodeCompanionSuccessEnvelope(deserializer)
-}
+): CompanionEnvelopeDecodeOutcome<T> =
+    execute { response ->
+        response.decodeCompanionSuccessEnvelope(deserializer)
+    }
 
 internal suspend fun HttpStatement.executeCompanionFailureEnvelope():
-    CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> = execute { response ->
-    response.decodeCompanionFailureEnvelope()
-}
+    CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
+    execute { response ->
+        response.decodeCompanionFailureEnvelope()
+    }
 
 /**
  * Executes this statement exactly once and decodes either its expected success envelope or its
@@ -36,7 +38,10 @@ internal suspend fun HttpStatement.executeCompanionFailureEnvelope():
  * The response-started distinction is important for replay policy: an idempotent request may be
  * repeated after a pre-response transport failure, while a body failure after headers is
  * deliberately ambiguous and must not be replayed automatically.
+ *
+ * The Ktor transport boundary must classify every non-cancellation client failure.
  */
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun <T> HttpStatement.executeCompanionResponse(
     expectedSuccessStatusCode: Int,
     deserializer: DeserializationStrategy<T>,
@@ -48,21 +53,26 @@ internal suspend fun <T> HttpStatement.executeCompanionResponse(
             responseStarted = true
             val statusCode = response.status.value
             if (!response.hasStrictJsonContentType() ||
-                (statusCode == expectedSuccessStatusCode &&
-                    requiredSuccessCacheControl != null &&
-                    !response.hasCanonicalHeader(
-                        HttpHeaders.CacheControl,
-                        requiredSuccessCacheControl,
-                    ))
+                (
+                    statusCode == expectedSuccessStatusCode &&
+                        requiredSuccessCacheControl != null &&
+                        !response.hasCanonicalHeader(
+                            HttpHeaders.CacheControl,
+                            requiredSuccessCacheControl,
+                        )
+                )
             ) {
                 response.bodyAsChannel().cancel()
                 CompanionHttpResponseOutcome.ContractFailure(statusCode)
             } else if (statusCode == expectedSuccessStatusCode) {
                 when (val decoded = response.decodeCompanionSuccessEnvelope(deserializer)) {
-                    is CompanionEnvelopeDecodeOutcome.Decoded ->
+                    is CompanionEnvelopeDecodeOutcome.Decoded -> {
                         CompanionHttpResponseOutcome.Success(decoded.value)
-                    CompanionEnvelopeDecodeOutcome.ContractFailure ->
+                    }
+
+                    CompanionEnvelopeDecodeOutcome.ContractFailure -> {
                         CompanionHttpResponseOutcome.ContractFailure(statusCode)
+                    }
                 }
             } else {
                 when (val decoded = response.decodeCompanionFailureEnvelope()) {
@@ -78,8 +88,10 @@ internal suspend fun <T> HttpStatement.executeCompanionResponse(
                             )
                         }
                     }
-                    CompanionEnvelopeDecodeOutcome.ContractFailure ->
+
+                    CompanionEnvelopeDecodeOutcome.ContractFailure -> {
                         CompanionHttpResponseOutcome.ContractFailure(statusCode)
+                    }
                 }
             }
         }
@@ -87,36 +99,48 @@ internal suspend fun <T> HttpStatement.executeCompanionResponse(
         throw cancellation
     } catch (error: Exception) {
         if (!isTransportFailure(error)) throw error
-        if (responseStarted) CompanionHttpResponseOutcome.CompleteResponseTransportFailure else
+        if (responseStarted) {
+            CompanionHttpResponseOutcome.CompleteResponseTransportFailure
+        } else {
             CompanionHttpResponseOutcome.PreResponseTransportFailure
+        }
     }
 }
 
-private fun HttpResponse.hasCanonicalHeader(name: String, expected: String): Boolean =
+private fun HttpResponse.hasCanonicalHeader(
+    name: String,
+    expected: String,
+): Boolean =
     headers.getAll(name)?.let { values ->
         values.size == 1 && values.single() == expected
     } == true
 
 private suspend fun <T> HttpResponse.decodeCompanionSuccessEnvelope(
     deserializer: DeserializationStrategy<T>,
-): CompanionEnvelopeDecodeOutcome<T> = when (val body = readBoundedControlResponseText()) {
-    is BoundedControlResponseBodyOutcome.Accepted ->
-        CompanionEnvelopeDecoder.decodeSuccess(body.text, deserializer)
-    BoundedControlResponseBodyOutcome.ContractFailure ->
-        CompanionEnvelopeDecodeOutcome.ContractFailure
-}
+): CompanionEnvelopeDecodeOutcome<T> =
+    when (val body = readBoundedControlResponseText()) {
+        is BoundedControlResponseBodyOutcome.Accepted -> {
+            CompanionEnvelopeDecoder.decodeSuccess(body.text, deserializer)
+        }
+
+        BoundedControlResponseBodyOutcome.ContractFailure -> {
+            CompanionEnvelopeDecodeOutcome.ContractFailure
+        }
+    }
 
 private suspend fun HttpResponse.decodeCompanionFailureEnvelope():
     CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
     when (val body = readBoundedControlResponseText()) {
-        is BoundedControlResponseBodyOutcome.Accepted ->
+        is BoundedControlResponseBodyOutcome.Accepted -> {
             CompanionEnvelopeDecoder.decodeFailure(body.text)
-        BoundedControlResponseBodyOutcome.ContractFailure ->
+        }
+
+        BoundedControlResponseBodyOutcome.ContractFailure -> {
             CompanionEnvelopeDecodeOutcome.ContractFailure
+        }
     }
 
-private suspend fun HttpResponse.readBoundedControlResponseText():
-    BoundedControlResponseBodyOutcome =
+private suspend fun HttpResponse.readBoundedControlResponseText(): BoundedControlResponseBodyOutcome =
     readBoundedControlResponseText(
         declaredLength = contentLength(),
         channel = bodyAsChannel(),
@@ -138,16 +162,19 @@ internal suspend fun readBoundedControlResponseText(
         channel.cancel()
         return BoundedControlResponseBodyOutcome.ContractFailure
     }
-    val text = try {
-        bytes.decodeToString(throwOnInvalidSequence = true)
-    } catch (_: CharacterCodingException) {
-        return BoundedControlResponseBodyOutcome.ContractFailure
-    }
+    val text =
+        try {
+            bytes.decodeToString(throwOnInvalidSequence = true)
+        } catch (_: CharacterCodingException) {
+            return BoundedControlResponseBodyOutcome.ContractFailure
+        }
     return BoundedControlResponseBodyOutcome.Accepted(text)
 }
 
 internal sealed interface BoundedControlResponseBodyOutcome {
-    class Accepted(internal val text: String) : BoundedControlResponseBodyOutcome {
+    class Accepted(
+        internal val text: String,
+    ) : BoundedControlResponseBodyOutcome {
         override fun toString(): String = "Accepted(redacted)"
     }
 
@@ -155,7 +182,9 @@ internal sealed interface BoundedControlResponseBodyOutcome {
 }
 
 internal sealed interface CompanionHttpResponseOutcome<out T> {
-    data class Success<T>(internal val value: T) : CompanionHttpResponseOutcome<T>
+    data class Success<T>(
+        internal val value: T,
+    ) : CompanionHttpResponseOutcome<T>
 
     data class Failure(
         internal val statusCode: Int,
@@ -179,26 +208,28 @@ private fun HttpResponse.retryAfterSeconds(statusCode: Int): Long? {
     return values.single().toLongOrNull()
 }
 
-private fun HttpResponse.hasStrictJsonContentType(): Boolean {
-    return hasStrictJsonContentType(headers.getAll(HttpHeaders.ContentType))
-}
+private fun HttpResponse.hasStrictJsonContentType(): Boolean =
+    hasStrictJsonContentType(headers.getAll(HttpHeaders.ContentType))
 
 internal fun hasStrictJsonContentType(values: List<String>?): Boolean {
     values ?: return false
     if (values.size != 1) return false
-    val parsed = try {
-        ContentType.parse(values.single())
-    } catch (_: IllegalArgumentException) {
-        return false
-    }
+    val parsed =
+        try {
+            ContentType.parse(values.single())
+        } catch (_: IllegalArgumentException) {
+            return false
+        }
     if (!parsed.match(ContentType.Application.Json)) return false
-    val charsetParameters = parsed.parameters.filter { parameter ->
-        parameter.name.equals("charset", ignoreCase = true)
-    }
+    val charsetParameters =
+        parsed.parameters.filter { parameter ->
+            parameter.name.equals("charset", ignoreCase = true)
+        }
     return parsed.parameters.size == charsetParameters.size &&
-        charsetParameters.size <= 1 && charsetParameters.all { parameter ->
-        parameter.value.equals("utf-8", ignoreCase = true)
-    }
+        charsetParameters.size <= 1 &&
+        charsetParameters.all { parameter ->
+            parameter.value.equals("utf-8", ignoreCase = true)
+        }
 }
 
 internal fun isTransportFailure(error: Throwable): Boolean {

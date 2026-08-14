@@ -1,7 +1,7 @@
 package org.rotki.mobile
 
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import org.rotki.mobile.auth.PairingConnection
@@ -35,10 +35,11 @@ public class CompanionFacade internal constructor(
     public val status: StateFlow<CompanionStatus> = coordinator.status
 
     public companion object {
-        private val COMMITTABLE_PAIRING_STATES: Set<CompanionRootState> = setOf(
-            CompanionRootState.Connecting,
-            CompanionRootState.DeviceLocked,
-        )
+        private val COMMITTABLE_PAIRING_STATES: Set<CompanionRootState> =
+            setOf(
+                CompanionRootState.Connecting,
+                CompanionRootState.DeviceLocked,
+            )
 
         public fun restorePaired(snapshotCoverage: SnapshotCoverage): CompanionFacade =
             CompanionFacade(
@@ -52,8 +53,7 @@ public class CompanionFacade internal constructor(
     internal fun beginPairing(): CompanionTransitionOutcome =
         coordinator.transition(CompanionTransitionEvent.ACCEPT_PAIRING_QR)
 
-    internal fun acceptPairing(pairingQr: PairingQr): CompanionTransitionOutcome =
-        acceptPairing(pairingQr) {}
+    internal fun acceptPairing(pairingQr: PairingQr): CompanionTransitionOutcome = acceptPairing(pairingQr) {}
 
     internal fun acceptPairing(
         pairingQr: PairingQr,
@@ -89,11 +89,12 @@ public class CompanionFacade internal constructor(
         while (true) {
             val current = pendingPairingAttempt.value ?: return null
             val pairingQr = current.pairingQr ?: return null
-            val consumed = PendingPairingAttempt(
-                pairingQr = null,
-                token = current.token,
-                durableRegistration = current.durableRegistration,
-            )
+            val consumed =
+                PendingPairingAttempt(
+                    pairingQr = null,
+                    token = current.token,
+                    durableRegistration = current.durableRegistration,
+                )
             if (pendingPairingAttempt.compareAndSet(expect = current, update = consumed)) {
                 return PendingPairingLease(pairingQr, current.token)
             }
@@ -103,7 +104,7 @@ public class CompanionFacade internal constructor(
     internal fun isPendingPairing(lease: PendingPairingLease): Boolean =
         pendingPairingAttempt.value?.token === lease.token
 
-    internal suspend fun awaitPendingPairingLoss(lease: PendingPairingLease): Unit {
+    internal suspend fun awaitPendingPairingLoss(lease: PendingPairingLease) {
         pendingPairingAttempt.first { attempt -> attempt?.token !== lease.token }
     }
 
@@ -114,11 +115,12 @@ public class CompanionFacade internal constructor(
             if (current.token !== lease.token || current.pairingQr != null) return false
             if (current.durableRegistration) return true
             if (status.value.rootState != CompanionRootState.Connecting) return false
-            val durable = PendingPairingAttempt(
-                pairingQr = null,
-                token = current.token,
-                durableRegistration = true,
-            )
+            val durable =
+                PendingPairingAttempt(
+                    pairingQr = null,
+                    token = current.token,
+                    durableRegistration = true,
+                )
             if (pendingPairingAttempt.compareAndSet(expect = current, update = durable)) {
                 return status.value.rootState in COMMITTABLE_PAIRING_STATES
             }
@@ -189,14 +191,12 @@ public class CompanionFacade internal constructor(
         return discarded
     }
 
-    private fun discardAllPendingPairing(): Unit {
+    private fun discardAllPendingPairing() {
         clearPendingPairing()
         coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
     }
 
-    internal suspend fun <T> withPairingConnectionOwnership(
-        operation: suspend () -> T,
-    ): T {
+    internal suspend fun <T> withPairingConnectionOwnership(operation: suspend () -> T): T {
         pairingConnectionMutex.lock()
         return try {
             operation()
@@ -209,15 +209,17 @@ public class CompanionFacade internal constructor(
 
     public fun pairingFlow(clock: Clock): PairingFlow = PairingFlow(this, clock)
 
-    public fun pairingConnection(
-        configuration: PairingConnectionConfiguration,
-    ): PairingConnection = PairingConnection.create(this, configuration)
+    public fun pairingConnection(configuration: PairingConnectionConfiguration): PairingConnection =
+        PairingConnection.create(this, configuration)
 
     public fun lock(): CompanionTransitionOutcome {
         val cancelledUnregisteredPairing = clearPendingPairingAttempt()
         return coordinator.transition(
-            if (cancelledUnregisteredPairing) CompanionTransitionEvent.LOCAL_UNPAIR else
-                CompanionTransitionEvent.BACKGROUND_OR_SYSTEM_LOCK,
+            if (cancelledUnregisteredPairing) {
+                CompanionTransitionEvent.LOCAL_UNPAIR
+            } else {
+                CompanionTransitionEvent.BACKGROUND_OR_SYSTEM_LOCK
+            },
         )
     }
 
@@ -298,11 +300,11 @@ public class CompanionFacade internal constructor(
         return coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
     }
 
-    private fun clearPendingPairing(): Unit {
+    private fun clearPendingPairing() {
         pendingPairingAttempt.value = null
     }
 
-    private fun completePairingRegistration(): Unit {
+    private fun completePairingRegistration() {
         clearPendingPairing()
     }
 

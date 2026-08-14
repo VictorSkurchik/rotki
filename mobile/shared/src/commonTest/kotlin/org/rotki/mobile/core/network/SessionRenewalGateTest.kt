@@ -12,27 +12,29 @@ import kotlin.test.assertNull
 
 class SessionRenewalGateTest {
     @Test
-    fun simultaneousTriggersAcquireExactlyOneRenewalLease(): Unit = runTest {
-        val gate = SessionRenewalGate()
-        val start = CompletableDeferred<Unit>()
-        val attempts = List(CONCURRENT_TRIGGER_COUNT) {
-            async(Dispatchers.Default) {
-                start.await()
-                gate.tryAcquire()
-            }
+    fun simultaneousTriggersAcquireExactlyOneRenewalLease(): Unit =
+        runTest {
+            val gate = SessionRenewalGate()
+            val start = CompletableDeferred<Unit>()
+            val attempts =
+                List(CONCURRENT_TRIGGER_COUNT) {
+                    async(Dispatchers.Default) {
+                        start.await()
+                        gate.tryAcquire()
+                    }
+                }
+
+            start.complete(Unit)
+            val leases = attempts.awaitAll()
+
+            assertEquals(1, leases.count { lease -> lease != null })
+            val winner = assertNotNull(leases.singleOrNull { lease -> lease != null })
+            assertNull(gate.tryAcquire())
+
+            winner.release()
+            val next = assertNotNull(gate.tryAcquire())
+            next.release()
         }
-
-        start.complete(Unit)
-        val leases = attempts.awaitAll()
-
-        assertEquals(1, leases.count { lease -> lease != null })
-        val winner = assertNotNull(leases.singleOrNull { lease -> lease != null })
-        assertNull(gate.tryAcquire())
-
-        winner.release()
-        val next = assertNotNull(gate.tryAcquire())
-        next.release()
-    }
 
     private companion object {
         private const val CONCURRENT_TRIGGER_COUNT: Int = 64

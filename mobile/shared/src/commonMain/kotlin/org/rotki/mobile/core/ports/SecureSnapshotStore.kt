@@ -14,7 +14,9 @@ public sealed interface SecureSnapshotReadOutcome {
      * lifecycle transition; no JVM or Native API can revoke an arbitrary copy retained by a caller.
      */
     @OptIn(ExperimentalAtomicApi::class)
-    public class Unlocked(document: ByteArray) : SecureSnapshotReadOutcome {
+    public class Unlocked(
+        document: ByteArray,
+    ) : SecureSnapshotReadOutcome {
         private val storedDocument: AtomicReference<ByteArray?> =
             AtomicReference(document.copyOf())
 
@@ -22,7 +24,7 @@ public sealed interface SecureSnapshotReadOutcome {
         public fun documentCopy(): ByteArray? = storedDocument.load()?.copyOf()
 
         /** Idempotently revokes this handle and overwrites its owned plaintext buffer. */
-        public fun discard(): Unit {
+        public fun discard() {
             storedDocument.exchange(null)?.fill(0)
         }
 

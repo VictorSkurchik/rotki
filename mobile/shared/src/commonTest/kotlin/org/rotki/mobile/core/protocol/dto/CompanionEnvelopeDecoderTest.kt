@@ -14,10 +14,11 @@ class CompanionEnvelopeDecoderTest {
                 SUCCESS_WITH_ADDITIVE_FIELDS,
                 ProtocolDiscoveryEnvelopeDto.serializer(),
             )
-        val decoded = when (outcome) {
-            is CompanionEnvelopeDecodeOutcome.Decoded -> outcome.value
-            CompanionEnvelopeDecodeOutcome.ContractFailure -> fail("Expected decoded success")
-        }
+        val decoded =
+            when (outcome) {
+                is CompanionEnvelopeDecodeOutcome.Decoded -> outcome.value
+                CompanionEnvelopeDecodeOutcome.ContractFailure -> fail("Expected decoded success")
+            }
 
         assertEquals(listOf(1), decoded.result.supportedProtocolVersions)
         assertEquals("", decoded.message)
@@ -27,10 +28,11 @@ class CompanionEnvelopeDecoderTest {
     fun `valid additive failure is decoded after envelope preflight`() {
         val outcome: CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
             CompanionEnvelopeDecoder.decodeFailure(FAILURE_WITH_ADDITIVE_FIELDS)
-        val decoded = when (outcome) {
-            is CompanionEnvelopeDecodeOutcome.Decoded -> outcome.value
-            CompanionEnvelopeDecodeOutcome.ContractFailure -> fail("Expected decoded failure")
-        }
+        val decoded =
+            when (outcome) {
+                is CompanionEnvelopeDecodeOutcome.Decoded -> outcome.value
+                CompanionEnvelopeDecodeOutcome.ContractFailure -> fail("Expected decoded failure")
+            }
 
         assertEquals(null, decoded.result)
         assertEquals("invalid_request", decoded.error.code)
@@ -40,19 +42,21 @@ class CompanionEnvelopeDecoderTest {
 
     @Test
     fun `duplicate members are rejected recursively before typed decoding`() {
-        val duplicate = SUCCESS_WITH_ADDITIVE_FIELDS.replace(
-            "\"device_sessions\":1",
-            "\"device_sessions\":1,\"device_sessions\":1",
-        )
+        val duplicate =
+            SUCCESS_WITH_ADDITIVE_FIELDS.replace(
+                "\"device_sessions\":1",
+                "\"device_sessions\":1,\"device_sessions\":1",
+            )
 
         assertSuccessContractFailure(duplicate)
     }
 
     @Test
     fun `success with any error member is rejected as ambiguous`() {
-        val ambiguous = SUCCESS_WITH_ADDITIVE_FIELDS.dropLast(1) +
-            ",\"error\":{\"code\":\"invalid_request\",\"retryable\":false," +
-            "\"action\":\"none\"}}"
+        val ambiguous =
+            SUCCESS_WITH_ADDITIVE_FIELDS.dropLast(1) +
+                ",\"error\":{\"code\":\"invalid_request\",\"retryable\":false," +
+                "\"action\":\"none\"}}"
         assertSuccessContractFailure(ambiguous)
         assertIs<CompanionEnvelopeDecodeOutcome.ContractFailure>(
             CompanionEnvelopeDecoder.decodeFailure(ambiguous),
@@ -107,18 +111,20 @@ class CompanionEnvelopeDecoderTest {
 
     @Test
     fun `oversized or over-depth raw text is rejected before typed decoding`() {
-        val oversized = """{"result":{},"message":"","padding":"""" +
-            "x".repeat(ProtocolClientInputLimits.MaximumControlResponseBytes) +
-            "\"}"
+        val oversized =
+            """{"result":{},"message":"","padding":"""" +
+                "x".repeat(ProtocolClientInputLimits.MaximumControlResponseBytes) +
+                "\"}"
         val nesting = ProtocolClientInputLimits.MaximumJsonNestingDepth
-        val overDepth = """{"result":""" + "[".repeat(nesting) + "0" +
-            "]".repeat(nesting) + """, "message":""}"""
+        val overDepth =
+            """{"result":""" + "[".repeat(nesting) + "0" +
+                "]".repeat(nesting) + """, "message":""}"""
 
         assertSuccessContractFailure(oversized)
         assertSuccessContractFailure(overDepth)
     }
 
-    private fun assertSuccessContractFailure(text: String): Unit {
+    private fun assertSuccessContractFailure(text: String) {
         assertIs<CompanionEnvelopeDecodeOutcome.ContractFailure>(
             CompanionEnvelopeDecoder.decodeSuccess(
                 text,

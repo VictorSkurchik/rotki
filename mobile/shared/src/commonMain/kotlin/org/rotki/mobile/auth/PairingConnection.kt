@@ -18,8 +18,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.PendingPairingLease
-import org.rotki.mobile.auth.protocol.DeviceLabelParseOutcome
 import org.rotki.mobile.auth.protocol.DeviceLabel
+import org.rotki.mobile.auth.protocol.DeviceLabelParseOutcome
 import org.rotki.mobile.auth.protocol.DeviceSession
 import org.rotki.mobile.core.network.RequestReplayPolicy
 import org.rotki.mobile.core.network.RetryDecision
@@ -30,15 +30,15 @@ import org.rotki.mobile.core.network.createPlatformCompanionHttpClient
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.ports.Clock
-import org.rotki.mobile.core.ports.DeviceProofPublicKeyOutcome
 import org.rotki.mobile.core.ports.DeviceProofKeyDeleteOutcome
+import org.rotki.mobile.core.ports.DeviceProofPublicKeyOutcome
 import org.rotki.mobile.core.ports.DeviceProofSigner
 import org.rotki.mobile.core.ports.IdempotencyKeyGenerator
-import org.rotki.mobile.core.ports.PairingRecord
 import org.rotki.mobile.core.ports.PairingCleanupJournal
 import org.rotki.mobile.core.ports.PairingCleanupJournalClearOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalReadOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalWriteOutcome
+import org.rotki.mobile.core.ports.PairingRecord
 import org.rotki.mobile.core.ports.PairingRecordDeleteOutcome
 import org.rotki.mobile.core.ports.PairingRecordReadOutcome
 import org.rotki.mobile.core.ports.PairingRecordStore
@@ -49,7 +49,9 @@ import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolErrorAction
 import org.rotki.mobile.core.protocol.generated.ProtocolLifetimesSeconds
 
-public enum class PairingDevicePlatform(public val code: String) {
+public enum class PairingDevicePlatform(
+    public val code: String,
+) {
     ANDROID("android"),
     IOS("ios"),
 }
@@ -69,7 +71,9 @@ public class PairingConnectionConfiguration(
 }
 
 /** Coarse, secret-free terminal outcomes suitable for a thin Android or Swift adapter. */
-public enum class PairingConnectionOutcome(public val code: String) {
+public enum class PairingConnectionOutcome(
+    public val code: String,
+) {
     REGISTERED("registered"),
     NO_PENDING_PAIRING("no_pending_pairing"),
     OUTSIDE_ACTIVE_FOREGROUND("outside_active_foreground"),
@@ -110,15 +114,19 @@ public class PairingConnection internal constructor(
                         facade.discardPendingPairingWithoutMaterial()
                         PairingConnectionOutcome.NO_PENDING_PAIRING
                     }
-                    PairingCleanupJournalReadOutcome.CleanupRequired ->
+
+                    PairingCleanupJournalReadOutcome.CleanupRequired -> {
                         if (cleanupAttemptMaterial()) {
                             facade.completeRecoveredPairingCleanup()
                             PairingConnectionOutcome.NO_PENDING_PAIRING
                         } else {
                             PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
                         }
-                    PairingCleanupJournalReadOutcome.Unavailable ->
+                    }
+
+                    PairingCleanupJournalReadOutcome.Unavailable -> {
                         PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                    }
                 }
             }
             when (journal) {
@@ -126,15 +134,19 @@ public class PairingConnection internal constructor(
                     facade.abandonPendingPairingCleanup(cleanup)
                     PairingConnectionOutcome.NO_PENDING_PAIRING
                 }
-                PairingCleanupJournalReadOutcome.CleanupRequired ->
+
+                PairingCleanupJournalReadOutcome.CleanupRequired -> {
                     if (cleanupAttemptMaterial()) {
                         facade.completePendingPairingCleanup(cleanup)
                         PairingConnectionOutcome.NO_PENDING_PAIRING
                     } else {
                         PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
                     }
-                PairingCleanupJournalReadOutcome.Unavailable ->
+                }
+
+                PairingCleanupJournalReadOutcome.Unavailable -> {
                     PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                }
             }
         }
 
@@ -148,54 +160,58 @@ public class PairingConnection internal constructor(
         }
         when (readCleanupJournal()) {
             PairingCleanupJournalReadOutcome.Clear -> Unit
+
             PairingCleanupJournalReadOutcome.CleanupRequired,
             PairingCleanupJournalReadOutcome.Unavailable,
             -> return PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
         }
-        val lease = facade.takePendingPairingForConnection()
-            ?: return PairingConnectionOutcome.NO_PENDING_PAIRING
+        val lease =
+            facade.takePendingPairingForConnection()
+                ?: return PairingConnectionOutcome.NO_PENDING_PAIRING
         var cleanupHandle: PairingCleanupHandle? = null
         var cleanupJournalStored = false
         var committed = false
         var result = PairingConnectionOutcome.UNEXPECTED_FAILURE
         try {
-            result = try {
-                performRegistration(
-                    lease = lease,
-                    markCleanupRequired = {
-                        facade.markPairingCleanupRequired(lease)?.also { cleanup ->
-                            cleanupHandle = cleanup
-                        } != null
-                    },
-                    onCleanupJournalStored = { cleanupJournalStored = true },
-                ).also { outcome ->
-                    if (outcome == PairingConnectionOutcome.REGISTERED) {
-                        committed = true
+            result =
+                try {
+                    performRegistration(
+                        lease = lease,
+                        markCleanupRequired = {
+                            facade.markPairingCleanupRequired(lease)?.also { cleanup ->
+                                cleanupHandle = cleanup
+                            } != null
+                        },
+                        onCleanupJournalStored = { cleanupJournalStored = true },
+                    ).also { outcome ->
+                        if (outcome == PairingConnectionOutcome.REGISTERED) {
+                            committed = true
+                        }
                     }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Exception) {
+                    PairingConnectionOutcome.UNEXPECTED_FAILURE
                 }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (_: Exception) {
-                PairingConnectionOutcome.UNEXPECTED_FAILURE
-            }
         } finally {
             if (!committed) {
-                val cleanupComplete = withContext(NonCancellable) {
-                    val cleanup = cleanupHandle
-                    if (cleanup != null && cleanupJournalStored) {
-                        if (cleanupAttemptMaterial()) {
-                            facade.completePendingPairingCleanup(cleanup)
+                val cleanupComplete =
+                    withContext(NonCancellable) {
+                        val cleanup = cleanupHandle
+                        if (cleanup != null && cleanupJournalStored) {
+                            if (cleanupAttemptMaterial()) {
+                                facade.completePendingPairingCleanup(cleanup)
+                                true
+                            } else {
+                                false
+                            }
+                        } else if (cleanup == null) {
+                            facade.abortPendingPairing(lease)
                             true
                         } else {
                             false
                         }
-                    } else if (cleanup == null) {
-                        facade.abortPendingPairing(lease)
-                        true
-                    } else {
-                        false
                     }
-                }
                 if (!cleanupComplete && currentCoroutineContext().isActive) {
                     result = PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
                 }
@@ -204,56 +220,53 @@ public class PairingConnection internal constructor(
         return result
     }
 
-    private suspend fun readCleanupJournal(): PairingCleanupJournalReadOutcome = try {
-        configuration.pairingCleanupJournal.read()
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (_: Exception) {
-        PairingCleanupJournalReadOutcome.Unavailable
-    }
-
-    private suspend fun deletePairingRecord(): Boolean = try {
-        configuration.pairingRecordStore.delete() == PairingRecordDeleteOutcome.Deleted
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (_: Exception) {
-        false
-    }
-
-    private suspend fun deleteDeviceKey(): Boolean = try {
-        configuration.deviceProofSigner.deleteKey() == DeviceProofKeyDeleteOutcome.Deleted
-    } catch (cancellation: CancellationException) {
-        throw cancellation
-    } catch (_: Exception) {
-        false
-    }
-
-    private suspend fun cleanupAttemptMaterial(): Boolean {
-        val recordDeleted = try {
-            configuration.pairingRecordStore.delete() == PairingRecordDeleteOutcome.Deleted
+    private suspend fun readCleanupJournal(): PairingCleanupJournalReadOutcome =
+        try {
+            configuration.pairingCleanupJournal.read()
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
-            false
+            PairingCleanupJournalReadOutcome.Unavailable
         }
-        val keyDeleted = try {
+
+    private suspend fun deleteDeviceKey(): Boolean =
+        try {
             configuration.deviceProofSigner.deleteKey() == DeviceProofKeyDeleteOutcome.Deleted
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (_: Exception) {
             false
         }
-        val materialDeleted = recordDeleted && keyDeleted
-        val journalCleared = if (materialDeleted) {
+
+    private suspend fun cleanupAttemptMaterial(): Boolean {
+        val recordDeleted =
             try {
-                configuration.pairingCleanupJournal.clear() ==
-                    PairingCleanupJournalClearOutcome.Cleared
+                configuration.pairingRecordStore.delete() == PairingRecordDeleteOutcome.Deleted
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (_: Exception) {
                 false
             }
-        } else {
-            false
-        }
+        val keyDeleted =
+            try {
+                configuration.deviceProofSigner.deleteKey() == DeviceProofKeyDeleteOutcome.Deleted
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                false
+            }
+        val materialDeleted = recordDeleted && keyDeleted
+        val journalCleared =
+            if (materialDeleted) {
+                try {
+                    configuration.pairingCleanupJournal.clear() ==
+                        PairingCleanupJournalClearOutcome.Cleared
+                } catch (_: Exception) {
+                    false
+                }
+            } else {
+                false
+            }
         return materialDeleted && journalCleared
     }
 
@@ -267,6 +280,7 @@ public class PairingConnection internal constructor(
         }
         when (configuration.pairingRecordStore.read()) {
             PairingRecordReadOutcome.Missing -> Unit
+
             PairingRecordReadOutcome.Corrupt,
             is PairingRecordReadOutcome.Present,
             PairingRecordReadOutcome.Unavailable,
@@ -275,27 +289,41 @@ public class PairingConnection internal constructor(
         if (!gateAttempt(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
-        val label = when (val parsed = DeviceLabel.parse(configuration.deviceLabel)) {
-            is DeviceLabelParseOutcome.Accepted -> parsed.value
-            DeviceLabelParseOutcome.Rejected ->
-                return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
-        }
+        val label =
+            when (val parsed = DeviceLabel.parse(configuration.deviceLabel)) {
+                is DeviceLabelParseOutcome.Accepted -> {
+                    parsed.value
+                }
+
+                DeviceLabelParseOutcome.Rejected -> {
+                    return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
+                }
+            }
         val pairingQr = lease.pairingQr
         if (pairingQr.expiresAtEpochSeconds <= configuration.clock.nowEpochSeconds()) {
             return PairingConnectionOutcome.PAIRING_EXPIRED
         }
 
-        val selectedProtocolVersion = when (
-            val discovery = discoverWithRetry(lease)
-        ) {
-            is DiscoverySequenceOutcome.Compatible -> discovery.selectedProtocolVersion
-            is DiscoverySequenceOutcome.Terminal ->
-                return discovery.outcome.toPublicPairingOutcome()
-            DiscoverySequenceOutcome.Expired ->
-                return PairingConnectionOutcome.PAIRING_EXPIRED
-            DiscoverySequenceOutcome.AttemptUnavailable ->
-                return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
-        }
+        val selectedProtocolVersion =
+            when (
+                val discovery = discoverWithRetry(lease)
+            ) {
+                is DiscoverySequenceOutcome.Compatible -> {
+                    discovery.selectedProtocolVersion
+                }
+
+                is DiscoverySequenceOutcome.Terminal -> {
+                    return discovery.outcome.toPublicPairingOutcome()
+                }
+
+                DiscoverySequenceOutcome.Expired -> {
+                    return PairingConnectionOutcome.PAIRING_EXPIRED
+                }
+
+                DiscoverySequenceOutcome.AttemptUnavailable -> {
+                    return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
+                }
+            }
         if (!gateAttempt(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
@@ -328,47 +356,65 @@ public class PairingConnection internal constructor(
                     return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
                 }
             }
-            DeviceProofPublicKeyOutcome.PairingRequired -> Unit
-            DeviceProofPublicKeyOutcome.UnexpectedFailure ->
+
+            DeviceProofPublicKeyOutcome.PairingRequired -> {
+                // There is no pre-existing key to reconcile before creating one.
+            }
+
+            DeviceProofPublicKeyOutcome.UnexpectedFailure -> {
                 return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
+            }
         }
-        val publicKey = when (val key = configuration.deviceProofSigner.createKeyForPairing()) {
-            is DeviceProofPublicKeyOutcome.PublicKey -> key.value
-            DeviceProofPublicKeyOutcome.PairingRequired,
-            DeviceProofPublicKeyOutcome.UnexpectedFailure,
-            -> return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
-        }
+        val publicKey =
+            when (val key = configuration.deviceProofSigner.createKeyForPairing()) {
+                is DeviceProofPublicKeyOutcome.PublicKey -> key.value
+
+                DeviceProofPublicKeyOutcome.PairingRequired,
+                DeviceProofPublicKeyOutcome.UnexpectedFailure,
+                -> return PairingConnectionOutcome.LOCAL_SECURITY_UNAVAILABLE
+            }
         if (!gateAttempt(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
 
-        val request = PairingRegistrationRequest(
-            engineOrigin = pairingQr.engineOrigin,
-            pairingId = pairingQr.pairingId,
-            pairingCredential = pairingQr.pairingCredential,
-            selectedProtocolVersion = selectedProtocolVersion,
-            idempotencyKey = configuration.idempotencyKeyGenerator.generate(),
-            deviceLabel = label,
-            platform = configuration.platform.toProtocolPlatform(),
-            publicKey = publicKey,
-        )
-        val deviceSession = when (val registration = registerWithRetry(lease, request)) {
-            is RegistrationSequenceOutcome.Registered -> registration.deviceSession.takeIf {
-                session ->
-                    val earliestPairing = pairingQr.expiresAtEpochSeconds - minOf(
-                        pairingQr.expiresAtEpochSeconds,
-                        ProtocolLifetimesSeconds.Pairing,
-                    )
-                    session.pairedAtEpochSeconds in
-                        earliestPairing..pairingQr.expiresAtEpochSeconds
-            } ?: return PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
-            is RegistrationSequenceOutcome.Terminal ->
-                return registration.outcome.toPublicPairingOutcome()
-            RegistrationSequenceOutcome.Expired ->
-                return PairingConnectionOutcome.PAIRING_EXPIRED
-            RegistrationSequenceOutcome.AttemptUnavailable ->
-                return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
-        }
+        val request =
+            PairingRegistrationRequest(
+                engineOrigin = pairingQr.engineOrigin,
+                pairingId = pairingQr.pairingId,
+                pairingCredential = pairingQr.pairingCredential,
+                selectedProtocolVersion = selectedProtocolVersion,
+                idempotencyKey = configuration.idempotencyKeyGenerator.generate(),
+                deviceLabel = label,
+                platform = configuration.platform.toProtocolPlatform(),
+                publicKey = publicKey,
+            )
+        val deviceSession =
+            when (val registration = registerWithRetry(lease, request)) {
+                is RegistrationSequenceOutcome.Registered -> {
+                    registration.deviceSession.takeIf { session ->
+                        val earliestPairing =
+                            pairingQr.expiresAtEpochSeconds -
+                                minOf(
+                                    pairingQr.expiresAtEpochSeconds,
+                                    ProtocolLifetimesSeconds.Pairing,
+                                )
+                        session.pairedAtEpochSeconds in
+                            earliestPairing..pairingQr.expiresAtEpochSeconds
+                    } ?: return PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+                }
+
+                is RegistrationSequenceOutcome.Terminal -> {
+                    return registration.outcome.toPublicPairingOutcome()
+                }
+
+                RegistrationSequenceOutcome.Expired -> {
+                    return PairingConnectionOutcome.PAIRING_EXPIRED
+                }
+
+                RegistrationSequenceOutcome.AttemptUnavailable -> {
+                    return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
+                }
+            }
         if (!gateAttempt(lease)) {
             return PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND
         }
@@ -390,9 +436,7 @@ public class PairingConnection internal constructor(
         return PairingConnectionOutcome.REGISTERED
     }
 
-    private suspend fun discoverWithRetry(
-        lease: PendingPairingLease,
-    ): DiscoverySequenceOutcome {
+    private suspend fun discoverWithRetry(lease: PendingPairingLease): DiscoverySequenceOutcome {
         var completedAttempts = 0
         while (true) {
             if (!facade.isPendingPairing(lease)) {
@@ -402,11 +446,12 @@ public class PairingConnection internal constructor(
                 return DiscoverySequenceOutcome.Expired
             }
             completedAttempts += 1
-            val outcome = executeWhenActive(lease) {
-                executeBeforePairingExpiry(lease) {
-                    protocolClient.discover(lease.pairingQr.engineOrigin)
+            val outcome =
+                executeWhenActive(lease) {
+                    executeBeforePairingExpiry(lease) {
+                        protocolClient.discover(lease.pairingQr.engineOrigin)
+                    }
                 }
-            }
             if (outcome is LifecycleOperationOutcome.Backgrounded) {
                 return DiscoverySequenceOutcome.AttemptUnavailable
             }
@@ -422,28 +467,42 @@ public class PairingConnection internal constructor(
             if (discovery is PairingDiscoveryOutcome.Compatible) {
                 return DiscoverySequenceOutcome.Compatible(discovery.selectedProtocolVersion)
             }
-            val retryFailure = discovery.toRetryFailure()
-                ?: return DiscoverySequenceOutcome.Terminal(discovery)
+            val retryFailure =
+                discovery.toRetryFailure()
+                    ?: return DiscoverySequenceOutcome.Terminal(discovery)
             if (!gateAttempt(lease)) {
                 return DiscoverySequenceOutcome.AttemptUnavailable
             }
-            val decision = retryPolicy.decide(
-                replayPolicy = RequestReplayPolicy.SAFE_READ,
-                completedAttempts = completedAttempts,
-                failure = retryFailure,
-                isActiveForeground = true,
-                isCredentialAvailable = facade.isPendingPairing(lease),
-            )
+            val decision =
+                retryPolicy.decide(
+                    replayPolicy = RequestReplayPolicy.SAFE_READ,
+                    completedAttempts = completedAttempts,
+                    failure = retryFailure,
+                    isActiveForeground = true,
+                    isCredentialAvailable = facade.isPendingPairing(lease),
+                )
             when (decision) {
-                is RetryDecision.RetryAfter -> when (
-                    waitForRetryWhileActive(lease, decision.delayMillis)
-                ) {
-                    RetryWaitOutcome.Ready -> Unit
-                    RetryWaitOutcome.ForegroundResumed -> completedAttempts = 0
-                    RetryWaitOutcome.Backgrounded ->
-                        return DiscoverySequenceOutcome.AttemptUnavailable
+                is RetryDecision.RetryAfter -> {
+                    when (
+                        waitForRetryWhileActive(lease, decision.delayMillis)
+                    ) {
+                        RetryWaitOutcome.Ready -> {
+                            // Keep the current retry budget in the same foreground epoch.
+                        }
+
+                        RetryWaitOutcome.ForegroundResumed -> {
+                            completedAttempts = 0
+                        }
+
+                        RetryWaitOutcome.Backgrounded -> {
+                            return DiscoverySequenceOutcome.AttemptUnavailable
+                        }
+                    }
                 }
-                is RetryDecision.Stop -> return DiscoverySequenceOutcome.Terminal(discovery)
+
+                is RetryDecision.Stop -> {
+                    return DiscoverySequenceOutcome.Terminal(discovery)
+                }
             }
         }
     }
@@ -461,9 +520,10 @@ public class PairingConnection internal constructor(
                 return RegistrationSequenceOutcome.Expired
             }
             completedAttempts += 1
-            val outcome = executeWhenActive(lease) {
-                executeBeforePairingExpiry(lease) { protocolClient.register(request) }
-            }
+            val outcome =
+                executeWhenActive(lease) {
+                    executeBeforePairingExpiry(lease) { protocolClient.register(request) }
+                }
             if (outcome is LifecycleOperationOutcome.Backgrounded) {
                 return RegistrationSequenceOutcome.AttemptUnavailable
             }
@@ -479,28 +539,42 @@ public class PairingConnection internal constructor(
             if (registration is PairingRegistrationRemoteOutcome.Registered) {
                 return RegistrationSequenceOutcome.Registered(registration.deviceSession)
             }
-            val retryFailure = registration.toRetryFailure()
-                ?: return RegistrationSequenceOutcome.Terminal(registration)
+            val retryFailure =
+                registration.toRetryFailure()
+                    ?: return RegistrationSequenceOutcome.Terminal(registration)
             if (!gateAttempt(lease)) {
                 return RegistrationSequenceOutcome.AttemptUnavailable
             }
-            val decision = retryPolicy.decide(
-                replayPolicy = RequestReplayPolicy.IDEMPOTENT_WRITE,
-                completedAttempts = completedAttempts,
-                failure = retryFailure,
-                isActiveForeground = true,
-                isCredentialAvailable = facade.isPendingPairing(lease),
-            )
+            val decision =
+                retryPolicy.decide(
+                    replayPolicy = RequestReplayPolicy.IDEMPOTENT_WRITE,
+                    completedAttempts = completedAttempts,
+                    failure = retryFailure,
+                    isActiveForeground = true,
+                    isCredentialAvailable = facade.isPendingPairing(lease),
+                )
             when (decision) {
-                is RetryDecision.RetryAfter -> when (
-                    waitForRetryWhileActive(lease, decision.delayMillis)
-                ) {
-                    RetryWaitOutcome.Ready -> Unit
-                    RetryWaitOutcome.ForegroundResumed -> completedAttempts = 0
-                    RetryWaitOutcome.Backgrounded ->
-                        return RegistrationSequenceOutcome.AttemptUnavailable
+                is RetryDecision.RetryAfter -> {
+                    when (
+                        waitForRetryWhileActive(lease, decision.delayMillis)
+                    ) {
+                        RetryWaitOutcome.Ready -> {
+                            // Keep the current retry budget in the same foreground epoch.
+                        }
+
+                        RetryWaitOutcome.ForegroundResumed -> {
+                            completedAttempts = 0
+                        }
+
+                        RetryWaitOutcome.Backgrounded -> {
+                            return RegistrationSequenceOutcome.AttemptUnavailable
+                        }
+                    }
                 }
-                is RetryDecision.Stop -> return RegistrationSequenceOutcome.Terminal(registration)
+
+                is RetryDecision.Stop -> {
+                    return RegistrationSequenceOutcome.Terminal(registration)
+                }
             }
         }
     }
@@ -513,14 +587,16 @@ public class PairingConnection internal constructor(
             return LifecycleOperationOutcome.Backgrounded
         }
         return coroutineScope {
-            val visibilityChange = async(start = CoroutineStart.UNDISPATCHED) {
-                configuration.applicationVisibility.state.first { candidate ->
-                    candidate != ApplicationVisibilityState.ACTIVE_FOREGROUND
+            val visibilityChange =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    configuration.applicationVisibility.state.first { candidate ->
+                        candidate != ApplicationVisibilityState.ACTIVE_FOREGROUND
+                    }
                 }
-            }
-            val ownershipLoss = async(start = CoroutineStart.UNDISPATCHED) {
-                facade.awaitPendingPairingLoss(lease)
-            }
+            val ownershipLoss =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    facade.awaitPendingPairingLoss(lease)
+                }
             val inFlight = async(start = CoroutineStart.UNDISPATCHED) { operation() }
             select {
                 inFlight.onAwait { value ->
@@ -531,13 +607,20 @@ public class PairingConnection internal constructor(
                     } else {
                         if (!facade.isPendingPairing(lease)) {
                             LifecycleOperationOutcome.Backgrounded
-                        } else when (configuration.applicationVisibility.state.value) {
-                            ApplicationVisibilityState.INACTIVE ->
-                                LifecycleOperationOutcome.Suspended
-                            ApplicationVisibilityState.BACKGROUND_OR_LOCKED ->
-                                LifecycleOperationOutcome.Backgrounded
-                            ApplicationVisibilityState.ACTIVE_FOREGROUND ->
-                                LifecycleOperationOutcome.Completed(value)
+                        } else {
+                            when (configuration.applicationVisibility.state.value) {
+                                ApplicationVisibilityState.INACTIVE -> {
+                                    LifecycleOperationOutcome.Suspended
+                                }
+
+                                ApplicationVisibilityState.BACKGROUND_OR_LOCKED -> {
+                                    LifecycleOperationOutcome.Backgrounded
+                                }
+
+                                ApplicationVisibilityState.ACTIVE_FOREGROUND -> {
+                                    LifecycleOperationOutcome.Completed(value)
+                                }
+                            }
                         }
                     }
                 }
@@ -545,11 +628,17 @@ public class PairingConnection internal constructor(
                     inFlight.cancelAndJoin()
                     ownershipLoss.cancelAndJoin()
                     when (next) {
-                        ApplicationVisibilityState.INACTIVE -> LifecycleOperationOutcome.Suspended
-                        ApplicationVisibilityState.BACKGROUND_OR_LOCKED ->
+                        ApplicationVisibilityState.INACTIVE -> {
+                            LifecycleOperationOutcome.Suspended
+                        }
+
+                        ApplicationVisibilityState.BACKGROUND_OR_LOCKED -> {
                             LifecycleOperationOutcome.Backgrounded
-                        ApplicationVisibilityState.ACTIVE_FOREGROUND ->
+                        }
+
+                        ApplicationVisibilityState.ACTIVE_FOREGROUND -> {
                             error("Visibility watcher accepted active foreground")
+                        }
                     }
                 }
                 ownershipLoss.onAwait {
@@ -565,14 +654,16 @@ public class PairingConnection internal constructor(
         lease: PendingPairingLease,
         operation: suspend () -> T,
     ): T? {
-        val remainingSeconds = lease.pairingQr.expiresAtEpochSeconds -
-            configuration.clock.nowEpochSeconds()
+        val remainingSeconds =
+            lease.pairingQr.expiresAtEpochSeconds -
+                configuration.clock.nowEpochSeconds()
         if (remainingSeconds <= 0L) return null
-        val remainingMillis = if (remainingSeconds > Long.MAX_VALUE / MILLIS_PER_SECOND) {
-            Long.MAX_VALUE
-        } else {
-            remainingSeconds * MILLIS_PER_SECOND
-        }
+        val remainingMillis =
+            if (remainingSeconds > Long.MAX_VALUE / MILLIS_PER_SECOND) {
+                Long.MAX_VALUE
+            } else {
+                remainingSeconds * MILLIS_PER_SECOND
+            }
         return withContext(Dispatchers.Default) {
             withTimeoutOrNull(remainingMillis) { operation() }
         }
@@ -582,31 +673,41 @@ public class PairingConnection internal constructor(
         currentCoroutineContext().ensureActive()
         if (!facade.isPendingPairing(lease)) return LifecycleGate.Unavailable
         return when (configuration.applicationVisibility.state.value) {
-            ApplicationVisibilityState.ACTIVE_FOREGROUND -> LifecycleGate.Active
-            ApplicationVisibilityState.BACKGROUND_OR_LOCKED -> LifecycleGate.Unavailable
-            ApplicationVisibilityState.INACTIVE -> coroutineScope {
-                val visibility = async(start = CoroutineStart.UNDISPATCHED) {
-                    configuration.applicationVisibility.state.first { candidate ->
-                        candidate != ApplicationVisibilityState.INACTIVE
-                    }
-                }
-                val ownershipLoss = async(start = CoroutineStart.UNDISPATCHED) {
-                    facade.awaitPendingPairingLoss(lease)
-                }
-                select {
-                    visibility.onAwait { next ->
-                        ownershipLoss.cancelAndJoin()
-                        if (next == ApplicationVisibilityState.ACTIVE_FOREGROUND &&
-                            facade.isPendingPairing(lease)
-                        ) {
-                            LifecycleGate.Active
-                        } else {
+            ApplicationVisibilityState.ACTIVE_FOREGROUND -> {
+                LifecycleGate.Active
+            }
+
+            ApplicationVisibilityState.BACKGROUND_OR_LOCKED -> {
+                LifecycleGate.Unavailable
+            }
+
+            ApplicationVisibilityState.INACTIVE -> {
+                coroutineScope {
+                    val visibility =
+                        async(start = CoroutineStart.UNDISPATCHED) {
+                            configuration.applicationVisibility.state.first { candidate ->
+                                candidate != ApplicationVisibilityState.INACTIVE
+                            }
+                        }
+                    val ownershipLoss =
+                        async(start = CoroutineStart.UNDISPATCHED) {
+                            facade.awaitPendingPairingLoss(lease)
+                        }
+                    select {
+                        visibility.onAwait { next ->
+                            ownershipLoss.cancelAndJoin()
+                            if (next == ApplicationVisibilityState.ACTIVE_FOREGROUND &&
+                                facade.isPendingPairing(lease)
+                            ) {
+                                LifecycleGate.Active
+                            } else {
+                                LifecycleGate.Unavailable
+                            }
+                        }
+                        ownershipLoss.onAwait {
+                            visibility.cancelAndJoin()
                             LifecycleGate.Unavailable
                         }
-                    }
-                    ownershipLoss.onAwait {
-                        visibility.cancelAndJoin()
-                        LifecycleGate.Unavailable
                     }
                 }
             }
@@ -623,20 +724,24 @@ public class PairingConnection internal constructor(
             }
             val outcome = executeWhenActive(lease) { retryDelay.wait(delayMillis) }
             when (outcome) {
-                is LifecycleOperationOutcome.Completed -> return RetryWaitOutcome.Ready
-                LifecycleOperationOutcome.Suspended ->
+                is LifecycleOperationOutcome.Completed -> {
+                    return RetryWaitOutcome.Ready
+                }
+
+                LifecycleOperationOutcome.Suspended -> {
                     return if (awaitActiveOrUnavailable(lease) == LifecycleGate.Active) {
                         RetryWaitOutcome.ForegroundResumed
                     } else {
                         RetryWaitOutcome.Backgrounded
                     }
-                LifecycleOperationOutcome.Backgrounded -> return RetryWaitOutcome.Backgrounded
+                }
+
+                LifecycleOperationOutcome.Backgrounded -> {
+                    return RetryWaitOutcome.Backgrounded
+                }
             }
         }
     }
-
-    private fun isAttemptOwned(lease: PendingPairingLease): Boolean =
-        facade.isPendingPairing(lease)
 
     private suspend fun gateAttempt(lease: PendingPairingLease): Boolean =
         awaitActiveOrUnavailable(lease) == LifecycleGate.Active
@@ -649,13 +754,14 @@ public class PairingConnection internal constructor(
         internal fun create(
             facade: CompanionFacade,
             configuration: PairingConnectionConfiguration,
-        ): PairingConnection = PairingConnection(
-            facade = facade,
-            configuration = configuration,
-            protocolClient = PairingProtocolClient(createPlatformCompanionHttpClient()),
-            retryPolicy = RetryPolicy(),
-            retryDelay = DefaultPairingRetryDelay,
-        )
+        ): PairingConnection =
+            PairingConnection(
+                facade = facade,
+                configuration = configuration,
+                protocolClient = PairingProtocolClient(createPlatformCompanionHttpClient()),
+                retryPolicy = RetryPolicy(),
+                retryDelay = DefaultPairingRetryDelay,
+            )
     }
 }
 
@@ -668,7 +774,9 @@ private object DefaultPairingRetryDelay : PairingRetryDelay {
 }
 
 private sealed interface LifecycleOperationOutcome<out T> {
-    data class Completed<T>(val value: T) : LifecycleOperationOutcome<T>
+    data class Completed<T>(
+        val value: T,
+    ) : LifecycleOperationOutcome<T>
 
     data object Suspended : LifecycleOperationOutcome<Nothing>
 
@@ -687,9 +795,13 @@ private enum class RetryWaitOutcome {
 }
 
 private sealed interface DiscoverySequenceOutcome {
-    data class Compatible(val selectedProtocolVersion: Int) : DiscoverySequenceOutcome
+    data class Compatible(
+        val selectedProtocolVersion: Int,
+    ) : DiscoverySequenceOutcome
 
-    data class Terminal(val outcome: PairingDiscoveryOutcome) : DiscoverySequenceOutcome
+    data class Terminal(
+        val outcome: PairingDiscoveryOutcome,
+    ) : DiscoverySequenceOutcome
 
     data object Expired : DiscoverySequenceOutcome
 
@@ -697,115 +809,182 @@ private sealed interface DiscoverySequenceOutcome {
 }
 
 private sealed interface RegistrationSequenceOutcome {
-    data class Registered(val deviceSession: DeviceSession) : RegistrationSequenceOutcome
+    data class Registered(
+        val deviceSession: DeviceSession,
+    ) : RegistrationSequenceOutcome
 
-    data class Terminal(val outcome: PairingRegistrationRemoteOutcome) :
-        RegistrationSequenceOutcome
+    data class Terminal(
+        val outcome: PairingRegistrationRemoteOutcome,
+    ) : RegistrationSequenceOutcome
 
     data object Expired : RegistrationSequenceOutcome
 
     data object AttemptUnavailable : RegistrationSequenceOutcome
 }
 
-private fun PairingDiscoveryOutcome.toRetryFailure(): RetryFailure? = when (this) {
-    is PairingDiscoveryOutcome.Compatible,
-    PairingDiscoveryOutcome.Incompatible,
-    -> null
-    is PairingDiscoveryOutcome.Rejected -> when (val rejected = failure) {
-        is CompanionFailure.Known -> RetryFailure.HttpResponse(
-            statusCode = rejected.statusCode,
-            typedError = rejected.toRetryDisposition(),
-            retryAfterSeconds = retryAfterSeconds,
-        )
-        CompanionFailure.UnexpectedEngineError -> RetryFailure.ContractViolation
-    }
-    is PairingDiscoveryOutcome.ContractFailure ->
-        if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
-            RetryFailure.HttpResponse(statusCode)
-        } else {
-            RetryFailure.ContractViolation
+private fun PairingDiscoveryOutcome.toRetryFailure(): RetryFailure? =
+    when (this) {
+        is PairingDiscoveryOutcome.Compatible,
+        PairingDiscoveryOutcome.Incompatible,
+        -> {
+            null
         }
-    PairingDiscoveryOutcome.PreResponseTransportFailure -> RetryFailure.PreResponseTransport
-    PairingDiscoveryOutcome.CompleteResponseTransportFailure ->
-        RetryFailure.CompleteResponseTransport
-}
 
-private fun PairingRegistrationRemoteOutcome.toRetryFailure(): RetryFailure? = when (this) {
-    is PairingRegistrationRemoteOutcome.Registered -> null
-    is PairingRegistrationRemoteOutcome.Rejected -> RetryFailure.HttpResponse(
-        statusCode = statusCode,
-        typedError = failure.toRetryDisposition(),
-        retryAfterSeconds = retryAfterSeconds,
-    )
-    is PairingRegistrationRemoteOutcome.ContractFailure ->
-        if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
-            RetryFailure.HttpResponse(statusCode)
-        } else {
-            RetryFailure.ContractViolation
+        is PairingDiscoveryOutcome.Rejected -> {
+            when (val rejected = failure) {
+                is CompanionFailure.Known -> {
+                    RetryFailure.HttpResponse(
+                        statusCode = rejected.statusCode,
+                        typedError = rejected.toRetryDisposition(),
+                        retryAfterSeconds = retryAfterSeconds,
+                    )
+                }
+
+                CompanionFailure.UnexpectedEngineError -> {
+                    RetryFailure.ContractViolation
+                }
+            }
         }
-    PairingRegistrationRemoteOutcome.PreResponseTransportFailure ->
-        RetryFailure.PreResponseTransport
-    PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure ->
-        RetryFailure.CompleteResponseTransport
-}
 
-private fun CompanionFailure.toRetryDisposition(): TypedErrorRetryDisposition = when (this) {
-    is CompanionFailure.Known -> when {
-        retryable -> TypedErrorRetryDisposition.RETRYABLE
-        action != ProtocolErrorAction.None -> TypedErrorRetryDisposition.USER_ACTION_REQUIRED
-        else -> TypedErrorRetryDisposition.NOT_RETRYABLE
-    }
-    CompanionFailure.UnexpectedEngineError ->
-        TypedErrorRetryDisposition.UNEXPECTED_ENGINE_ERROR
-}
+        is PairingDiscoveryOutcome.ContractFailure -> {
+            if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
+                RetryFailure.HttpResponse(statusCode)
+            } else {
+                RetryFailure.ContractViolation
+            }
+        }
 
-private fun CompanionFailure.toPublicPairingOutcome(): PairingConnectionOutcome = when (this) {
-    is CompanionFailure.Known -> when (code) {
-        HttpErrorCode.IncompatibleProtocol -> PairingConnectionOutcome.INCOMPATIBLE
-        HttpErrorCode.PairingUnavailable -> PairingConnectionOutcome.PAIRING_UNAVAILABLE
-        HttpErrorCode.RateLimited -> PairingConnectionOutcome.RATE_LIMITED
-        HttpErrorCode.SnapshotUnavailable -> PairingConnectionOutcome.NETWORK_UNAVAILABLE
-        else -> PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+        PairingDiscoveryOutcome.PreResponseTransportFailure -> {
+            RetryFailure.PreResponseTransport
+        }
+
+        PairingDiscoveryOutcome.CompleteResponseTransportFailure -> {
+            RetryFailure.CompleteResponseTransport
+        }
     }
-    CompanionFailure.UnexpectedEngineError ->
-        PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
-}
+
+private fun PairingRegistrationRemoteOutcome.toRetryFailure(): RetryFailure? =
+    when (this) {
+        is PairingRegistrationRemoteOutcome.Registered -> {
+            null
+        }
+
+        is PairingRegistrationRemoteOutcome.Rejected -> {
+            RetryFailure.HttpResponse(
+                statusCode = statusCode,
+                typedError = failure.toRetryDisposition(),
+                retryAfterSeconds = retryAfterSeconds,
+            )
+        }
+
+        is PairingRegistrationRemoteOutcome.ContractFailure -> {
+            if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
+                RetryFailure.HttpResponse(statusCode)
+            } else {
+                RetryFailure.ContractViolation
+            }
+        }
+
+        PairingRegistrationRemoteOutcome.PreResponseTransportFailure -> {
+            RetryFailure.PreResponseTransport
+        }
+
+        PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure -> {
+            RetryFailure.CompleteResponseTransport
+        }
+    }
+
+private fun CompanionFailure.toRetryDisposition(): TypedErrorRetryDisposition =
+    when (this) {
+        is CompanionFailure.Known -> {
+            when {
+                retryable -> TypedErrorRetryDisposition.RETRYABLE
+                action != ProtocolErrorAction.None -> TypedErrorRetryDisposition.USER_ACTION_REQUIRED
+                else -> TypedErrorRetryDisposition.NOT_RETRYABLE
+            }
+        }
+
+        CompanionFailure.UnexpectedEngineError -> {
+            TypedErrorRetryDisposition.UNEXPECTED_ENGINE_ERROR
+        }
+    }
+
+private fun CompanionFailure.toPublicPairingOutcome(): PairingConnectionOutcome =
+    when (this) {
+        is CompanionFailure.Known -> {
+            when (code) {
+                HttpErrorCode.IncompatibleProtocol -> PairingConnectionOutcome.INCOMPATIBLE
+                HttpErrorCode.PairingUnavailable -> PairingConnectionOutcome.PAIRING_UNAVAILABLE
+                HttpErrorCode.RateLimited -> PairingConnectionOutcome.RATE_LIMITED
+                HttpErrorCode.SnapshotUnavailable -> PairingConnectionOutcome.NETWORK_UNAVAILABLE
+                else -> PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+            }
+        }
+
+        CompanionFailure.UnexpectedEngineError -> {
+            PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+        }
+    }
 
 private fun PairingDiscoveryOutcome.toPublicPairingOutcome(): PairingConnectionOutcome =
     when (this) {
-        is PairingDiscoveryOutcome.Compatible -> PairingConnectionOutcome.UNEXPECTED_FAILURE
-        PairingDiscoveryOutcome.Incompatible -> PairingConnectionOutcome.INCOMPATIBLE
-        is PairingDiscoveryOutcome.Rejected -> failure.toPublicPairingOutcome()
-        is PairingDiscoveryOutcome.ContractFailure ->
+        is PairingDiscoveryOutcome.Compatible -> {
+            PairingConnectionOutcome.UNEXPECTED_FAILURE
+        }
+
+        PairingDiscoveryOutcome.Incompatible -> {
+            PairingConnectionOutcome.INCOMPATIBLE
+        }
+
+        is PairingDiscoveryOutcome.Rejected -> {
+            failure.toPublicPairingOutcome()
+        }
+
+        is PairingDiscoveryOutcome.ContractFailure -> {
             if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
                 PairingConnectionOutcome.NETWORK_UNAVAILABLE
             } else {
                 PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
             }
+        }
+
         PairingDiscoveryOutcome.PreResponseTransportFailure,
         PairingDiscoveryOutcome.CompleteResponseTransportFailure,
-        -> PairingConnectionOutcome.NETWORK_UNAVAILABLE
+        -> {
+            PairingConnectionOutcome.NETWORK_UNAVAILABLE
+        }
     }
 
-private fun PairingRegistrationRemoteOutcome.toPublicPairingOutcome():
-    PairingConnectionOutcome = when (this) {
-    is PairingRegistrationRemoteOutcome.Registered -> PairingConnectionOutcome.UNEXPECTED_FAILURE
-    is PairingRegistrationRemoteOutcome.Rejected -> failure.toPublicPairingOutcome()
-    is PairingRegistrationRemoteOutcome.ContractFailure ->
-        if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
-            PairingConnectionOutcome.NETWORK_UNAVAILABLE
-        } else {
-            PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+private fun PairingRegistrationRemoteOutcome.toPublicPairingOutcome(): PairingConnectionOutcome =
+    when (this) {
+        is PairingRegistrationRemoteOutcome.Registered -> {
+            PairingConnectionOutcome.UNEXPECTED_FAILURE
         }
-    PairingRegistrationRemoteOutcome.PreResponseTransportFailure,
-    PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure,
-    -> PairingConnectionOutcome.NETWORK_UNAVAILABLE
-}
 
-private fun PairingDevicePlatform.toProtocolPlatform(): CompanionPlatform = when (this) {
-    PairingDevicePlatform.ANDROID -> CompanionPlatform.Android
-    PairingDevicePlatform.IOS -> CompanionPlatform.Ios
-}
+        is PairingRegistrationRemoteOutcome.Rejected -> {
+            failure.toPublicPairingOutcome()
+        }
+
+        is PairingRegistrationRemoteOutcome.ContractFailure -> {
+            if (statusCode in OPTIONAL_ENVELOPE_GATEWAY_STATUSES) {
+                PairingConnectionOutcome.NETWORK_UNAVAILABLE
+            } else {
+                PairingConnectionOutcome.UNEXPECTED_ENGINE_RESPONSE
+            }
+        }
+
+        PairingRegistrationRemoteOutcome.PreResponseTransportFailure,
+        PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure,
+        -> {
+            PairingConnectionOutcome.NETWORK_UNAVAILABLE
+        }
+    }
+
+private fun PairingDevicePlatform.toProtocolPlatform(): CompanionPlatform =
+    when (this) {
+        PairingDevicePlatform.ANDROID -> CompanionPlatform.Android
+        PairingDevicePlatform.IOS -> CompanionPlatform.Ios
+    }
 
 private val OPTIONAL_ENVELOPE_GATEWAY_STATUSES: Set<Int> = setOf(408, 502, 504)
 private const val MILLIS_PER_SECOND: Long = 1_000L

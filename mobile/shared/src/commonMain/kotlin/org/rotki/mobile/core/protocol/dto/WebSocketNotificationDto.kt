@@ -7,9 +7,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import org.rotki.mobile.core.network.CompanionJson
-import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
-import org.rotki.mobile.core.protocol.hasValidJsonSyntax
-import org.rotki.mobile.core.protocol.isCanonicalFixedBase64Url
 import org.rotki.mobile.core.protocol.StrictJsonBooleanSerializer
 import org.rotki.mobile.core.protocol.StrictJsonIntSerializer
 import org.rotki.mobile.core.protocol.StrictJsonLongSerializer
@@ -19,6 +16,9 @@ import org.rotki.mobile.core.protocol.generated.ProtocolEncodedLengths
 import org.rotki.mobile.core.protocol.generated.ProtocolErrorAction
 import org.rotki.mobile.core.protocol.generated.SourceErrorCode
 import org.rotki.mobile.core.protocol.generated.WebSocketEventType
+import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
+import org.rotki.mobile.core.protocol.hasValidJsonSyntax
+import org.rotki.mobile.core.protocol.isCanonicalFixedBase64Url
 
 internal object WebSocketNotificationDecoder {
     internal fun decode(text: String): WebSocketNotificationDecodeOutcome {
@@ -31,33 +31,42 @@ internal object WebSocketNotificationDecoder {
         if (!hasValidJsonSyntax(text)) {
             return WebSocketNotificationDecodeOutcome.ContractFailure
         }
-        val envelope = try {
-            CompanionJson.parseToJsonElement(text) as? JsonObject
+        val envelope =
+            try {
+                CompanionJson.parseToJsonElement(text) as? JsonObject
+                    ?: return WebSocketNotificationDecodeOutcome.ContractFailure
+            } catch (_: SerializationException) {
+                return WebSocketNotificationDecodeOutcome.ContractFailure
+            } catch (_: IllegalArgumentException) {
+                return WebSocketNotificationDecodeOutcome.ContractFailure
+            }
+        val type =
+            envelope["type"] as? JsonPrimitive
                 ?: return WebSocketNotificationDecodeOutcome.ContractFailure
-        } catch (_: SerializationException) {
-            return WebSocketNotificationDecodeOutcome.ContractFailure
-        } catch (_: IllegalArgumentException) {
-            return WebSocketNotificationDecodeOutcome.ContractFailure
-        }
-        val type = envelope["type"] as? JsonPrimitive
-            ?: return WebSocketNotificationDecodeOutcome.ContractFailure
         if (!type.isString) return WebSocketNotificationDecodeOutcome.ContractFailure
         return when (type.content) {
-            WebSocketEventType.CompanionSnapshotRevision.wireValue ->
+            WebSocketEventType.CompanionSnapshotRevision.wireValue -> {
                 decodeSnapshot(envelope["data"] as? JsonObject)
-            WebSocketEventType.CompanionRefreshOperation.wireValue ->
+            }
+
+            WebSocketEventType.CompanionRefreshOperation.wireValue -> {
                 decodeRefresh(envelope["data"] as? JsonObject)
-            else -> WebSocketNotificationDecodeOutcome.IgnoredUnknownEvent
+            }
+
+            else -> {
+                WebSocketNotificationDecodeOutcome.IgnoredUnknownEvent
+            }
         }
     }
 
     private fun decodeSnapshot(data: JsonObject?): WebSocketNotificationDecodeOutcome {
         if (data == null) return WebSocketNotificationDecodeOutcome.ContractFailure
-        val dto = try {
-            CompanionJson.decodeFromJsonElement<SnapshotRevisionDataDto>(data)
-        } catch (_: SerializationException) {
-            return WebSocketNotificationDecodeOutcome.ContractFailure
-        }
+        val dto =
+            try {
+                CompanionJson.decodeFromJsonElement<SnapshotRevisionDataDto>(data)
+            } catch (_: SerializationException) {
+                return WebSocketNotificationDecodeOutcome.ContractFailure
+            }
         if (!isCanonicalFixedBase64Url(dto.revision, SNAPSHOT_REVISION_LENGTH, 32)) {
             return WebSocketNotificationDecodeOutcome.ContractFailure
         }
@@ -68,11 +77,12 @@ internal object WebSocketNotificationDecoder {
 
     private fun decodeRefresh(data: JsonObject?): WebSocketNotificationDecodeOutcome {
         if (data == null) return WebSocketNotificationDecodeOutcome.ContractFailure
-        val dto = try {
-            CompanionJson.decodeFromJsonElement<RefreshOperationDataDto>(data)
-        } catch (_: SerializationException) {
-            return WebSocketNotificationDecodeOutcome.ContractFailure
-        }
+        val dto =
+            try {
+                CompanionJson.decodeFromJsonElement<RefreshOperationDataDto>(data)
+            } catch (_: SerializationException) {
+                return WebSocketNotificationDecodeOutcome.ContractFailure
+            }
         val operation = dto.toDomain() ?: return WebSocketNotificationDecodeOutcome.ContractFailure
         return WebSocketNotificationDecodeOutcome.Decoded(
             CompanionNotification.RefreshOperationChanged(operation),
@@ -122,7 +132,9 @@ internal data class RefreshOperationNotification(
 internal sealed interface RefreshTarget {
     data object Global : RefreshTarget
 
-    data class Source(internal val sourceId: String) : RefreshTarget {
+    data class Source(
+        internal val sourceId: String,
+    ) : RefreshTarget {
         override fun toString(): String = "Source(redacted)"
     }
 }
@@ -172,13 +184,21 @@ private class RefreshOperationDataDto(
     @SerialName("operation_id")
     val operationId: String,
     @SerialName("version")
-    val version: @Serializable(with = StrictJsonIntSerializer::class) Int,
+    val version:
+        @Serializable(with = StrictJsonIntSerializer::class)
+        Int,
     @SerialName("created_at")
-    val createdAt: @Serializable(with = StrictJsonLongSerializer::class) Long,
+    val createdAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long,
     @SerialName("started_at")
-    val startedAt: @Serializable(with = StrictJsonLongSerializer::class) Long?,
+    val startedAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long?,
     @SerialName("finished_at")
-    val finishedAt: @Serializable(with = StrictJsonLongSerializer::class) Long?,
+    val finishedAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long?,
     @SerialName("target")
     val target: JsonObject,
     @SerialName("state")
@@ -194,9 +214,13 @@ private class RefreshOperationDataDto(
 @Serializable
 private class RefreshProgressDto(
     @SerialName("completed")
-    val completed: @Serializable(with = StrictJsonIntSerializer::class) Int,
+    val completed:
+        @Serializable(with = StrictJsonIntSerializer::class)
+        Int,
     @SerialName("total")
-    val total: @Serializable(with = StrictJsonIntSerializer::class) Int,
+    val total:
+        @Serializable(with = StrictJsonIntSerializer::class)
+        Int,
 )
 
 @Serializable
@@ -204,7 +228,9 @@ private class RefreshOperationErrorDto(
     @SerialName("code")
     val code: String,
     @SerialName("retryable")
-    val retryable: @Serializable(with = StrictJsonBooleanSerializer::class) Boolean,
+    val retryable:
+        @Serializable(with = StrictJsonBooleanSerializer::class)
+        Boolean,
     @SerialName("action")
     val action: String,
 )
@@ -222,13 +248,14 @@ private fun RefreshOperationDataDto.toDomain(): RefreshOperationNotification? {
         return null
     }
     val domainTarget = target.toRefreshTarget() ?: return null
-    val domainState = when (state) {
-        "queued" -> RefreshOperationState.QUEUED
-        "running" -> RefreshOperationState.RUNNING
-        "succeeded" -> RefreshOperationState.SUCCEEDED
-        "failed" -> RefreshOperationState.FAILED
-        else -> return null
-    }
+    val domainState =
+        when (state) {
+            "queued" -> RefreshOperationState.QUEUED
+            "running" -> RefreshOperationState.RUNNING
+            "succeeded" -> RefreshOperationState.SUCCEEDED
+            "failed" -> RefreshOperationState.FAILED
+            else -> return null
+        }
     val domainProgress = progress?.toDomain() ?: if (progress == null) null else return null
     val domainError = error?.toDomain(domainTarget) ?: if (error == null) null else return null
     if ((domainTarget is RefreshTarget.Global && domainProgress == null) ||
@@ -236,24 +263,32 @@ private fun RefreshOperationDataDto.toDomain(): RefreshOperationNotification? {
     ) {
         return null
     }
-    val stateIsValid = when (domainState) {
-        RefreshOperationState.QUEUED ->
-            startedAt == null && finishedAt == null && domainError == null &&
-                resultSnapshotRevision == null && domainProgress?.completed == 0
-        RefreshOperationState.RUNNING ->
-            startedAt != null && finishedAt == null && domainError == null &&
-                resultSnapshotRevision == null
-        RefreshOperationState.SUCCEEDED ->
-            startedAt != null && finishedAt != null && domainError == null &&
-                (domainProgress == null || domainProgress.completed == domainProgress.total)
-        RefreshOperationState.FAILED ->
-            finishedAt != null && domainError != null &&
-                failedOutcomeIsValid(
-                    progress = domainProgress,
-                    error = domainError,
-                    resultSnapshotRevision = resultSnapshotRevision,
-                )
-    }
+    val stateIsValid =
+        when (domainState) {
+            RefreshOperationState.QUEUED -> {
+                startedAt == null && finishedAt == null && domainError == null &&
+                    resultSnapshotRevision == null && domainProgress?.completed == 0
+            }
+
+            RefreshOperationState.RUNNING -> {
+                startedAt != null && finishedAt == null && domainError == null &&
+                    resultSnapshotRevision == null
+            }
+
+            RefreshOperationState.SUCCEEDED -> {
+                startedAt != null && finishedAt != null && domainError == null &&
+                    (domainProgress == null || domainProgress.completed == domainProgress.total)
+            }
+
+            RefreshOperationState.FAILED -> {
+                finishedAt != null && domainError != null &&
+                    failedOutcomeIsValid(
+                        progress = domainProgress,
+                        error = domainError,
+                        resultSnapshotRevision = resultSnapshotRevision,
+                    )
+            }
+        }
     if (!stateIsValid) {
         return null
     }
@@ -275,18 +310,26 @@ private fun JsonObject.toRefreshTarget(): RefreshTarget? {
     val kind = this["kind"] as? JsonPrimitive ?: return null
     if (!kind.isString) return null
     return when (kind.content) {
-        "global" -> if ("source_id" !in this) RefreshTarget.Global else null
+        "global" -> {
+            if ("source_id" !in this) RefreshTarget.Global else null
+        }
+
         "source" -> {
             val sourceId = this["source_id"] as? JsonPrimitive ?: return null
-            sourceId.takeIf { value ->
-                value.isString && isCanonicalFixedBase64Url(
-                    value.content,
-                    ProtocolEncodedLengths.PairingId,
-                    16,
-                )
-            }?.let { value -> RefreshTarget.Source(value.content) }
+            sourceId
+                .takeIf { value ->
+                    value.isString &&
+                        isCanonicalFixedBase64Url(
+                            value.content,
+                            ProtocolEncodedLengths.PairingId,
+                            16,
+                        )
+                }?.let { value -> RefreshTarget.Source(value.content) }
         }
-        else -> null
+
+        else -> {
+            null
+        }
     }
 }
 
@@ -298,17 +341,20 @@ private fun RefreshProgressDto.toDomain(): RefreshProgress? =
     }
 
 private fun RefreshOperationErrorDto.toDomain(target: RefreshTarget): RefreshOperationError? {
-    val operationCode = OperationErrorCode.entries.firstOrNull { candidate ->
-        candidate.wireValue == code
-    }
-    if (operationCode != null) {
-        val knownAction = ProtocolErrorAction.entries.firstOrNull { candidate ->
-            candidate.wireValue == action
-        } ?: return null
-        val targetIsValid = when (operationCode) {
-            OperationErrorCode.OperationInterrupted -> true
-            OperationErrorCode.SourceRefreshFailed -> target is RefreshTarget.Global
+    val operationCode =
+        OperationErrorCode.entries.firstOrNull { candidate ->
+            candidate.wireValue == code
         }
+    if (operationCode != null) {
+        val knownAction =
+            ProtocolErrorAction.entries.firstOrNull { candidate ->
+                candidate.wireValue == action
+            } ?: return null
+        val targetIsValid =
+            when (operationCode) {
+                OperationErrorCode.OperationInterrupted -> true
+                OperationErrorCode.SourceRefreshFailed -> target is RefreshTarget.Global
+            }
         if (!targetIsValid ||
             !retryable ||
             knownAction != ProtocolErrorAction.Retry
@@ -323,15 +369,17 @@ private fun RefreshOperationErrorDto.toDomain(target: RefreshTarget): RefreshOpe
         }
         return RefreshOperationError.UnexpectedOperation
     }
-    val sourceCode = SourceErrorCode.entries.firstOrNull { candidate -> candidate.wireValue == code }
-        ?: return RefreshOperationError.Source(
-            SourceErrorCode.SourceUnexpectedError,
-            retryable = false,
-            action = ProtocolErrorAction.None,
-        )
-    val knownAction = ProtocolErrorAction.entries.firstOrNull { candidate ->
-        candidate.wireValue == action
-    } ?: return null
+    val sourceCode =
+        SourceErrorCode.entries.firstOrNull { candidate -> candidate.wireValue == code }
+            ?: return RefreshOperationError.Source(
+                SourceErrorCode.SourceUnexpectedError,
+                retryable = false,
+                action = ProtocolErrorAction.None,
+            )
+    val knownAction =
+        ProtocolErrorAction.entries.firstOrNull { candidate ->
+            candidate.wireValue == action
+        } ?: return null
     val expected = SOURCE_ERROR_TUPLES[sourceCode] ?: return null
     if (retryable != expected.retryable || knownAction != expected.action) return null
     return RefreshOperationError.Source(sourceCode, retryable, knownAction)
@@ -341,16 +389,29 @@ private fun failedOutcomeIsValid(
     progress: RefreshProgress?,
     error: RefreshOperationError,
     resultSnapshotRevision: String?,
-): Boolean = when (error) {
-    is RefreshOperationError.Source -> progress == null
-    RefreshOperationError.UnexpectedOperation -> progress != null
-    is RefreshOperationError.Operation -> when (error.code) {
-        OperationErrorCode.OperationInterrupted -> true
-        OperationErrorCode.SourceRefreshFailed ->
-            progress != null && progress.completed == progress.total &&
-                resultSnapshotRevision != null
+): Boolean =
+    when (error) {
+        is RefreshOperationError.Source -> {
+            progress == null
+        }
+
+        RefreshOperationError.UnexpectedOperation -> {
+            progress != null
+        }
+
+        is RefreshOperationError.Operation -> {
+            when (error.code) {
+                OperationErrorCode.OperationInterrupted -> {
+                    true
+                }
+
+                OperationErrorCode.SourceRefreshFailed -> {
+                    progress != null && progress.completed == progress.total &&
+                        resultSnapshotRevision != null
+                }
+            }
+        }
     }
-}
 
 private const val SNAPSHOT_REVISION_LENGTH: Int = 43
 
@@ -359,12 +420,13 @@ private data class ErrorTuple(
     val action: ProtocolErrorAction,
 )
 
-private val SOURCE_ERROR_TUPLES: Map<SourceErrorCode, ErrorTuple> = mapOf(
-    SourceErrorCode.SourceUnreachable to ErrorTuple(true, ProtocolErrorAction.Retry),
-    SourceErrorCode.SourceRateLimited to ErrorTuple(true, ProtocolErrorAction.Retry),
-    SourceErrorCode.SourceAuthenticationFailed to
-        ErrorTuple(false, ProtocolErrorAction.UseFullClient),
-    SourceErrorCode.SourceConfigurationChanged to
-        ErrorTuple(false, ProtocolErrorAction.UseFullClient),
-    SourceErrorCode.SourceUnexpectedError to ErrorTuple(false, ProtocolErrorAction.None),
-)
+private val SOURCE_ERROR_TUPLES: Map<SourceErrorCode, ErrorTuple> =
+    mapOf(
+        SourceErrorCode.SourceUnreachable to ErrorTuple(true, ProtocolErrorAction.Retry),
+        SourceErrorCode.SourceRateLimited to ErrorTuple(true, ProtocolErrorAction.Retry),
+        SourceErrorCode.SourceAuthenticationFailed to
+            ErrorTuple(false, ProtocolErrorAction.UseFullClient),
+        SourceErrorCode.SourceConfigurationChanged to
+            ErrorTuple(false, ProtocolErrorAction.UseFullClient),
+        SourceErrorCode.SourceUnexpectedError to ErrorTuple(false, ProtocolErrorAction.None),
+    )

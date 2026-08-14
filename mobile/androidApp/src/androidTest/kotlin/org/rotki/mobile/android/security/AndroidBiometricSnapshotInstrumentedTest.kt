@@ -34,7 +34,7 @@ class AndroidBiometricSnapshotInstrumentedTest {
     private lateinit var keyStore: AndroidSnapshotKeyStore
 
     @Before
-    fun setUp(): Unit {
+    fun setUp() {
         assumeTrue(
             InstrumentationRegistry.getArguments().getString(OPT_IN_ARGUMENT) == "true",
         )
@@ -44,12 +44,12 @@ class AndroidBiometricSnapshotInstrumentedTest {
     }
 
     @After
-    fun tearDown(): Unit {
+    fun tearDown() {
         if (::keyStore.isInitialized) keyStore.delete()
     }
 
     @Test
-    fun aesKeyHasExactPerUseBiometricOnlyPolicy(): Unit {
+    fun aesKeyHasExactPerUseBiometricOnlyPolicy() {
         val policy = keyStore.policyForTest()
 
         assertTrue(policy.opaque)
@@ -73,31 +73,36 @@ class AndroidBiometricSnapshotInstrumentedTest {
     }
 
     @Test
-    fun productionStoreUsesFreshIvRoundTripsAndRejectsTamper(): Unit {
+    fun productionStoreUsesFreshIvRoundTripsAndRejectsTamper() {
         val plaintext = "biometric-only snapshot bytes".toByteArray()
-        val activity = instrumentation.startActivitySync(
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        ) as MainActivity
+        val activity =
+            instrumentation.startActivitySync(
+                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ) as MainActivity
         val snapshotFile = AtomicSnapshotFile(context).also { file -> file.delete() }
         try {
-            val broker = AndroidBiometricCryptoBroker(
-                activity = activity,
-                promptCopy = AndroidBiometricPromptCopy(
-                    title = "Rotki snapshot security test",
-                    subtitle = "Authorize the encrypted Snapshot operation",
-                    cancel = "Cancel",
-                ),
-            )
-            val cleaner = object : LocalMaterialCleaner {
-                override suspend fun destroyAll(): Boolean = true
-            }
-            val store = AndroidSecureSnapshotStore(
-                context = context,
-                keyStore = keyStore,
-                biometricBroker = broker,
-                materialCleaner = cleaner,
-                file = snapshotFile,
-            )
+            val broker =
+                AndroidBiometricCryptoBroker(
+                    activity = activity,
+                    promptCopy =
+                        AndroidBiometricPromptCopy(
+                            title = "Rotki snapshot security test",
+                            subtitle = "Authorize the encrypted Snapshot operation",
+                            cancel = "Cancel",
+                        ),
+                )
+            val cleaner =
+                object : LocalMaterialCleaner {
+                    override suspend fun destroyAll(): Boolean = true
+                }
+            val store =
+                AndroidSecureSnapshotStore(
+                    context = context,
+                    keyStore = keyStore,
+                    biometricBroker = broker,
+                    materialCleaner = cleaner,
+                    file = snapshotFile,
+                )
 
             assertEquals(
                 SecureSnapshotWriteOutcome.Stored,
@@ -115,21 +120,24 @@ class AndroidBiometricSnapshotInstrumentedTest {
                 first.initializationVectorCopy().contentEquals(second.initializationVectorCopy()),
             )
 
-            val reloaded = AndroidSecureSnapshotStore(
-                context = context,
-                keyStore = keyStore,
-                biometricBroker = broker,
-                materialCleaner = cleaner,
-                file = snapshotFile,
-            )
-            val read = runBlocking { reloaded.readAfterDeviceAuthentication() }
-                as SecureSnapshotReadOutcome.Unlocked
+            val reloaded =
+                AndroidSecureSnapshotStore(
+                    context = context,
+                    keyStore = keyStore,
+                    biometricBroker = broker,
+                    materialCleaner = cleaner,
+                    file = snapshotFile,
+                )
+            val read =
+                runBlocking { reloaded.readAfterDeviceAuthentication() }
+                    as SecureSnapshotReadOutcome.Unlocked
             assertArrayEquals(plaintext, checkNotNull(read.documentCopy()))
             read.discard()
 
-            val tampered = second.ciphertextAndTagCopy().also { bytes ->
-                bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
-            }
+            val tampered =
+                second.ciphertextAndTagCopy().also { bytes ->
+                    bytes[bytes.lastIndex] = (bytes.last().toInt() xor 1).toByte()
+                }
             assertTrue(
                 snapshotFile.replace(
                     SnapshotEnvelopeCodec.encode(

@@ -1,13 +1,15 @@
 package org.rotki.mobile.core.protocol
 
 import com.ionspin.kotlin.bignum.integer.BigInteger
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.io.encoding.Base64.PaddingOption
 import org.rotki.mobile.core.protocol.generated.ProtocolEncodedLengths
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.Base64.PaddingOption
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 public sealed interface ProtocolValueParseOutcome<out T> {
-    public data class Accepted<T>(public val value: T) : ProtocolValueParseOutcome<T>
+    public data class Accepted<T>(
+        public val value: T,
+    ) : ProtocolValueParseOutcome<T>
 
     public data class Rejected(
         public val reason: ProtocolValueRejection,
@@ -26,8 +28,7 @@ public enum class ProtocolValueRejection {
 public class DeviceSessionId private constructor(
     public val encoded: String,
 ) {
-    public override fun equals(other: Any?): Boolean =
-        other is DeviceSessionId && encoded == other.encoded
+    public override fun equals(other: Any?): Boolean = other is DeviceSessionId && encoded == other.encoded
 
     public override fun hashCode(): Int = encoded.hashCode()
 
@@ -46,8 +47,7 @@ public class DeviceSessionId private constructor(
 public class IdempotencyKey private constructor(
     public val encoded: String,
 ) {
-    public override fun equals(other: Any?): Boolean =
-        other is IdempotencyKey && encoded == other.encoded
+    public override fun equals(other: Any?): Boolean = other is IdempotencyKey && encoded == other.encoded
 
     public override fun hashCode(): Int = encoded.hashCode()
 
@@ -73,8 +73,7 @@ public class IdempotencyKey private constructor(
 public class P1363Signature private constructor(
     public val encoded: String,
 ) {
-    public override fun equals(other: Any?): Boolean =
-        other is P1363Signature && encoded == other.encoded
+    public override fun equals(other: Any?): Boolean = other is P1363Signature && encoded == other.encoded
 
     public override fun hashCode(): Int = encoded.hashCode()
 
@@ -85,12 +84,13 @@ public class P1363Signature private constructor(
     public companion object {
         public fun parse(candidate: String): ProtocolValueParseOutcome<P1363Signature> =
             when (
-                val parsed = parseFixedBase64Url(
-                    candidate,
-                    ProtocolEncodedLengths.P1363Signature,
-                    64,
-                    ::P1363Signature,
-                )
+                val parsed =
+                    parseFixedBase64Url(
+                        candidate,
+                        ProtocolEncodedLengths.P1363Signature,
+                        64,
+                        ::P1363Signature,
+                    )
             ) {
                 is ProtocolValueParseOutcome.Accepted -> {
                     val bytes = parsed.value.bytesCopy()
@@ -102,7 +102,10 @@ public class P1363Signature private constructor(
                         ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.INVALID_SIGNATURE)
                     }
                 }
-                is ProtocolValueParseOutcome.Rejected -> parsed
+
+                is ProtocolValueParseOutcome.Rejected -> {
+                    parsed
+                }
             }
 
         public fun fromBytes(bytes: ByteArray): ProtocolValueParseOutcome<P1363Signature> =
@@ -117,8 +120,7 @@ public class P1363Signature private constructor(
 public class X963PublicKey private constructor(
     public val encoded: String,
 ) {
-    public override fun equals(other: Any?): Boolean =
-        other is X963PublicKey && encoded == other.encoded
+    public override fun equals(other: Any?): Boolean = other is X963PublicKey && encoded == other.encoded
 
     public override fun hashCode(): Int = encoded.hashCode()
 
@@ -129,20 +131,25 @@ public class X963PublicKey private constructor(
     public companion object {
         public fun parse(candidate: String): ProtocolValueParseOutcome<X963PublicKey> =
             when (
-                val parsed = parseFixedBase64Url(
-                    candidate,
-                    ProtocolEncodedLengths.P256PublicKey,
-                    65,
-                    ::X963PublicKey,
-                )
+                val parsed =
+                    parseFixedBase64Url(
+                        candidate,
+                        ProtocolEncodedLengths.P256PublicKey,
+                        65,
+                        ::X963PublicKey,
+                    )
             ) {
-                is ProtocolValueParseOutcome.Accepted ->
+                is ProtocolValueParseOutcome.Accepted -> {
                     if (isValidUncompressedP256PublicKey(parsed.value.bytesCopy())) {
                         parsed
                     } else {
                         ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.INVALID_PUBLIC_KEY)
                     }
-                is ProtocolValueParseOutcome.Rejected -> parsed
+                }
+
+                is ProtocolValueParseOutcome.Rejected -> {
+                    parsed
+                }
             }
 
         public fun fromBytes(bytes: ByteArray): ProtocolValueParseOutcome<X963PublicKey> =
@@ -240,11 +247,12 @@ private inline fun <T> parseFixedBase64Url(
     if (candidate.any { character -> !character.isBase64UrlCharacter() }) {
         return ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.INVALID_ALPHABET)
     }
-    val decoded = try {
-        decodeCanonicalBase64Url(candidate)
-    } catch (_: IllegalArgumentException) {
-        return ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.NON_CANONICAL)
-    }
+    val decoded =
+        try {
+            decodeCanonicalBase64Url(candidate)
+        } catch (_: IllegalArgumentException) {
+            return ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.NON_CANONICAL)
+        }
     if (decoded.size != byteLength || encodeBase64Url(decoded) != candidate) {
         return ProtocolValueParseOutcome.Rejected(ProtocolValueRejection.NON_CANONICAL)
     }
@@ -255,8 +263,9 @@ internal fun isCanonicalFixedBase64Url(
     candidate: String,
     encodedLength: Int,
     byteLength: Int,
-): Boolean = parseFixedBase64Url(candidate, encodedLength, byteLength) { Unit } is
-    ProtocolValueParseOutcome.Accepted
+): Boolean =
+    parseFixedBase64Url(candidate, encodedLength, byteLength) { Unit } is
+        ProtocolValueParseOutcome.Accepted
 
 private fun Char.isBase64UrlCharacter(): Boolean =
     this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this == '-' || this == '_'
@@ -266,8 +275,7 @@ private fun decodeCanonicalBase64Url(encoded: String): ByteArray =
     Base64.UrlSafe.withPadding(PaddingOption.ABSENT_OPTIONAL).decode(encoded)
 
 @OptIn(ExperimentalEncodingApi::class)
-private fun encodeBase64Url(bytes: ByteArray): String =
-    Base64.UrlSafe.withPadding(PaddingOption.ABSENT).encode(bytes)
+private fun encodeBase64Url(bytes: ByteArray): String = Base64.UrlSafe.withPadding(PaddingOption.ABSENT).encode(bytes)
 
 private fun isValidP256Scalar(bytes: ByteArray): Boolean {
     if (bytes.size != 32 || bytes.all { byte -> byte == 0.toByte() }) {
@@ -293,34 +301,65 @@ private fun isValidUncompressedP256PublicKey(bytes: ByteArray): Boolean {
     return left == right
 }
 
-private fun positiveMod(value: BigInteger, modulus: BigInteger): BigInteger {
+private fun positiveMod(
+    value: BigInteger,
+    modulus: BigInteger,
+): BigInteger {
     val remainder = value % modulus
     return if (remainder.signum() < 0) remainder + modulus else remainder
 }
 
-private fun ByteArray.toUnsignedBigInteger(): BigInteger = BigInteger.parseString(
-    joinToString(separator = "") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') },
-    16,
-)
+private fun ByteArray.toUnsignedBigInteger(): BigInteger =
+    BigInteger.parseString(
+        joinToString(separator = "") { byte -> (byte.toInt() and 0xff).toString(16).padStart(2, '0') },
+        16,
+    )
 
 private const val UNCOMPRESSED_POINT_PREFIX: Byte = 0x04
 
-private val P256_FIELD_PRIME: BigInteger = BigInteger.parseString(
-    "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
-    16,
-)
-private val P256_CURVE_B: BigInteger = BigInteger.parseString(
-    "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
-    16,
-)
+private val P256_FIELD_PRIME: BigInteger =
+    BigInteger.parseString(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+        16,
+    )
+private val P256_CURVE_B: BigInteger =
+    BigInteger.parseString(
+        "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+        16,
+    )
 
-private val P256_ORDER: ByteArray = byteArrayOf(
-    0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
-    0x00, 0x00, 0x00, 0x00,
-    0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
-    0xff.toByte(), 0xff.toByte(), 0xff.toByte(), 0xff.toByte(),
-    0xbc.toByte(), 0xe6.toByte(), 0xfa.toByte(), 0xad.toByte(),
-    0xa7.toByte(), 0x17, 0x9e.toByte(), 0x84.toByte(),
-    0xf3.toByte(), 0xb9.toByte(), 0xca.toByte(), 0xc2.toByte(),
-    0xfc.toByte(), 0x63, 0x25, 0x51,
-)
+private val P256_ORDER: ByteArray =
+    byteArrayOf(
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xff.toByte(),
+        0xbc.toByte(),
+        0xe6.toByte(),
+        0xfa.toByte(),
+        0xad.toByte(),
+        0xa7.toByte(),
+        0x17,
+        0x9e.toByte(),
+        0x84.toByte(),
+        0xf3.toByte(),
+        0xb9.toByte(),
+        0xca.toByte(),
+        0xc2.toByte(),
+        0xfc.toByte(),
+        0x63,
+        0x25,
+        0x51,
+    )

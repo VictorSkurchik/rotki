@@ -48,18 +48,19 @@ public sealed interface CompanionRootState {
     }
 
     public companion object {
-        internal val entries: List<CompanionRootState> = listOf(
-            Unpaired,
-            DeviceLocked,
-            Connecting,
-            Online,
-            Refreshing,
-            Degraded,
-            Unreachable,
-            EngineLocked,
-            ProfileMismatch,
-            Incompatible,
-            Revoked,
-        )
+        internal val entries: List<CompanionRootState> =
+            listOf(
+                Unpaired,
+                DeviceLocked,
+                Connecting,
+                Online,
+                Refreshing,
+                Degraded,
+                Unreachable,
+                EngineLocked,
+                ProfileMismatch,
+                Incompatible,
+                Revoked,
+            )
     }
 }

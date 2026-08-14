@@ -12,7 +12,6 @@ import org.rotki.mobile.auth.protocol.DeviceLabel
 import org.rotki.mobile.auth.protocol.DeviceSession
 import org.rotki.mobile.auth.protocol.RegisterDeviceSessionRequestDto
 import org.rotki.mobile.auth.protocol.matchesRegistration
-import org.rotki.mobile.auth.protocol.toDomain as toDeviceSession
 import org.rotki.mobile.core.network.CompanionHttpResponseOutcome
 import org.rotki.mobile.core.network.executeCompanionResponse
 import org.rotki.mobile.core.protocol.CompanionFailure
@@ -29,35 +28,47 @@ import org.rotki.mobile.core.protocol.generated.CompanionPlatform
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolHeaders
 import org.rotki.mobile.core.protocol.generated.SUPPORTED_PROTOCOL_VERSIONS
+import org.rotki.mobile.auth.protocol.toDomain as toDeviceSession
 import org.rotki.mobile.core.protocol.toDomain as toCompanionFailure
 
 internal class PairingProtocolClient(
     private val client: HttpClient,
 ) {
     internal suspend fun discover(origin: EngineOrigin): PairingDiscoveryOutcome {
-        val response = client.prepareRequest(
-            "${origin.restApiBase}/companion${PairingProtocolRoutes.Discovery.path}",
-        ) {
-            method = PairingProtocolRoutes.Discovery.method
-        }.executeCompanionResponse(
-            expectedSuccessStatusCode = PairingProtocolRoutes.Discovery.successStatusCode,
-            deserializer = ProtocolDiscoveryEnvelopeDto.serializer(),
-        )
-        return when (response) {
-            is CompanionHttpResponseOutcome.Success ->
-                when (
-                    val negotiation = response.value.result.negotiate(
-                        SUPPORTED_PROTOCOL_VERSIONS,
-                    )
+        val response =
+            client
+                .prepareRequest(
+                    "${origin.restApiBase}/companion${PairingProtocolRoutes.Discovery.path}",
                 ) {
-                    is ProtocolNegotiationOutcome.Compatible ->
+                    method = PairingProtocolRoutes.Discovery.method
+                }.executeCompanionResponse(
+                    expectedSuccessStatusCode = PairingProtocolRoutes.Discovery.successStatusCode,
+                    deserializer = ProtocolDiscoveryEnvelopeDto.serializer(),
+                )
+        return when (response) {
+            is CompanionHttpResponseOutcome.Success -> {
+                when (
+                    val negotiation =
+                        response.value.result.negotiate(
+                            SUPPORTED_PROTOCOL_VERSIONS,
+                        )
+                ) {
+                    is ProtocolNegotiationOutcome.Compatible -> {
                         PairingDiscoveryOutcome.Compatible(negotiation.selectedVersion)
-                    ProtocolNegotiationOutcome.Incompatible -> PairingDiscoveryOutcome.Incompatible
-                    ProtocolNegotiationOutcome.ContractFailure ->
+                    }
+
+                    ProtocolNegotiationOutcome.Incompatible -> {
+                        PairingDiscoveryOutcome.Incompatible
+                    }
+
+                    ProtocolNegotiationOutcome.ContractFailure -> {
                         PairingDiscoveryOutcome.ContractFailure(
                             PairingProtocolRoutes.Discovery.successStatusCode,
                         )
+                    }
                 }
+            }
+
             is CompanionHttpResponseOutcome.Failure -> {
                 if (response.statusCode == HTTP_NOT_FOUND) {
                     PairingDiscoveryOutcome.Incompatible
@@ -73,72 +84,95 @@ internal class PairingProtocolClient(
                     }
                 }
             }
-            is CompanionHttpResponseOutcome.ContractFailure ->
+
+            is CompanionHttpResponseOutcome.ContractFailure -> {
                 if (response.statusCode == HTTP_NOT_FOUND) {
                     PairingDiscoveryOutcome.Incompatible
                 } else {
                     PairingDiscoveryOutcome.ContractFailure(response.statusCode)
                 }
-            CompanionHttpResponseOutcome.PreResponseTransportFailure ->
+            }
+
+            CompanionHttpResponseOutcome.PreResponseTransportFailure -> {
                 PairingDiscoveryOutcome.PreResponseTransportFailure
-            CompanionHttpResponseOutcome.CompleteResponseTransportFailure ->
+            }
+
+            CompanionHttpResponseOutcome.CompleteResponseTransportFailure -> {
                 PairingDiscoveryOutcome.CompleteResponseTransportFailure
+            }
         }
     }
 
-    internal suspend fun register(
-        request: PairingRegistrationRequest,
-    ): PairingRegistrationRemoteOutcome {
-        val response = client.prepareRequest(
-            "${request.engineOrigin.restApiBase}/companion${PairingProtocolRoutes.Registration.path}",
-        ) {
-            method = PairingProtocolRoutes.Registration.method
-            header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-            header(ProtocolHeaders.Protocol, request.selectedProtocolVersion.toString())
-            header(HttpHeaders.Authorization, "Bearer ${request.pairingCredential.encoded}")
-            header(ProtocolHeaders.IdempotencyKey, request.idempotencyKey.encoded)
-            setBody(
-                RegisterDeviceSessionRequestDto.create(
-                    pairingId = request.pairingId,
-                    deviceLabel = request.deviceLabel,
-                    platform = request.platform,
-                    publicKey = request.publicKey,
-                ),
-            )
-        }.executeCompanionResponse(
-            expectedSuccessStatusCode = PairingProtocolRoutes.Registration.successStatusCode,
-            deserializer = DeviceSessionEnvelopeDto.serializer(),
-            requiredSuccessCacheControl = "no-store",
-        )
+    internal suspend fun register(request: PairingRegistrationRequest): PairingRegistrationRemoteOutcome {
+        val response =
+            client
+                .prepareRequest(
+                    "${request.engineOrigin.restApiBase}/companion${PairingProtocolRoutes.Registration.path}",
+                ) {
+                    method = PairingProtocolRoutes.Registration.method
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header(ProtocolHeaders.Protocol, request.selectedProtocolVersion.toString())
+                    header(HttpHeaders.Authorization, "Bearer ${request.pairingCredential.encoded}")
+                    header(ProtocolHeaders.IdempotencyKey, request.idempotencyKey.encoded)
+                    setBody(
+                        RegisterDeviceSessionRequestDto.create(
+                            pairingId = request.pairingId,
+                            deviceLabel = request.deviceLabel,
+                            platform = request.platform,
+                            publicKey = request.publicKey,
+                        ),
+                    )
+                }.executeCompanionResponse(
+                    expectedSuccessStatusCode = PairingProtocolRoutes.Registration.successStatusCode,
+                    deserializer = DeviceSessionEnvelopeDto.serializer(),
+                    requiredSuccessCacheControl = "no-store",
+                )
         return when (response) {
             is CompanionHttpResponseOutcome.Success -> {
-                when (val domain = response.value.result.deviceSession.toDeviceSession()) {
-                    is AuthContractOutcome.Accepted -> if (
-                        domain.value.matchesRegistration(request.deviceLabel, request.platform)
-                    ) {
-                        PairingRegistrationRemoteOutcome.Registered(domain.value)
-                    } else {
+                when (
+                    val domain =
+                        response.value.result.deviceSession
+                            .toDeviceSession()
+                ) {
+                    is AuthContractOutcome.Accepted -> {
+                        if (
+                            domain.value.matchesRegistration(request.deviceLabel, request.platform)
+                        ) {
+                            PairingRegistrationRemoteOutcome.Registered(domain.value)
+                        } else {
+                            PairingRegistrationRemoteOutcome.ContractFailure(
+                                PairingProtocolRoutes.Registration.successStatusCode,
+                            )
+                        }
+                    }
+
+                    AuthContractOutcome.ContractFailure -> {
                         PairingRegistrationRemoteOutcome.ContractFailure(
                             PairingProtocolRoutes.Registration.successStatusCode,
                         )
                     }
-                    AuthContractOutcome.ContractFailure ->
-                        PairingRegistrationRemoteOutcome.ContractFailure(
-                            PairingProtocolRoutes.Registration.successStatusCode,
-                        )
                 }
             }
-            is CompanionHttpResponseOutcome.Failure -> PairingRegistrationRemoteOutcome.Rejected(
-                statusCode = response.statusCode,
-                failure = response.envelope.error.toCompanionFailure(response.statusCode),
-                retryAfterSeconds = response.retryAfterSeconds,
-            )
-            is CompanionHttpResponseOutcome.ContractFailure ->
+
+            is CompanionHttpResponseOutcome.Failure -> {
+                PairingRegistrationRemoteOutcome.Rejected(
+                    statusCode = response.statusCode,
+                    failure = response.envelope.error.toCompanionFailure(response.statusCode),
+                    retryAfterSeconds = response.retryAfterSeconds,
+                )
+            }
+
+            is CompanionHttpResponseOutcome.ContractFailure -> {
                 PairingRegistrationRemoteOutcome.ContractFailure(response.statusCode)
-            CompanionHttpResponseOutcome.PreResponseTransportFailure ->
+            }
+
+            CompanionHttpResponseOutcome.PreResponseTransportFailure -> {
                 PairingRegistrationRemoteOutcome.PreResponseTransportFailure
-            CompanionHttpResponseOutcome.CompleteResponseTransportFailure ->
+            }
+
+            CompanionHttpResponseOutcome.CompleteResponseTransportFailure -> {
                 PairingRegistrationRemoteOutcome.CompleteResponseTransportFailure
+            }
         }
     }
 
@@ -159,7 +193,9 @@ internal class PairingRegistrationRequest(
 }
 
 internal sealed interface PairingDiscoveryOutcome {
-    data class Compatible(internal val selectedProtocolVersion: Int) : PairingDiscoveryOutcome
+    data class Compatible(
+        internal val selectedProtocolVersion: Int,
+    ) : PairingDiscoveryOutcome
 
     data object Incompatible : PairingDiscoveryOutcome
 
@@ -168,7 +204,9 @@ internal sealed interface PairingDiscoveryOutcome {
         internal val retryAfterSeconds: Long?,
     ) : PairingDiscoveryOutcome
 
-    data class ContractFailure(internal val statusCode: Int) : PairingDiscoveryOutcome
+    data class ContractFailure(
+        internal val statusCode: Int,
+    ) : PairingDiscoveryOutcome
 
     data object PreResponseTransportFailure : PairingDiscoveryOutcome
 
@@ -176,8 +214,9 @@ internal sealed interface PairingDiscoveryOutcome {
 }
 
 internal sealed interface PairingRegistrationRemoteOutcome {
-    data class Registered(internal val deviceSession: DeviceSession) :
-        PairingRegistrationRemoteOutcome
+    data class Registered(
+        internal val deviceSession: DeviceSession,
+    ) : PairingRegistrationRemoteOutcome
 
     data class Rejected(
         internal val statusCode: Int,
@@ -185,8 +224,9 @@ internal sealed interface PairingRegistrationRemoteOutcome {
         internal val retryAfterSeconds: Long?,
     ) : PairingRegistrationRemoteOutcome
 
-    data class ContractFailure(internal val statusCode: Int) :
-        PairingRegistrationRemoteOutcome
+    data class ContractFailure(
+        internal val statusCode: Int,
+    ) : PairingRegistrationRemoteOutcome
 
     data object PreResponseTransportFailure : PairingRegistrationRemoteOutcome
 
@@ -206,17 +246,19 @@ internal class PairingProtocolRoute(
 )
 
 internal object PairingProtocolRoutes {
-    internal val Discovery: PairingProtocolRoute = PairingProtocolRoute(
-        id = "get_protocol",
-        method = HttpMethod.Get,
-        path = "/protocol",
-        successStatusCode = 200,
-    )
+    internal val Discovery: PairingProtocolRoute =
+        PairingProtocolRoute(
+            id = "get_protocol",
+            method = HttpMethod.Get,
+            path = "/protocol",
+            successStatusCode = 200,
+        )
 
-    internal val Registration: PairingProtocolRoute = PairingProtocolRoute(
-        id = "register_device_session",
-        method = HttpMethod.Post,
-        path = "/device-sessions",
-        successStatusCode = 201,
-    )
+    internal val Registration: PairingProtocolRoute =
+        PairingProtocolRoute(
+            id = "register_device_session",
+            method = HttpMethod.Post,
+            path = "/device-sessions",
+            successStatusCode = 201,
+        )
 }

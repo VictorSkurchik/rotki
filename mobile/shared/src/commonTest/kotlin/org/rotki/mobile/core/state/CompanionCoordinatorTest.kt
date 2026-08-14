@@ -1,26 +1,28 @@
 package org.rotki.mobile.core.state
 
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
+import org.rotki.mobile.CompanionFacade
+import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import org.rotki.mobile.CompanionFacade
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 
 class CompanionCoordinatorTest {
     @Test
-    fun exposesTheCompleteRootStateVocabulary(): Unit {
+    fun exposesTheCompleteRootStateVocabulary() {
         assertEquals(
-            ProtocolFixtureData.vocabulary.getValue("root_states").jsonArray
+            ProtocolFixtureData.vocabulary
+                .getValue("root_states")
+                .jsonArray
                 .mapTo(mutableSetOf()) { value -> value.jsonPrimitive.content },
             CompanionRootState.entries.mapTo(mutableSetOf(), CompanionRootState::code),
         )
     }
 
     @Test
-    fun preservesSnapshotCoverageAcrossTransientStates(): Unit {
+    fun preservesSnapshotCoverageAcrossTransientStates() {
         val facade: CompanionFacade = CompanionFacade()
 
         facade.beginPairing()
@@ -49,7 +51,7 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun notAuthorizedDeletesAllLocalAuthority(): Unit {
+    fun notAuthorizedDeletesAllLocalAuthority() {
         pairedRestStates().forEach { facade ->
             val source = facade.status.value.rootState
             val outcome: CompanionTransitionOutcome = facade.notAuthorized()
@@ -64,12 +66,13 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun rejectedTransitionDoesNotChangeState(): Unit {
+    fun rejectedTransitionDoesNotChangeState() {
         val facade: CompanionFacade = CompanionFacade()
 
-        val rejected: CompanionTransitionOutcome.Rejected = assertIs(
-            facade.activeRefreshReconciled(),
-        )
+        val rejected: CompanionTransitionOutcome.Rejected =
+            assertIs(
+                facade.activeRefreshReconciled(),
+            )
 
         assertEquals("active_refresh_reconciled", rejected.eventCode)
         assertEquals(CompanionRootState.Unpaired, rejected.status.rootState)
@@ -77,7 +80,7 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun rejectsContradictoryCoverageAtConstruction(): Unit {
+    fun rejectsContradictoryCoverageAtConstruction() {
         assertFailsWith<IllegalArgumentException> {
             CompanionFacade(
                 CompanionStatus(
@@ -89,7 +92,7 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun restoresPairedInstallationBehindThePrivacyGate(): Unit {
+    fun restoresPairedInstallationBehindThePrivacyGate() {
         val restored = CompanionFacade.restorePaired(SnapshotCoverage.Degraded)
 
         assertEquals(
@@ -100,14 +103,15 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun proactiveRenewalRetainsBearerUntilItsOriginalExpiry(): Unit {
+    fun proactiveRenewalRetainsBearerUntilItsOriginalExpiry() {
         val facade = CompanionFacade()
         facade.beginPairing()
         facade.completeConnectionWithCompleteSnapshot()
 
-        val applied = assertIs<CompanionTransitionOutcome.Applied>(
-            facade.proactiveRenewalStarted(),
-        )
+        val applied =
+            assertIs<CompanionTransitionOutcome.Applied>(
+                facade.proactiveRenewalStarted(),
+            )
 
         assertEquals(CompanionRootState.Connecting, applied.status.rootState)
         assertEquals(BearerEffect.KEEP_UNTIL_EXPIRY, applied.effects.bearer)
@@ -115,14 +119,15 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun proofAndActiveRefreshReconciliationReplacesTheRetainedBearer(): Unit {
+    fun proofAndActiveRefreshReconciliationReplacesTheRetainedBearer() {
         val facade = onlineFacade()
         assertIs<CompanionTransitionOutcome.Applied>(facade.proactiveRenewalStarted())
         assertIs<CompanionTransitionOutcome.Rejected>(facade.activeRefreshReconciled())
 
-        val applied = assertIs<CompanionTransitionOutcome.Applied>(
-            facade.completeConnectionWithActiveRefresh(),
-        )
+        val applied =
+            assertIs<CompanionTransitionOutcome.Applied>(
+                facade.completeConnectionWithActiveRefresh(),
+            )
 
         assertEquals(CompanionRootState.Refreshing, applied.status.rootState)
         assertEquals(SnapshotCoverage.Complete, applied.status.snapshotCoverage)
@@ -132,7 +137,7 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun proactiveRenewalClassificationHandlesTheRetainedBearer(): Unit {
+    fun proactiveRenewalClassificationHandlesTheRetainedBearer() {
         listOf(
             ClassificationCase(
                 classify = CompanionFacade::engineLocked,
@@ -169,7 +174,7 @@ class CompanionCoordinatorTest {
     }
 
     @Test
-    fun connectingCanDiscardAnUnavailableOrPolicyClosedBearer(): Unit {
+    fun connectingCanDiscardAnUnavailableOrPolicyClosedBearer() {
         listOf(
             CompanionFacade::accessSessionUnavailable,
             CompanionFacade::webSocketPolicyClosed,
@@ -177,9 +182,10 @@ class CompanionCoordinatorTest {
             val facade = onlineFacade()
             assertIs<CompanionTransitionOutcome.Applied>(facade.proactiveRenewalStarted())
 
-            val applied = assertIs<CompanionTransitionOutcome.Applied>(
-                invalidateBearer(facade),
-            )
+            val applied =
+                assertIs<CompanionTransitionOutcome.Applied>(
+                    invalidateBearer(facade),
+                )
 
             assertEquals(CompanionRootState.Connecting, applied.status.rootState)
             assertEquals(SnapshotCoverage.Complete, applied.status.snapshotCoverage)
@@ -192,19 +198,21 @@ class CompanionCoordinatorTest {
     private fun pairedRestStates(): List<CompanionFacade> {
         val connecting = CompanionFacade().also { facade -> facade.beginPairing() }
         val online = onlineFacade()
-        val degraded = CompanionFacade().also { facade ->
-            facade.beginPairing()
-            facade.completeConnectionWithDegradedSnapshot()
-        }
+        val degraded =
+            CompanionFacade().also { facade ->
+                facade.beginPairing()
+                facade.completeConnectionWithDegradedSnapshot()
+            }
         val refreshing = onlineFacade().also { facade -> facade.activeRefreshReconciled() }
         val unreachable = onlineFacade().also { facade -> facade.transportBudgetExhausted() }
         return listOf(connecting, online, degraded, refreshing, unreachable)
     }
 
-    private fun onlineFacade(): CompanionFacade = CompanionFacade().also { facade ->
-        facade.beginPairing()
-        facade.completeConnectionWithCompleteSnapshot()
-    }
+    private fun onlineFacade(): CompanionFacade =
+        CompanionFacade().also { facade ->
+            facade.beginPairing()
+            facade.completeConnectionWithCompleteSnapshot()
+        }
 
     private data class ClassificationCase(
         val classify: (CompanionFacade) -> CompanionTransitionOutcome,

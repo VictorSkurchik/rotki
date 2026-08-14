@@ -16,23 +16,24 @@ public interface ApplicationVisibility {
 
 /** Swift-safe lifecycle input whose initial state is deliberately fail-closed. */
 public class ApplicationVisibilityController : ApplicationVisibility {
-    private val mutableState: MutableStateFlow<ApplicationVisibilityState> = MutableStateFlow(
-        ApplicationVisibilityState.BACKGROUND_OR_LOCKED,
-    )
+    private val mutableState: MutableStateFlow<ApplicationVisibilityState> =
+        MutableStateFlow(
+            ApplicationVisibilityState.BACKGROUND_OR_LOCKED,
+        )
 
     override val state: StateFlow<ApplicationVisibilityState> = mutableState.asStateFlow()
 
-    public fun onActiveForeground(): Unit {
+    public fun onActiveForeground() {
         mutableState.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
     }
 
-    public fun onInactive(): Unit {
+    public fun onInactive() {
         if (mutableState.value == ApplicationVisibilityState.ACTIVE_FOREGROUND) {
             mutableState.value = ApplicationVisibilityState.INACTIVE
         }
     }
 
-    public fun onBackgroundOrLocked(): Unit {
+    public fun onBackgroundOrLocked() {
         mutableState.value = ApplicationVisibilityState.BACKGROUND_OR_LOCKED
     }
 

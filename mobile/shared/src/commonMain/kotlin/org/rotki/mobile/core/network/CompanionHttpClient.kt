@@ -2,8 +2,8 @@ package org.rotki.mobile.core.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.ChannelOverflow
@@ -26,14 +26,16 @@ internal fun createCompanionHttpClient(engine: HttpClientEngine): HttpClient =
         install(WebSockets) {
             maxFrameSize = ProtocolClientInputLimits.MaximumWebSocketEventBytes
             channels {
-                incoming = bounded(
-                    ProtocolClientInputLimits.MaximumWebSocketBufferedFrames,
-                    ChannelOverflow.CLOSE,
-                )
-                outgoing = bounded(
-                    ProtocolClientInputLimits.MaximumWebSocketBufferedFrames,
-                    ChannelOverflow.CLOSE,
-                )
+                incoming =
+                    bounded(
+                        ProtocolClientInputLimits.MaximumWebSocketBufferedFrames,
+                        ChannelOverflow.CLOSE,
+                    )
+                outgoing =
+                    bounded(
+                        ProtocolClientInputLimits.MaximumWebSocketBufferedFrames,
+                        ChannelOverflow.CLOSE,
+                    )
             }
         }
     }

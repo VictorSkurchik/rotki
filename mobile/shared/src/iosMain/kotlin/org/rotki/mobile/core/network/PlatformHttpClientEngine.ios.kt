@@ -6,12 +6,13 @@ import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURLRequestReloadIgnoringLocalCacheData
 import platform.Foundation.NSURLSessionConfiguration
 
-internal actual fun createPlatformHttpClientEngine(): HttpClientEngine = Darwin.create {
-    configureSession(::disableCompanionUrlCaching)
-    configureRequest(::disableCompanionRequestCaching)
-}
+internal actual fun createPlatformHttpClientEngine(): HttpClientEngine =
+    Darwin.create {
+        configureSession(::disableCompanionUrlCaching)
+        configureRequest(::disableCompanionRequestCaching)
+    }
 
-internal fun disableCompanionUrlCaching(configuration: NSURLSessionConfiguration): Unit {
+internal fun disableCompanionUrlCaching(configuration: NSURLSessionConfiguration) {
     configuration.URLCache = null
     configuration.URLCredentialStorage = null
     configuration.HTTPCookieStorage = null
@@ -19,6 +20,6 @@ internal fun disableCompanionUrlCaching(configuration: NSURLSessionConfiguration
     configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData
 }
 
-private fun disableCompanionRequestCaching(request: NSMutableURLRequest): Unit {
+private fun disableCompanionRequestCaching(request: NSMutableURLRequest) {
     request.setCachePolicy(NSURLRequestReloadIgnoringLocalCacheData)
 }

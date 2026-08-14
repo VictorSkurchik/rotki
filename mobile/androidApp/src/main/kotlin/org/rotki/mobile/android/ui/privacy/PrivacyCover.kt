@@ -22,13 +22,14 @@ import androidx.compose.ui.unit.dp
 import org.rotki.mobile.android.ui.UiTags
 
 @Composable
-internal fun PrivacyCover(modifier: Modifier = Modifier): Unit {
+internal fun PrivacyCover(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF111217))
-            .testTag(UiTags.PRIVACY_COVER)
-            .semantics { contentDescription = "Portfolio hidden" },
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(Color(0xFF111217))
+                .testTag(UiTags.PRIVACY_COVER)
+                .semantics { contentDescription = "Portfolio hidden" },
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -36,10 +37,11 @@ internal fun PrivacyCover(modifier: Modifier = Modifier): Unit {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF30364F)),
+                modifier =
+                    Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF30364F)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(

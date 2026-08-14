@@ -35,11 +35,13 @@ class ProtocolDtoContractTest {
         )
         assertIs<AuthContractOutcome.Accepted<*>>(
             decodeResponse<DeviceSessionEnvelopeDto>("register_device_session")
-                .result.deviceSession.toDomain(),
+                .result.deviceSession
+                .toDomain(),
         )
         assertIs<AuthContractOutcome.Accepted<*>>(
             decodeResponse<DeviceSessionEnvelopeDto>("rename_current_device_session")
-                .result.deviceSession.toDomain(),
+                .result.deviceSession
+                .toDomain(),
         )
         assertTrue(decodeResponse<RevokedEnvelopeDto>("revoke_current_device_session").result.revoked)
         assertIs<AuthContractOutcome.Accepted<*>>(
@@ -52,9 +54,11 @@ class ProtocolDtoContractTest {
 
     @Test
     fun `unknown additive response fields decode but missing required fields fail`() {
-        val original = ProtocolFixtureData.successExample("get_protocol")
-            .getValue("response")
-            .toString()
+        val original =
+            ProtocolFixtureData
+                .successExample("get_protocol")
+                .getValue("response")
+                .toString()
         val additive = original.dropLast(1) + ",\"future_hint\":true}"
         val missing = original.replace(",\"message\":\"\"", "")
 
@@ -114,9 +118,11 @@ class ProtocolDtoContractTest {
     }
 
     private inline fun <reified T> decodeResponse(id: String): T {
-        val response: JsonObject = ProtocolFixtureData.successExample(id)
-            .getValue("response")
-            .jsonObject
+        val response: JsonObject =
+            ProtocolFixtureData
+                .successExample(id)
+                .getValue("response")
+                .jsonObject
         return CompanionJson.decodeFromJsonElement(response)
     }
 

@@ -5,7 +5,7 @@ import org.junit.Test
 
 class PairingCodeDeliveryGateTest {
     @Test
-    fun `delivers only the first payload until explicit restart`(): Unit {
+    fun `delivers only the first payload until explicit restart`() {
         val delivered = mutableListOf<String>()
         val gate = PairingCodeDeliveryGate()
         gate.activate()
@@ -25,7 +25,7 @@ class PairingCodeDeliveryGateTest {
     }
 
     @Test
-    fun `blank values do not consume the delivery cycle`(): Unit {
+    fun `blank values do not consume the delivery cycle`() {
         val delivered = mutableListOf<String>()
         val gate = PairingCodeDeliveryGate()
         gate.activate()
@@ -40,7 +40,7 @@ class PairingCodeDeliveryGateTest {
     }
 
     @Test
-    fun `late results from stopped or replaced sessions are ignored`(): Unit {
+    fun `late results from stopped or replaced sessions are ignored`() {
         val delivered = mutableListOf<String>()
         val gate = PairingCodeDeliveryGate()
         gate.activate()
@@ -57,7 +57,7 @@ class PairingCodeDeliveryGateTest {
     }
 
     @Test
-    fun `detected result redacts its diagnostic representation`(): Unit {
+    fun `detected result redacts its diagnostic representation`() {
         val result = PairingFrameDecodeResult.Detected("sensitive-payload")
 
         assertEquals("Detected(redacted)", result.toString())

@@ -7,23 +7,24 @@ import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 
 internal class AndroidApplicationVisibility : ApplicationVisibility {
-    private val mutableState = MutableStateFlow(
-        ApplicationVisibilityState.BACKGROUND_OR_LOCKED,
-    )
+    private val mutableState =
+        MutableStateFlow(
+            ApplicationVisibilityState.BACKGROUND_OR_LOCKED,
+        )
 
     override val state: StateFlow<ApplicationVisibilityState> = mutableState.asStateFlow()
 
-    fun onActiveForeground(): Unit {
+    fun onActiveForeground() {
         mutableState.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
     }
 
-    fun onInactive(): Unit {
+    fun onInactive() {
         if (mutableState.value == ApplicationVisibilityState.ACTIVE_FOREGROUND) {
             mutableState.value = ApplicationVisibilityState.INACTIVE
         }
     }
 
-    fun onBackgroundOrLocked(): Unit {
+    fun onBackgroundOrLocked() {
         mutableState.value = ApplicationVisibilityState.BACKGROUND_OR_LOCKED
     }
 }

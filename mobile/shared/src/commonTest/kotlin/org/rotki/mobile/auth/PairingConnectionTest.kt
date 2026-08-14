@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import kotlinx.io.IOException
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.core.network.RetryPolicy
@@ -28,11 +28,11 @@ import org.rotki.mobile.core.ports.DeviceProofPublicKeyOutcome
 import org.rotki.mobile.core.ports.DeviceProofSigner
 import org.rotki.mobile.core.ports.DeviceProofSigningOutcome
 import org.rotki.mobile.core.ports.IdempotencyKeyGenerator
-import org.rotki.mobile.core.ports.PairingRecord
 import org.rotki.mobile.core.ports.PairingCleanupJournal
 import org.rotki.mobile.core.ports.PairingCleanupJournalClearOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalReadOutcome
 import org.rotki.mobile.core.ports.PairingCleanupJournalWriteOutcome
+import org.rotki.mobile.core.ports.PairingRecord
 import org.rotki.mobile.core.ports.PairingRecordDeleteOutcome
 import org.rotki.mobile.core.ports.PairingRecordReadOutcome
 import org.rotki.mobile.core.ports.PairingRecordStore
@@ -56,19 +56,24 @@ class PairingConnectionTest {
     fun `discovery precedes key creation and registration persists before commit`(): Unit =
         runTest {
             val fixture = Fixture()
-            val engine = MockEngine { request ->
-                when (request.url.encodedPath) {
-                    "/api/1/companion/protocol" -> {
-                        fixture.events += "discovery"
-                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+            val engine =
+                MockEngine { request ->
+                    when (request.url.encodedPath) {
+                        "/api/1/companion/protocol" -> {
+                            fixture.events += "discovery"
+                            respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                        }
+
+                        "/api/1/companion/device-sessions" -> {
+                            fixture.events += "registration"
+                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                        }
+
+                        else -> {
+                            error("Unexpected request")
+                        }
                     }
-                    "/api/1/companion/device-sessions" -> {
-                        fixture.events += "registration"
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
-                    }
-                    else -> error("Unexpected request")
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
@@ -99,24 +104,26 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             var registrationCalls = 0
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    registrationCalls += 1
-                    if (registrationCalls == 1) {
-                        respond(content = "gateway", status = HttpStatusCode.BadGateway)
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
                     } else {
-                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                        registrationCalls += 1
+                        if (registrationCalls == 1) {
+                            respond(content = "gateway", status = HttpStatusCode.BadGateway)
+                        } else {
+                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                        }
                     }
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
-                val registrations = engine.requestHistory.filter { request ->
-                    request.url.encodedPath.endsWith("/device-sessions")
-                }
+                val registrations =
+                    engine.requestHistory.filter { request ->
+                        request.url.encodedPath.endsWith("/device-sessions")
+                    }
                 assertEquals(2, registrations.size)
                 assertEquals(
                     registrations[0].headers[HttpHeaders.Authorization],
@@ -135,92 +142,99 @@ class PairingConnectionTest {
         }
 
     @Test
-    fun `safe discovery retries before creating the device key`(): Unit = runTest {
-        val fixture = Fixture()
-        var discoveryCalls = 0
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                discoveryCalls += 1
-                if (discoveryCalls == 1) {
-                    throw IOException("redacted transport failure")
+    fun `safe discovery retries before creating the device key`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            var discoveryCalls = 0
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        discoveryCalls += 1
+                        if (discoveryCalls == 1) {
+                            throw IOException("redacted transport failure")
+                        }
+                        fixture.events += "discovery_success"
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                    }
                 }
-                fixture.events += "discovery_success"
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+            val connection = fixture.connection(engine)
+            try {
+                assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
+                assertEquals(2, discoveryCalls)
+                assertEquals(1, fixture.signer.createCalls)
+                assertTrue(fixture.events.indexOf("discovery_success") < fixture.events.indexOf("create_key"))
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
-            assertEquals(2, discoveryCalls)
-            assertEquals(1, fixture.signer.createCalls)
-            assertTrue(fixture.events.indexOf("discovery_success") < fixture.events.indexOf("create_key"))
-        } finally {
-            connection.close()
-        }
-    }
 
     @Test
-    fun `incompatible discovery aborts only ephemeral QR without deleting durable stores`():
-        Unit = runTest {
-        val fixture = Fixture()
-        val engine = MockEngine {
-            respondJson(INCOMPATIBLE_FAILURE, HttpStatusCode.UpgradeRequired)
-        }
-        val connection = fixture.connection(engine)
-        try {
-            assertEquals(PairingConnectionOutcome.INCOMPATIBLE, connection.connectPendingPairing())
-            assertEquals(0, fixture.signer.createCalls)
-            assertEquals(0, fixture.signer.deleteCalls)
-            assertEquals(0, fixture.store.deleteCalls)
-            assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
-        } finally {
-            connection.close()
-        }
-    }
-
-    @Test
-    fun `pairing unavailable is typed and rolls back the newly created key`(): Unit = runTest {
-        val fixture = Fixture()
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
+    fun `incompatible discovery aborts only ephemeral QR without deleting durable stores`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val engine =
+                MockEngine {
+                    respondJson(INCOMPATIBLE_FAILURE, HttpStatusCode.UpgradeRequired)
+                }
+            val connection = fixture.connection(engine)
+            try {
+                assertEquals(PairingConnectionOutcome.INCOMPATIBLE, connection.connectPendingPairing())
+                assertEquals(0, fixture.signer.createCalls)
+                assertEquals(0, fixture.signer.deleteCalls)
+                assertEquals(0, fixture.store.deleteCalls)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            assertEquals(
-                PairingConnectionOutcome.PAIRING_UNAVAILABLE,
-                connection.connectPendingPairing(),
-            )
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertEquals(1, fixture.store.deleteCalls)
-            assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
-        } finally {
-            connection.close()
+
+    @Test
+    fun `pairing unavailable is typed and rolls back the newly created key`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                assertEquals(
+                    PairingConnectionOutcome.PAIRING_UNAVAILABLE,
+                    connection.connectPendingPairing(),
+                )
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertEquals(1, fixture.store.deleteCalls)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+            } finally {
+                connection.close()
+            }
         }
-    }
 
     @Test
     fun `expiry during registration backoff stops without a second post and rolls back`(): Unit =
         runTest {
             val fixture = Fixture()
             var registrationCalls = 0
-            fixture.retryDelay = PairingRetryDelay {
-                fixture.delays += it
-                fixture.clock.now = QR_EXPIRY
-            }
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    registrationCalls += 1
-                    respond(content = "gateway", status = HttpStatusCode.BadGateway)
+            fixture.retryDelay =
+                PairingRetryDelay {
+                    fixture.delays += it
+                    fixture.clock.now = QR_EXPIRY
                 }
-            }
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        registrationCalls += 1
+                        respond(content = "gateway", status = HttpStatusCode.BadGateway)
+                    }
+                }
             val connection = fixture.connection(engine)
             try {
                 assertEquals(
@@ -242,14 +256,15 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture(qrExpiry = NOW + 1)
             val postStarted = CompletableDeferred<Unit>()
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    postStarted.complete(Unit)
-                    awaitCancellation()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        postStarted.complete(Unit)
+                        awaitCancellation()
+                    }
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
@@ -269,136 +284,143 @@ class PairingConnectionTest {
         }
 
     @Test
-    fun `background cancels an in-flight post and noncancellable rollback clears local material`():
-        Unit = runTest {
-        val fixture = Fixture()
-        val postStarted = CompletableDeferred<Unit>()
-        val postCancelled = CompletableDeferred<Unit>()
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                postStarted.complete(Unit)
-                try {
-                    awaitCancellation()
-                } finally {
-                    postCancelled.complete(Unit)
-                }
-            }
-        }
-        val connection = fixture.connection(engine)
-        try {
-            val result = CompletableDeferred<PairingConnectionOutcome>()
-            val job = launch { result.complete(connection.connectPendingPairing()) }
-            postStarted.await()
-
-            fixture.visibility.set(ApplicationVisibilityState.BACKGROUND_OR_LOCKED)
-
-            assertEquals(PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND, result.await())
-            postCancelled.await()
-            job.cancelAndJoin()
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertEquals(1, fixture.store.deleteCalls)
-            assertNull(fixture.store.record)
-            assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
-        } finally {
-            connection.close()
-        }
-    }
-
-    @Test
-    fun `inactive during post resumes identical request without native relaunch`(): Unit = runTest {
-        val fixture = Fixture()
-        val firstPostStarted = CompletableDeferred<Unit>()
-        val firstPostCancelled = CompletableDeferred<Unit>()
-        var registrationCalls = 0
-        val bearerValues = mutableListOf<String?>()
-        val idempotencyValues = mutableListOf<String?>()
-        val bodyValues = mutableListOf<String>()
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                registrationCalls += 1
-                bearerValues += request.headers[HttpHeaders.Authorization]
-                idempotencyValues += request.headers[ProtocolHeaders.IdempotencyKey]
-                bodyValues += request.bodyText()
-                if (registrationCalls == 1) {
-                    firstPostStarted.complete(Unit)
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        firstPostCancelled.complete(Unit)
+    fun `background cancels an in-flight post and noncancellable rollback clears local material`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val postStarted = CompletableDeferred<Unit>()
+            val postCancelled = CompletableDeferred<Unit>()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        postStarted.complete(Unit)
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            postCancelled.complete(Unit)
+                        }
                     }
-                } else {
-                    respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
                 }
+            val connection = fixture.connection(engine)
+            try {
+                val result = CompletableDeferred<PairingConnectionOutcome>()
+                val job = launch { result.complete(connection.connectPendingPairing()) }
+                postStarted.await()
+
+                fixture.visibility.set(ApplicationVisibilityState.BACKGROUND_OR_LOCKED)
+
+                assertEquals(PairingConnectionOutcome.OUTSIDE_ACTIVE_FOREGROUND, result.await())
+                postCancelled.await()
+                job.cancelAndJoin()
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertEquals(1, fixture.store.deleteCalls)
+                assertNull(fixture.store.record)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            val result = CompletableDeferred<PairingConnectionOutcome>()
-            launch { result.complete(connection.connectPendingPairing()) }
-            firstPostStarted.await()
-            fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
-            firstPostCancelled.await()
-            yield()
-            assertEquals(1, registrationCalls)
-            assertEquals(1, fixture.signer.createCalls)
-
-            fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
-
-            assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
-            assertEquals(2, registrationCalls)
-            assertEquals(bearerValues.first(), bearerValues.last())
-            assertEquals(idempotencyValues.first(), idempotencyValues.last())
-            assertEquals(bodyValues.first(), bodyValues.last())
-            assertEquals(1, fixture.idempotencyGenerator.calls)
-            assertEquals(0, fixture.signer.deleteCalls)
-        } finally {
-            connection.close()
-        }
-    }
 
     @Test
-    fun `retry after above policy bound surfaces rate limited and rolls back`(): Unit = runTest {
-        val fixture = Fixture()
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                respond(
-                    content = RATE_LIMIT_FAILURE,
-                    status = HttpStatusCode.TooManyRequests,
-                    headers = headersOf(
-                        HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
-                        HttpHeaders.RetryAfter to listOf("6"),
-                    ),
-                )
+    fun `inactive during post resumes identical request without native relaunch`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val firstPostStarted = CompletableDeferred<Unit>()
+            val firstPostCancelled = CompletableDeferred<Unit>()
+            var registrationCalls = 0
+            val bearerValues = mutableListOf<String?>()
+            val idempotencyValues = mutableListOf<String?>()
+            val bodyValues = mutableListOf<String>()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        registrationCalls += 1
+                        bearerValues += request.headers[HttpHeaders.Authorization]
+                        idempotencyValues += request.headers[ProtocolHeaders.IdempotencyKey]
+                        bodyValues += request.bodyText()
+                        if (registrationCalls == 1) {
+                            firstPostStarted.complete(Unit)
+                            try {
+                                awaitCancellation()
+                            } finally {
+                                firstPostCancelled.complete(Unit)
+                            }
+                        } else {
+                            respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                        }
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                val result = CompletableDeferred<PairingConnectionOutcome>()
+                launch { result.complete(connection.connectPendingPairing()) }
+                firstPostStarted.await()
+                fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
+                firstPostCancelled.await()
+                yield()
+                assertEquals(1, registrationCalls)
+                assertEquals(1, fixture.signer.createCalls)
+
+                fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+
+                assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
+                assertEquals(2, registrationCalls)
+                assertEquals(bearerValues.first(), bearerValues.last())
+                assertEquals(idempotencyValues.first(), idempotencyValues.last())
+                assertEquals(bodyValues.first(), bodyValues.last())
+                assertEquals(1, fixture.idempotencyGenerator.calls)
+                assertEquals(0, fixture.signer.deleteCalls)
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            assertEquals(PairingConnectionOutcome.RATE_LIMITED, connection.connectPendingPairing())
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertEquals(1, fixture.store.deleteCalls)
-        } finally {
-            connection.close()
+
+    @Test
+    fun `retry after above policy bound surfaces rate limited and rolls back`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respond(
+                            content = RATE_LIMIT_FAILURE,
+                            status = HttpStatusCode.TooManyRequests,
+                            headers =
+                                headersOf(
+                                    HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
+                                    HttpHeaders.RetryAfter to listOf("6"),
+                                ),
+                        )
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                assertEquals(PairingConnectionOutcome.RATE_LIMITED, connection.connectPendingPairing())
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertEquals(1, fixture.store.deleteCalls)
+            } finally {
+                connection.close()
+            }
         }
-    }
 
     @Test
     fun `cleanup failure stays fail closed rejects fresh qr and retry clears ownership`(): Unit =
         runTest {
             val fixture = Fixture()
             fixture.store.deleteOutcome = PairingRecordDeleteOutcome.Unavailable
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respondJson(PAIRING_UNAVAILABLE_FAILURE, HttpStatusCode.Gone)
+                    }
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 assertEquals(
@@ -430,13 +452,14 @@ class PairingConnectionTest {
         runTest {
             val fixture = Fixture()
             fixture.cleanupJournal.markOutcome = PairingCleanupJournalWriteOutcome.Unavailable
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    error("Registration must not start")
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        error("Registration must not start")
+                    }
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 assertEquals(
@@ -454,30 +477,32 @@ class PairingConnectionTest {
         }
 
     @Test
-    fun `journal clear failure after record write rolls all material back`(): Unit = runTest {
-        val fixture = Fixture()
-        fixture.cleanupJournal.clearOutcome = PairingCleanupJournalClearOutcome.Unavailable
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+    fun `journal clear failure after record write rolls all material back`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            fixture.cleanupJournal.clearOutcome = PairingCleanupJournalClearOutcome.Unavailable
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                assertEquals(
+                    PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
+                    connection.connectPendingPairing(),
+                )
+                assertNull(fixture.store.record)
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertTrue(fixture.cleanupJournal.cleanupRequired)
+                assertEquals(CompanionRootState.Connecting, fixture.facade.status.value.rootState)
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            assertEquals(
-                PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
-                connection.connectPendingPairing(),
-            )
-            assertNull(fixture.store.record)
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertTrue(fixture.cleanupJournal.cleanupRequired)
-            assertEquals(CompanionRootState.Connecting, fixture.facade.status.value.rootState)
-        } finally {
-            connection.close()
-        }
-    }
 
     @Test
     fun `transient journal preflight failure then clear retry discards untouched qr`(): Unit =
@@ -538,14 +563,15 @@ class PairingConnectionTest {
             val fixture = Fixture()
             fixture.signer.deleteOutcome = DeviceProofKeyDeleteOutcome.Unavailable
             val postStarted = CompletableDeferred<Unit>()
-            val engine = MockEngine { request ->
-                if (request.url.encodedPath.endsWith("/protocol")) {
-                    respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-                } else {
-                    postStarted.complete(Unit)
-                    awaitCancellation()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        postStarted.complete(Unit)
+                        awaitCancellation()
+                    }
                 }
-            }
             val connection = fixture.connection(engine)
             try {
                 val result = CompletableDeferred<PairingConnectionOutcome>()
@@ -572,88 +598,95 @@ class PairingConnectionTest {
         }
 
     @Test
-    fun `durable journal recovers cleanup after process restart without qr lease`(): Unit = runTest {
-        val fixture = Fixture()
-        fixture.cleanupJournal.cleanupRequired = true
-        val connection = fixture.connection(MockEngine { error("No network expected") })
-        try {
-            // Simulates a new facade where the QR/token died with the previous process.
-            fixture.facade.lock()
-            assertEquals(
-                PairingConnectionOutcome.NO_PENDING_PAIRING,
-                connection.retryIncompleteCleanup(),
-            )
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertEquals(1, fixture.store.deleteCalls)
-            assertFalse(fixture.cleanupJournal.cleanupRequired)
-        } finally {
-            connection.close()
+    fun `durable journal recovers cleanup after process restart without qr lease`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            fixture.cleanupJournal.cleanupRequired = true
+            val connection = fixture.connection(MockEngine { error("No network expected") })
+            try {
+                // Simulates a new facade where the QR/token died with the previous process.
+                fixture.facade.lock()
+                assertEquals(
+                    PairingConnectionOutcome.NO_PENDING_PAIRING,
+                    connection.retryIncompleteCleanup(),
+                )
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertEquals(1, fixture.store.deleteCalls)
+                assertFalse(fixture.cleanupJournal.cleanupRequired)
+            } finally {
+                connection.close()
+            }
         }
-    }
 
     @Test
-    fun `inactive start waits without network or key work then resumes and stays redacted`():
-        Unit = runTest {
-        val fixture = Fixture()
-        fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+    fun `inactive start waits without network or key work then resumes and stays redacted`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            fixture.visibility.set(ApplicationVisibilityState.INACTIVE)
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        respondJson(REGISTRATION_SUCCESS, HttpStatusCode.Created)
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                val result = CompletableDeferred<PairingConnectionOutcome>()
+                launch { result.complete(connection.connectPendingPairing()) }
+                yield()
+                assertTrue(engine.requestHistory.isEmpty())
+                assertEquals(0, fixture.signer.createCalls)
+                fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+                assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
+                val representations =
+                    listOf(
+                        connection.toString(),
+                        fixture.configuration().toString(),
+                        PairingConnectionOutcome.NETWORK_UNAVAILABLE.toString(),
+                    ).joinToString()
+                listOf(ORIGIN, PAIRING_CREDENTIAL, PAIRING_ID, "Pixel 10 Pro").forEach { secret ->
+                    assertFalse(secret in representations, secret)
+                }
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            val result = CompletableDeferred<PairingConnectionOutcome>()
-            launch { result.complete(connection.connectPendingPairing()) }
-            yield()
-            assertTrue(engine.requestHistory.isEmpty())
-            assertEquals(0, fixture.signer.createCalls)
-            fixture.visibility.set(ApplicationVisibilityState.ACTIVE_FOREGROUND)
-            assertEquals(PairingConnectionOutcome.REGISTERED, result.await())
-            val representations = listOf(
-                connection.toString(),
-                fixture.configuration().toString(),
-                PairingConnectionOutcome.NETWORK_UNAVAILABLE.toString(),
-            ).joinToString()
-            listOf(ORIGIN, PAIRING_CREDENTIAL, PAIRING_ID, "Pixel 10 Pro").forEach { secret ->
-                assertFalse(secret in representations, secret)
-            }
-        } finally {
-            connection.close()
-        }
-    }
 
     @Test
-    fun `owner cancellation is rethrown after noncancellable rollback`(): Unit = runTest {
-        val fixture = Fixture()
-        val postStarted = CompletableDeferred<Unit>()
-        val engine = MockEngine { request ->
-            if (request.url.encodedPath.endsWith("/protocol")) {
-                respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
-            } else {
-                postStarted.complete(Unit)
-                awaitCancellation()
+    fun `owner cancellation is rethrown after noncancellable rollback`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val postStarted = CompletableDeferred<Unit>()
+            val engine =
+                MockEngine { request ->
+                    if (request.url.encodedPath.endsWith("/protocol")) {
+                        respondJson(DISCOVERY_SUCCESS, HttpStatusCode.OK)
+                    } else {
+                        postStarted.complete(Unit)
+                        awaitCancellation()
+                    }
+                }
+            val connection = fixture.connection(engine)
+            try {
+                val job = launch { connection.connectPendingPairing() }
+                postStarted.await()
+
+                job.cancelAndJoin()
+
+                assertTrue(job.isCancelled)
+                assertEquals(1, fixture.signer.deleteCalls)
+                assertEquals(1, fixture.store.deleteCalls)
+                assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
+            } finally {
+                connection.close()
             }
         }
-        val connection = fixture.connection(engine)
-        try {
-            val job = launch { connection.connectPendingPairing() }
-            postStarted.await()
 
-            job.cancelAndJoin()
-
-            assertTrue(job.isCancelled)
-            assertEquals(1, fixture.signer.deleteCalls)
-            assertEquals(1, fixture.store.deleteCalls)
-            assertEquals(CompanionRootState.Unpaired, fixture.facade.status.value.rootState)
-        } finally {
-            connection.close()
-        }
-    }
-
-    private class Fixture(qrExpiry: Long = QR_EXPIRY) {
+    private class Fixture(
+        qrExpiry: Long = QR_EXPIRY,
+    ) {
         val events: MutableList<String> = mutableListOf()
         val facade: CompanionFacade = CompanionFacade()
         val clock: MutableClock = MutableClock(NOW)
@@ -673,34 +706,39 @@ class PairingConnectionTest {
             assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
         }
 
-        fun connection(engine: MockEngine): PairingConnection = PairingConnection(
-            facade = facade,
-            configuration = configuration(),
-            protocolClient = PairingProtocolClient(createCompanionHttpClient(engine)),
-            retryPolicy = RetryPolicy { 0L },
-            retryDelay = retryDelay,
-        )
+        fun connection(engine: MockEngine): PairingConnection =
+            PairingConnection(
+                facade = facade,
+                configuration = configuration(),
+                protocolClient = PairingProtocolClient(createCompanionHttpClient(engine)),
+                retryPolicy = RetryPolicy { 0L },
+                retryDelay = retryDelay,
+            )
 
-        fun configuration(): PairingConnectionConfiguration = PairingConnectionConfiguration(
-            deviceLabel = "Pixel 10 Pro",
-            platform = PairingDevicePlatform.ANDROID,
-            deviceProofSigner = signer,
-            pairingRecordStore = store,
-            pairingCleanupJournal = cleanupJournal,
-            idempotencyKeyGenerator = idempotencyGenerator,
-            applicationVisibility = visibility,
-            clock = clock,
-        )
+        fun configuration(): PairingConnectionConfiguration =
+            PairingConnectionConfiguration(
+                deviceLabel = "Pixel 10 Pro",
+                platform = PairingDevicePlatform.ANDROID,
+                deviceProofSigner = signer,
+                pairingRecordStore = store,
+                pairingCleanupJournal = cleanupJournal,
+                idempotencyKeyGenerator = idempotencyGenerator,
+                applicationVisibility = visibility,
+                clock = clock,
+            )
     }
 
-    private class MutableClock(var now: Long) : Clock {
+    private class MutableClock(
+        var now: Long,
+    ) : Clock {
         override fun nowEpochSeconds(): Long = now
     }
 
     private class MutableVisibility : ApplicationVisibility {
         private val mutable = MutableStateFlow(ApplicationVisibilityState.ACTIVE_FOREGROUND)
         override val state: StateFlow<ApplicationVisibilityState> = mutable.asStateFlow()
-        fun set(value: ApplicationVisibilityState): Unit {
+
+        fun set(value: ApplicationVisibilityState) {
             mutable.value = value
         }
     }
@@ -760,6 +798,7 @@ class PairingConnectionTest {
 
     private class RecordingIdempotencyGenerator : IdempotencyKeyGenerator {
         var calls: Int = 0
+
         override fun generate(): IdempotencyKey {
             calls += 1
             return parsed(IdempotencyKey.parse(IDEMPOTENCY_KEY))
@@ -810,14 +849,15 @@ private fun io.ktor.client.engine.mock.MockRequestHandleScope.respondJson(
 ) = respond(
     content = body,
     status = status,
-    headers = if (status == HttpStatusCode.Created) {
-        headersOf(
-            HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
-            HttpHeaders.CacheControl to listOf("no-store"),
-        )
-    } else {
-        headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
-    },
+    headers =
+        if (status == HttpStatusCode.Created) {
+            headersOf(
+                HttpHeaders.ContentType to listOf(ContentType.Application.Json.toString()),
+                HttpHeaders.CacheControl to listOf("no-store"),
+            )
+        } else {
+            headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+        },
 )
 
 private fun validQr(expiresAt: Long = QR_EXPIRY): String =

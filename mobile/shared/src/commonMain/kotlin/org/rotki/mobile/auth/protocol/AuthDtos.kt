@@ -35,13 +35,14 @@ internal class RegisterDeviceSessionRequestDto(
             deviceLabel: DeviceLabel,
             platform: CompanionPlatform,
             publicKey: X963PublicKey,
-        ): RegisterDeviceSessionRequestDto = RegisterDeviceSessionRequestDto(
-            pairingId = pairingId.encoded,
-            deviceLabel = deviceLabel.value,
-            platform = platform.wireValue,
-            publicKeyAlgorithm = DEVICE_PROOF_ALGORITHM,
-            publicKey = publicKey.encoded,
-        )
+        ): RegisterDeviceSessionRequestDto =
+            RegisterDeviceSessionRequestDto(
+                pairingId = pairingId.encoded,
+                deviceLabel = deviceLabel.value,
+                platform = platform.wireValue,
+                publicKeyAlgorithm = DEVICE_PROOF_ALGORITHM,
+                publicKey = publicKey.encoded,
+            )
     }
 }
 
@@ -60,7 +61,9 @@ internal class DeviceSessionResultDto(
 @Serializable
 internal class RevokedResultDto(
     @SerialName("revoked")
-    internal val revoked: @Serializable(with = StrictJsonBooleanSerializer::class) Boolean,
+    internal val revoked:
+        @Serializable(with = StrictJsonBooleanSerializer::class)
+        Boolean,
 )
 
 @Serializable
@@ -74,11 +77,17 @@ internal class DeviceSessionDto(
     @SerialName("state")
     internal val state: String,
     @SerialName("paired_at")
-    internal val pairedAt: @Serializable(with = StrictJsonLongSerializer::class) Long,
+    internal val pairedAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long,
     @SerialName("last_seen_at")
-    internal val lastSeenAt: @Serializable(with = StrictJsonLongSerializer::class) Long?,
+    internal val lastSeenAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long?,
     @SerialName("revoked_at")
-    internal val revokedAt: @Serializable(with = StrictJsonLongSerializer::class) Long?,
+    internal val revokedAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long?,
 )
 
 internal class DeviceSession(
@@ -149,7 +158,9 @@ internal class ChallengeResultDto(
     @SerialName("nonce")
     internal val nonce: String,
     @SerialName("expires_at")
-    internal val expiresAt: @Serializable(with = StrictJsonLongSerializer::class) Long,
+    internal val expiresAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long,
 )
 
 internal class AuthorizationChallenge(
@@ -186,11 +197,12 @@ internal class AccessSessionRequestDto(
             deviceSessionId: DeviceSessionId,
             challengeId: ChallengeId,
             signature: P1363Signature,
-        ): AccessSessionRequestDto = AccessSessionRequestDto(
-            deviceSessionId = deviceSessionId.encoded,
-            challengeId = challengeId.encoded,
-            signature = signature.encoded,
-        )
+        ): AccessSessionRequestDto =
+            AccessSessionRequestDto(
+                deviceSessionId = deviceSessionId.encoded,
+                challengeId = challengeId.encoded,
+                signature = signature.encoded,
+            )
     }
 }
 
@@ -199,7 +211,9 @@ internal class AccessSessionResultDto(
     @SerialName("access_session_credential")
     internal val accessSessionCredential: String,
     @SerialName("expires_at")
-    internal val expiresAt: @Serializable(with = StrictJsonLongSerializer::class) Long,
+    internal val expiresAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long,
 )
 
 internal class AccessSession(
@@ -216,20 +230,26 @@ internal fun AccessSessionResultDto.toDomain(): AuthContractOutcome<AccessSessio
 }
 
 internal sealed interface AuthContractOutcome<out T> {
-    data class Accepted<T>(internal val value: T) : AuthContractOutcome<T>
+    data class Accepted<T>(
+        internal val value: T,
+    ) : AuthContractOutcome<T>
 
     data object ContractFailure : AuthContractOutcome<Nothing>
 }
 
-internal class DeviceLabel private constructor(internal val value: String) {
+internal class DeviceLabel private constructor(
+    internal val value: String,
+) {
     internal companion object {
         internal fun parse(candidate: String): DeviceLabelParseOutcome {
-            val scalarCount = candidate.unicodeScalarCountOrNull()
-                ?: return DeviceLabelParseOutcome.Rejected
-            val isInvalid = scalarCount !in 1..64 ||
-                candidate.encodeToByteArray().size > 256 ||
-                candidate != candidate.trim() ||
-                candidate.hasForbiddenLabelScalar()
+            val scalarCount =
+                candidate.unicodeScalarCountOrNull()
+                    ?: return DeviceLabelParseOutcome.Rejected
+            val isInvalid =
+                scalarCount !in 1..64 ||
+                    candidate.encodeToByteArray().size > 256 ||
+                    candidate != candidate.trim() ||
+                    candidate.hasForbiddenLabelScalar()
             return if (isInvalid) {
                 DeviceLabelParseOutcome.Rejected
             } else {
@@ -241,12 +261,13 @@ internal class DeviceLabel private constructor(internal val value: String) {
 
 /** Cross-platform scalar-aware validator for native device-label providers. */
 public object DeviceLabelValidator {
-    public fun isValid(candidate: String): Boolean =
-        DeviceLabel.parse(candidate) is DeviceLabelParseOutcome.Accepted
+    public fun isValid(candidate: String): Boolean = DeviceLabel.parse(candidate) is DeviceLabelParseOutcome.Accepted
 }
 
 internal sealed interface DeviceLabelParseOutcome {
-    data class Accepted(internal val value: DeviceLabel) : DeviceLabelParseOutcome
+    data class Accepted(
+        internal val value: DeviceLabel,
+    ) : DeviceLabelParseOutcome
 
     data object Rejected : DeviceLabelParseOutcome
 }
@@ -256,11 +277,12 @@ private fun String.unicodeScalarCountOrNull(): Int? {
     var index = 0
     while (index < length) {
         val first = this[index]
-        index += when {
-            first.isHighSurrogate() && index + 1 < length && this[index + 1].isLowSurrogate() -> 2
-            first.isHighSurrogate() || first.isLowSurrogate() -> return null
-            else -> 1
-        }
+        index +=
+            when {
+                first.isHighSurrogate() && index + 1 < length && this[index + 1].isLowSurrogate() -> 2
+                first.isHighSurrogate() || first.isLowSurrogate() -> return null
+                else -> 1
+            }
         count += 1
     }
     return count
@@ -270,48 +292,51 @@ private fun String.hasForbiddenLabelScalar(): Boolean {
     var index = 0
     while (index < length) {
         val first = this[index]
-        val codePoint = if (first.isHighSurrogate()) {
-            val second = this[index + 1]
-            index += 2
-            SUPPLEMENTARY_PLANE_OFFSET +
-                ((first.code - HIGH_SURROGATE_START) shl SURROGATE_SHIFT) +
-                (second.code - LOW_SURROGATE_START)
-        } else {
-            index += 1
-            first.code
-        }
+        val codePoint =
+            if (first.isHighSurrogate()) {
+                val second = this[index + 1]
+                index += 2
+                SUPPLEMENTARY_PLANE_OFFSET +
+                    ((first.code - HIGH_SURROGATE_START) shl SURROGATE_SHIFT) +
+                    (second.code - LOW_SURROGATE_START)
+            } else {
+                index += 1
+                first.code
+            }
         if (codePoint.isForbiddenLabelCodePoint()) return true
     }
     return false
 }
 
-private fun Int.isForbiddenLabelCodePoint(): Boolean = when (this) {
-    in 0x0000..0x001F,
-    in 0x007F..0x009F,
-    0x00AD,
-    in 0x0600..0x0605,
-    0x061C,
-    0x06DD,
-    0x070F,
-    in 0x0890..0x0891,
-    0x08E2,
-    0x180E,
-    in 0x200B..0x200F,
-    in 0x2028..0x202E,
-    in 0x2060..0x2064,
-    in 0x2066..0x206F,
-    0xFEFF,
-    in 0xFFF9..0xFFFB,
-    0x110BD,
-    0x110CD,
-    in 0x13430..0x1343F,
-    in 0x1BCA0..0x1BCAF,
-    in 0x1D173..0x1D17A,
-    0xE0001,
-    in 0xE0020..0xE007F,
-    -> true
-    else -> false
-}
+private fun Int.isForbiddenLabelCodePoint(): Boolean =
+    when (this) {
+        in 0x0000..0x001F,
+        in 0x007F..0x009F,
+        0x00AD,
+        in 0x0600..0x0605,
+        0x061C,
+        0x06DD,
+        0x070F,
+        in 0x0890..0x0891,
+        0x08E2,
+        0x180E,
+        in 0x200B..0x200F,
+        in 0x2028..0x202E,
+        in 0x2060..0x2064,
+        in 0x2066..0x206F,
+        0xFEFF,
+        in 0xFFF9..0xFFFB,
+        0x110BD,
+        0x110CD,
+        in 0x13430..0x1343F,
+        in 0x1BCA0..0x1BCAF,
+        in 0x1D173..0x1D17A,
+        0xE0001,
+        in 0xE0020..0xE007F,
+        -> true
+
+        else -> false
+    }
 
 private const val HIGH_SURROGATE_START: Int = 0xD800
 private const val LOW_SURROGATE_START: Int = 0xDC00

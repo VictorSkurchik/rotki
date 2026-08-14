@@ -35,12 +35,13 @@ internal object SnapshotEnvelopeCodec {
     const val DEFENSIVE_MAX_ENCODED_BYTES: Int =
         HEADER_BYTES + GCM_IV_BYTES + MAX_CIPHERTEXT_BYTES
 
-    private val magic: ByteArray = byteArrayOf(
-        'R'.code.toByte(),
-        'K'.code.toByte(),
-        'S'.code.toByte(),
-        'E'.code.toByte(),
-    )
+    private val magic: ByteArray =
+        byteArrayOf(
+            'R'.code.toByte(),
+            'K'.code.toByte(),
+            'S'.code.toByte(),
+            'E'.code.toByte(),
+        )
     private val authenticatedDomain: ByteArray =
         "rotki-companion/snapshot-envelope/v1".toByteArray(Charsets.US_ASCII)
 
@@ -50,13 +51,15 @@ internal object SnapshotEnvelopeCodec {
         require(initializationVector.size == GCM_IV_BYTES) {
             "AES-GCM initialization vector must contain 12 bytes"
         }
-        require(ciphertextAndTag.size >= GCM_TAG_BYTES &&
-            isWithinDefensivePlaintextBound(ciphertextAndTag.size - GCM_TAG_BYTES)
+        require(
+            ciphertextAndTag.size >= GCM_TAG_BYTES &&
+                isWithinDefensivePlaintextBound(ciphertextAndTag.size - GCM_TAG_BYTES),
         ) {
             "Snapshot ciphertext is outside the supported bounds"
         }
 
-        return ByteBuffer.allocate(HEADER_BYTES + initializationVector.size + ciphertextAndTag.size)
+        return ByteBuffer
+            .allocate(HEADER_BYTES + initializationVector.size + ciphertextAndTag.size)
             .order(ByteOrder.BIG_ENDIAN)
             .put(magic)
             .put(VERSION.toByte())

@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 class SecureSnapshotStoreTest {
     @Test
-    fun unlockedSnapshotCopiesRedactsAndRevokesPlaintext(): Unit {
+    fun unlockedSnapshotCopiesRedactsAndRevokesPlaintext() {
         val source = byteArrayOf(1, 2, 3)
         val unlocked = SecureSnapshotReadOutcome.Unlocked(source)
         source.fill(9)

@@ -3,16 +3,16 @@ package org.rotki.mobile.android.security
 import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
-import androidx.biometric.BiometricManager
 import android.util.AtomicFile
+import androidx.biometric.BiometricManager
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.InvalidKeyException
 import java.security.KeyStore
-import android.security.keystore.KeyInfo
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -23,7 +23,9 @@ internal const val ANDROID_SNAPSHOT_KEY_ALIAS: String =
     "rotki_companion_snapshot_encryption_v1"
 
 internal sealed interface SnapshotCipherPreparationOutcome {
-    class Prepared(val cipher: Cipher) : SnapshotCipherPreparationOutcome {
+    class Prepared(
+        val cipher: Cipher,
+    ) : SnapshotCipherPreparationOutcome {
         override fun toString(): String = "Prepared(redacted)"
     }
 
@@ -75,42 +77,53 @@ internal class AndroidSnapshotKeyStore(
         )
     },
 ) : SnapshotKeyStore {
-    private val expectationFile: AtomicFile = AtomicFile(
-        File(context.noBackupFilesDir, EXPECTATION_FILE_NAME),
-    )
+    private val expectationFile: AtomicFile =
+        AtomicFile(
+            File(context.noBackupFilesDir, EXPECTATION_FILE_NAME),
+        )
 
-    override fun presence(): SnapshotKeyPresence = synchronized(keyAccessLock) {
-        val expectation = readExpectation()
-        if (expectation == KeyExpectation.Unavailable) {
-            return@synchronized SnapshotKeyPresence.Unavailable
-        }
-        if (expectation == KeyExpectation.Corrupt) {
-            return@synchronized SnapshotKeyPresence.PermanentlyInvalidated
-        }
-        val keyPresent = try {
-            currentKeyOrNull() != null
-        } catch (_: Exception) {
-            return@synchronized SnapshotKeyPresence.Unavailable
-        }
-        when {
-            keyPresent != (expectation == KeyExpectation.Present) ->
-                SnapshotKeyPresence.PermanentlyInvalidated
-            !keyPresent -> SnapshotKeyPresence.Missing
-            biometricAvailability() == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ->
-                SnapshotKeyPresence.PermanentlyInvalidated
-            else -> SnapshotKeyPresence.Present
-        }
-    }
+    override fun presence(): SnapshotKeyPresence =
+        synchronized(keyAccessLock) {
+            val expectation = readExpectation()
+            if (expectation == KeyExpectation.Unavailable) {
+                return@synchronized SnapshotKeyPresence.Unavailable
+            }
+            if (expectation == KeyExpectation.Corrupt) {
+                return@synchronized SnapshotKeyPresence.PermanentlyInvalidated
+            }
+            val keyPresent =
+                try {
+                    currentKeyOrNull() != null
+                } catch (_: Exception) {
+                    return@synchronized SnapshotKeyPresence.Unavailable
+                }
+            when {
+                keyPresent != (expectation == KeyExpectation.Present) -> {
+                    SnapshotKeyPresence.PermanentlyInvalidated
+                }
 
-    override fun prepareEncryptCipher(): SnapshotCipherPreparationOutcome = prepareCipher { key ->
-        Cipher.getInstance(AES_TRANSFORMATION).apply {
-            init(Cipher.ENCRYPT_MODE, key)
-        }
-    }
+                !keyPresent -> {
+                    SnapshotKeyPresence.Missing
+                }
 
-    override fun prepareDecryptCipher(
-        initializationVector: ByteArray,
-    ): SnapshotCipherPreparationOutcome {
+                biometricAvailability() == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
+                    SnapshotKeyPresence.PermanentlyInvalidated
+                }
+
+                else -> {
+                    SnapshotKeyPresence.Present
+                }
+            }
+        }
+
+    override fun prepareEncryptCipher(): SnapshotCipherPreparationOutcome =
+        prepareCipher { key ->
+            Cipher.getInstance(AES_TRANSFORMATION).apply {
+                init(Cipher.ENCRYPT_MODE, key)
+            }
+        }
+
+    override fun prepareDecryptCipher(initializationVector: ByteArray): SnapshotCipherPreparationOutcome {
         if (initializationVector.size != SnapshotEnvelopeCodec.GCM_IV_BYTES) {
             return SnapshotCipherPreparationOutcome.Unavailable
         }
@@ -126,151 +139,164 @@ internal class AndroidSnapshotKeyStore(
         }
     }
 
-    override fun delete(): Boolean = synchronized(keyAccessLock) {
-        try {
-            val store = loadKeyStore()
-            if (store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS)) {
-                store.deleteEntry(ANDROID_SNAPSHOT_KEY_ALIAS)
+    override fun delete(): Boolean =
+        synchronized(keyAccessLock) {
+            try {
+                val store = loadKeyStore()
+                if (store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS)) {
+                    store.deleteEntry(ANDROID_SNAPSHOT_KEY_ALIAS)
+                }
+                expectationFile.delete()
+                !store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS) &&
+                    readExpectation() == KeyExpectation.Missing
+            } catch (_: Exception) {
+                false
             }
-            expectationFile.delete()
-            !store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS) &&
-                readExpectation() == KeyExpectation.Missing
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    private fun prepareCipher(
-        initialize: (SecretKey) -> Cipher,
-    ): SnapshotCipherPreparationOutcome = synchronized(keyAccessLock) {
-        val expectation = readExpectation()
-        if (expectation == KeyExpectation.Unavailable) {
-            return@synchronized SnapshotCipherPreparationOutcome.Unavailable
-        }
-        if (expectation == KeyExpectation.Corrupt) {
-            return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
-        }
-        val key = try {
-            currentKeyOrNull()
-        } catch (error: Exception) {
-            return@synchronized error.toPreparationOutcome()
-        } ?: return@synchronized if (expectation == KeyExpectation.Present) {
-            SnapshotCipherPreparationOutcome.PermanentlyInvalidated
-        } else {
-            SnapshotCipherPreparationOutcome.PairingRequired
         }
 
-        if (expectation == KeyExpectation.Missing) {
-            return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
-        }
+    // AndroidKeyStore reports availability and invalidation through a provider-specific exception graph.
+    @Suppress("TooGenericExceptionCaught")
+    private fun prepareCipher(initialize: (SecretKey) -> Cipher): SnapshotCipherPreparationOutcome =
+        synchronized(keyAccessLock) {
+            val expectation = readExpectation()
+            if (expectation == KeyExpectation.Unavailable) {
+                return@synchronized SnapshotCipherPreparationOutcome.Unavailable
+            }
+            if (expectation == KeyExpectation.Corrupt) {
+                return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
+            }
+            val key =
+                try {
+                    currentKeyOrNull()
+                } catch (error: Exception) {
+                    return@synchronized error.toPreparationOutcome()
+                } ?: return@synchronized if (expectation == KeyExpectation.Present) {
+                    SnapshotCipherPreparationOutcome.PermanentlyInvalidated
+                } else {
+                    SnapshotCipherPreparationOutcome.PairingRequired
+                }
 
-        val availability = biometricAvailability()
-        if (availability == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
-            return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
-        }
-        if (availability != BiometricManager.BIOMETRIC_SUCCESS) {
-            return@synchronized SnapshotCipherPreparationOutcome.AuthenticationUnavailable
-        }
+            if (expectation == KeyExpectation.Missing) {
+                return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
+            }
 
-        try {
-            SnapshotCipherPreparationOutcome.Prepared(initialize(key))
-        } catch (error: Exception) {
-            error.toPreparationOutcome()
+            val availability = biometricAvailability()
+            if (availability == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) {
+                return@synchronized SnapshotCipherPreparationOutcome.PermanentlyInvalidated
+            }
+            if (availability != BiometricManager.BIOMETRIC_SUCCESS) {
+                return@synchronized SnapshotCipherPreparationOutcome.AuthenticationUnavailable
+            }
+
+            try {
+                SnapshotCipherPreparationOutcome.Prepared(initialize(key))
+            } catch (error: Exception) {
+                error.toPreparationOutcome()
+            }
         }
-    }
 
     private fun currentKeyOrNull(): SecretKey? {
         val store = loadKeyStore()
         if (!store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS)) return null
-        val key = store.getKey(ANDROID_SNAPSHOT_KEY_ALIAS, null) as? SecretKey
-            ?: throw IllegalStateException("Snapshot key has an unexpected type")
+        val key =
+            store.getKey(ANDROID_SNAPSHOT_KEY_ALIAS, null) as? SecretKey
+                ?: error("Snapshot key has an unexpected type")
         check(key.format == null && key.encoded == null) {
             "AndroidKeyStore snapshot key is unexpectedly exportable"
         }
         return key
     }
 
-    private fun loadKeyStore(): KeyStore = KeyStore.getInstance(ANDROID_KEY_STORE_PROVIDER).apply {
-        load(null)
-    }
-
-    internal fun createForPairing(): Boolean = synchronized(keyAccessLock) {
-        if (biometricAvailability() != BiometricManager.BIOMETRIC_SUCCESS) return@synchronized false
-        try {
-            if (currentKeyOrNull() != null && readExpectation() == KeyExpectation.Present) {
-                return@synchronized true
-            }
-            deleteKeyAndExpectation()
-            val builder = KeyGenParameterSpec.Builder(
-                ANDROID_SNAPSHOT_KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-            )
-                .setKeySize(AES_KEY_BITS)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setRandomizedEncryptionRequired(true)
-                .setUserAuthenticationRequired(true)
-                .setInvalidatedByBiometricEnrollment(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                builder.setUserAuthenticationParameters(
-                    0,
-                    KeyProperties.AUTH_BIOMETRIC_STRONG,
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                builder.setUserAuthenticationValidityDurationSeconds(-1)
-            }
-            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE_PROVIDER)
-                .run {
-                    init(builder.build())
-                    generateKey()
-                }
-            if (!writeExpectation()) {
-                deleteKeyAndExpectation()
-                return@synchronized false
-            }
-            currentKeyOrNull() != null && readExpectation() == KeyExpectation.Present
-        } catch (_: Exception) {
-            runCatching { deleteKeyAndExpectation() }
-            false
+    private fun loadKeyStore(): KeyStore =
+        KeyStore.getInstance(ANDROID_KEY_STORE_PROVIDER).apply {
+            load(null)
         }
-    }
 
-    internal fun policyForTest(): SnapshotKeyPolicy = synchronized(keyAccessLock) {
-        val key = checkNotNull(currentKeyOrNull())
-        // Java's SecretKeyFactory boundary erases the concrete KeySpec return type.
-        val info = checkNotNull(
-            SecretKeyFactory.getInstance(
-                key.algorithm,
-                ANDROID_KEY_STORE_PROVIDER,
-            ).getKeySpec(key, KeyInfo::class.java) as? KeyInfo,
-        )
-        SnapshotKeyPolicy(
-            opaque = key.format == null && key.encoded == null,
-            keySize = info.keySize,
-            origin = info.origin,
-            purposes = info.purposes,
-            blockModes = info.blockModes.toSet(),
-            encryptionPaddings = info.encryptionPaddings.toSet(),
-            userAuthenticationRequired = info.isUserAuthenticationRequired,
-            authenticationValiditySeconds = info.userAuthenticationValidityDurationSeconds,
-            invalidatedByBiometricEnrollment = info.isInvalidatedByBiometricEnrollment,
-            authenticationType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                info.userAuthenticationType
-            } else {
-                null
-            },
-        )
-    }
+    internal fun createForPairing(): Boolean =
+        synchronized(keyAccessLock) {
+            if (biometricAvailability() != BiometricManager.BIOMETRIC_SUCCESS) return@synchronized false
+            try {
+                if (currentKeyOrNull() != null && readExpectation() == KeyExpectation.Present) {
+                    return@synchronized true
+                }
+                deleteKeyAndExpectation()
+                val builder =
+                    KeyGenParameterSpec
+                        .Builder(
+                            ANDROID_SNAPSHOT_KEY_ALIAS,
+                            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                        ).setKeySize(AES_KEY_BITS)
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setRandomizedEncryptionRequired(true)
+                        .setUserAuthenticationRequired(true)
+                        .setInvalidatedByBiometricEnrollment(true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    builder.setUserAuthenticationParameters(
+                        0,
+                        KeyProperties.AUTH_BIOMETRIC_STRONG,
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    builder.setUserAuthenticationValidityDurationSeconds(-1)
+                }
+                KeyGenerator
+                    .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEY_STORE_PROVIDER)
+                    .run {
+                        init(builder.build())
+                        generateKey()
+                    }
+                if (!writeExpectation()) {
+                    deleteKeyAndExpectation()
+                    return@synchronized false
+                }
+                currentKeyOrNull() != null && readExpectation() == KeyExpectation.Present
+            } catch (_: Exception) {
+                runCatching { deleteKeyAndExpectation() }
+                false
+            }
+        }
+
+    internal fun policyForTest(): SnapshotKeyPolicy =
+        synchronized(keyAccessLock) {
+            val key = checkNotNull(currentKeyOrNull())
+            // Java's SecretKeyFactory boundary erases the concrete KeySpec return type.
+            val info =
+                checkNotNull(
+                    SecretKeyFactory
+                        .getInstance(
+                            key.algorithm,
+                            ANDROID_KEY_STORE_PROVIDER,
+                        ).getKeySpec(key, KeyInfo::class.java) as? KeyInfo,
+                )
+            SnapshotKeyPolicy(
+                opaque = key.format == null && key.encoded == null,
+                keySize = info.keySize,
+                origin = info.origin,
+                purposes = info.purposes,
+                blockModes = info.blockModes.toSet(),
+                encryptionPaddings = info.encryptionPaddings.toSet(),
+                userAuthenticationRequired = info.isUserAuthenticationRequired,
+                authenticationValiditySeconds = info.userAuthenticationValidityDurationSeconds,
+                invalidatedByBiometricEnrollment = info.isInvalidatedByBiometricEnrollment,
+                authenticationType =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        info.userAuthenticationType
+                    } else {
+                        null
+                    },
+            )
+        }
 
     private fun writeExpectation(): Boolean {
-        val output = try {
-            expectationFile.startWrite()
-        } catch (_: IOException) {
-            return false
-        } catch (_: SecurityException) {
-            return false
-        }
+        val output =
+            try {
+                expectationFile.startWrite()
+            } catch (_: IOException) {
+                return false
+            } catch (_: SecurityException) {
+                return false
+            }
         return try {
             output.write(EXPECTATION_BYTES)
             expectationFile.finishWrite(output)
@@ -284,35 +310,37 @@ internal class AndroidSnapshotKeyStore(
         }
     }
 
-    private fun readExpectation(): KeyExpectation = try {
-        val bytes = expectationFile.openRead().use { input ->
-            val encoded = ByteArray(EXPECTATION_BYTES.size + 1)
-            var count = 0
-            while (count < encoded.size) {
-                val read = input.read(encoded, count, encoded.size - count)
-                if (read == -1) break
-                if (read == 0) continue
-                count += read
+    private fun readExpectation(): KeyExpectation =
+        try {
+            val bytes =
+                expectationFile.openRead().use { input ->
+                    val encoded = ByteArray(EXPECTATION_BYTES.size + 1)
+                    var count = 0
+                    while (count < encoded.size) {
+                        val read = input.read(encoded, count, encoded.size - count)
+                        if (read == -1) break
+                        if (read == 0) continue
+                        count += read
+                    }
+                    if (count != EXPECTATION_BYTES.size) {
+                        return KeyExpectation.Corrupt
+                    }
+                    encoded
+                }
+            if (bytes.copyOf(EXPECTATION_BYTES.size).contentEquals(EXPECTATION_BYTES)) {
+                KeyExpectation.Present
+            } else {
+                KeyExpectation.Corrupt
             }
-            if (count != EXPECTATION_BYTES.size) {
-                return KeyExpectation.Corrupt
-            }
-            encoded
+        } catch (_: FileNotFoundException) {
+            KeyExpectation.Missing
+        } catch (_: IOException) {
+            KeyExpectation.Unavailable
+        } catch (_: SecurityException) {
+            KeyExpectation.Unavailable
         }
-        if (bytes.copyOf(EXPECTATION_BYTES.size).contentEquals(EXPECTATION_BYTES)) {
-            KeyExpectation.Present
-        } else {
-            KeyExpectation.Corrupt
-        }
-    } catch (_: FileNotFoundException) {
-        KeyExpectation.Missing
-    } catch (_: IOException) {
-        KeyExpectation.Unavailable
-    } catch (_: SecurityException) {
-        KeyExpectation.Unavailable
-    }
 
-    private fun deleteKeyAndExpectation(): Unit {
+    private fun deleteKeyAndExpectation() {
         val store = loadKeyStore()
         if (store.containsAlias(ANDROID_SNAPSHOT_KEY_ALIAS)) {
             store.deleteEntry(ANDROID_SNAPSHOT_KEY_ALIAS)

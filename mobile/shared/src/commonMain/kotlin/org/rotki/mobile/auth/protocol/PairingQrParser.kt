@@ -26,46 +26,63 @@ internal class PairingQrParser(
         if (raw.size > MAX_PAIRING_QR_BYTES) {
             return PairingQrParseOutcome.Rejected(PairingQrRejection.TOO_LARGE)
         }
-        val text = try {
-            raw.decodeToString(throwOnInvalidSequence = true)
-        } catch (_: CharacterCodingException) {
-            return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_UTF8)
-        }
+        val text =
+            try {
+                raw.decodeToString(throwOnInvalidSequence = true)
+            } catch (_: CharacterCodingException) {
+                return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_UTF8)
+            }
         if (hasDuplicateJsonMember(text)) {
             return PairingQrParseOutcome.Rejected(PairingQrRejection.DUPLICATE_MEMBER)
         }
         if (!hasValidJsonSyntax(text)) {
             return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
         }
-        val dto = try {
-            val element = CompanionJson.parseToJsonElement(text).jsonObject
-            if (!element.hasStrictPairingQrTypes()) {
+        val dto =
+            try {
+                val element = CompanionJson.parseToJsonElement(text).jsonObject
+                if (!element.hasStrictPairingQrTypes()) {
+                    return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
+                }
+                CompanionJson.decodeFromJsonElement<PairingQrDto>(element)
+            } catch (_: SerializationException) {
+                return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
+            } catch (_: IllegalArgumentException) {
                 return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
             }
-            CompanionJson.decodeFromJsonElement<PairingQrDto>(element)
-        } catch (_: SerializationException) {
-            return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
-        } catch (_: IllegalArgumentException) {
-            return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_SHAPE)
-        }
         if (dto.kind != PAIRING_KIND || dto.formatVersion != PAIRING_FORMAT_VERSION) {
             return PairingQrParseOutcome.Rejected(PairingQrRejection.UNSUPPORTED_FORMAT)
         }
-        val origin = when (val parsed = EngineOrigin.parse(dto.engineOrigin)) {
-            is EngineOriginParseOutcome.Accepted -> parsed.origin
-            is EngineOriginParseOutcome.Rejected ->
-                return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_ORIGIN)
-        }
-        val pairingId = when (val parsed = PairingId.parse(dto.pairingId)) {
-            is ProtocolValueParseOutcome.Accepted -> parsed.value
-            is ProtocolValueParseOutcome.Rejected ->
-                return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_PAIRING_ID)
-        }
-        val credential = when (val parsed = PairingCredential.parse(dto.pairingCredential)) {
-            is ProtocolValueParseOutcome.Accepted -> parsed.value
-            is ProtocolValueParseOutcome.Rejected ->
-                return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_CREDENTIAL)
-        }
+        val origin =
+            when (val parsed = EngineOrigin.parse(dto.engineOrigin)) {
+                is EngineOriginParseOutcome.Accepted -> {
+                    parsed.origin
+                }
+
+                is EngineOriginParseOutcome.Rejected -> {
+                    return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_ORIGIN)
+                }
+            }
+        val pairingId =
+            when (val parsed = PairingId.parse(dto.pairingId)) {
+                is ProtocolValueParseOutcome.Accepted -> {
+                    parsed.value
+                }
+
+                is ProtocolValueParseOutcome.Rejected -> {
+                    return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_PAIRING_ID)
+                }
+            }
+        val credential =
+            when (val parsed = PairingCredential.parse(dto.pairingCredential)) {
+                is ProtocolValueParseOutcome.Accepted -> {
+                    parsed.value
+                }
+
+                is ProtocolValueParseOutcome.Rejected -> {
+                    return PairingQrParseOutcome.Rejected(PairingQrRejection.INVALID_CREDENTIAL)
+                }
+            }
         if (dto.expiresAt <= clock.nowEpochSeconds()) {
             return PairingQrParseOutcome.Rejected(PairingQrRejection.EXPIRED)
         }
@@ -85,9 +102,13 @@ internal class PairingQr(
 }
 
 internal sealed interface PairingQrParseOutcome {
-    data class Accepted(internal val pairingQr: PairingQr) : PairingQrParseOutcome
+    data class Accepted(
+        internal val pairingQr: PairingQr,
+    ) : PairingQrParseOutcome
 
-    data class Rejected(internal val reason: PairingQrRejection) : PairingQrParseOutcome
+    data class Rejected(
+        internal val reason: PairingQrRejection,
+    ) : PairingQrParseOutcome
 }
 
 internal enum class PairingQrRejection {
@@ -107,7 +128,9 @@ private class PairingQrDto(
     @SerialName("kind")
     val kind: String,
     @SerialName("format_version")
-    val formatVersion: @Serializable(with = StrictJsonIntSerializer::class) Int,
+    val formatVersion:
+        @Serializable(with = StrictJsonIntSerializer::class)
+        Int,
     @SerialName("engine_origin")
     val engineOrigin: String,
     @SerialName("pairing_id")
@@ -115,7 +138,9 @@ private class PairingQrDto(
     @SerialName("pairing_credential")
     val pairingCredential: String,
     @SerialName("expires_at")
-    val expiresAt: @Serializable(with = StrictJsonLongSerializer::class) Long,
+    val expiresAt:
+        @Serializable(with = StrictJsonLongSerializer::class)
+        Long,
 )
 
 private const val MAX_PAIRING_QR_BYTES: Int = 2_048
@@ -125,16 +150,18 @@ private const val PAIRING_FORMAT_VERSION: Int = 1
 private fun JsonObject.hasStrictPairingQrTypes(): Boolean =
     PAIRING_QR_STRING_MEMBERS.all { name ->
         (this[name] as? JsonPrimitive)?.isString == true
-    } && PAIRING_QR_INTEGER_MEMBERS.all { name ->
-        val primitive = this[name] as? JsonPrimitive
-        primitive != null && !primitive.isString && JSON_INTEGER.matches(primitive.content)
-    }
+    } &&
+        PAIRING_QR_INTEGER_MEMBERS.all { name ->
+            val primitive = this[name] as? JsonPrimitive
+            primitive != null && !primitive.isString && JSON_INTEGER.matches(primitive.content)
+        }
 
-private val PAIRING_QR_STRING_MEMBERS: Set<String> = setOf(
-    "kind",
-    "engine_origin",
-    "pairing_id",
-    "pairing_credential",
-)
+private val PAIRING_QR_STRING_MEMBERS: Set<String> =
+    setOf(
+        "kind",
+        "engine_origin",
+        "pairing_id",
+        "pairing_credential",
+    )
 private val PAIRING_QR_INTEGER_MEMBERS: Set<String> = setOf("format_version", "expires_at")
 private val JSON_INTEGER: Regex = Regex("-?(?:0|[1-9][0-9]*)")

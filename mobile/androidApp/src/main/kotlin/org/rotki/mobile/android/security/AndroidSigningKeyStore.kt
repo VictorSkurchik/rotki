@@ -34,68 +34,75 @@ internal interface DeviceSigningKeyStore {
 
 /** Persistent non-exportable P-256 Device Key storage backed by AndroidKeyStore. */
 internal class AndroidSigningKeyStore : DeviceSigningKeyStore {
-    override fun createOrCurrent(): AndroidSigningKeyMaterial = synchronized(keyAccessLock) {
-        val store = loadKeyStore()
-        readMaterial(store)?.let { material -> return@synchronized material }
+    // Rollback must cover every provider failure after the KeyStore generates the key pair.
+    @Suppress("TooGenericExceptionCaught")
+    override fun createOrCurrent(): AndroidSigningKeyMaterial =
+        synchronized(keyAccessLock) {
+            val store = loadKeyStore()
+            readMaterial(store)?.let { material -> return@synchronized material }
 
-        var generated: Boolean = false
-        try {
-            val generator = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC,
-                ANDROID_KEY_STORE_PROVIDER,
-            )
-            generator.initialize(
-                KeyGenParameterSpec.Builder(
-                    ANDROID_DEVICE_PROOF_SIGNING_ALIAS,
-                    KeyProperties.PURPOSE_SIGN,
+            var generated: Boolean = false
+            try {
+                val generator =
+                    KeyPairGenerator.getInstance(
+                        KeyProperties.KEY_ALGORITHM_EC,
+                        ANDROID_KEY_STORE_PROVIDER,
+                    )
+                generator.initialize(
+                    KeyGenParameterSpec
+                        .Builder(
+                            ANDROID_DEVICE_PROOF_SIGNING_ALIAS,
+                            KeyProperties.PURPOSE_SIGN,
+                        ).setAlgorithmParameterSpec(ECGenParameterSpec(P256_CURVE_NAME))
+                        .setKeySize(P256_KEY_SIZE_BITS)
+                        .setDigests(KeyProperties.DIGEST_SHA256)
+                        .setUserAuthenticationRequired(false)
+                        .setCertificateSubject(X500Principal(CERTIFICATE_SUBJECT))
+                        .setCertificateSerialNumber(BigInteger.ONE)
+                        .setCertificateNotBefore(Date(CERTIFICATE_NOT_BEFORE_MILLIS))
+                        .setCertificateNotAfter(Date(CERTIFICATE_NOT_AFTER_MILLIS))
+                        .build(),
                 )
-                    .setAlgorithmParameterSpec(ECGenParameterSpec(P256_CURVE_NAME))
-                    .setKeySize(P256_KEY_SIZE_BITS)
-                    .setDigests(KeyProperties.DIGEST_SHA256)
-                    .setUserAuthenticationRequired(false)
-                    .setCertificateSubject(X500Principal(CERTIFICATE_SUBJECT))
-                    .setCertificateSerialNumber(BigInteger.ONE)
-                    .setCertificateNotBefore(Date(CERTIFICATE_NOT_BEFORE_MILLIS))
-                    .setCertificateNotAfter(Date(CERTIFICATE_NOT_AFTER_MILLIS))
-                    .build(),
-            )
-            generator.generateKeyPair()
-            generated = true
-            checkNotNull(readMaterial(loadKeyStore())) {
-                "AndroidKeyStore did not persist a valid Device Key"
+                generator.generateKeyPair()
+                generated = true
+                checkNotNull(readMaterial(loadKeyStore())) {
+                    "AndroidKeyStore did not persist a valid Device Key"
+                }
+            } catch (error: Exception) {
+                if (generated) {
+                    runCatching {
+                        loadKeyStore().deleteEntry(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)
+                    }.onFailure(error::addSuppressed)
+                }
+                throw error
             }
-        } catch (error: Exception) {
-            if (generated) {
-                runCatching {
-                    loadKeyStore().deleteEntry(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)
-                }.onFailure(error::addSuppressed)
+        }
+
+    override fun currentOrNull(): AndroidSigningKeyMaterial? =
+        synchronized(keyAccessLock) {
+            readMaterial(loadKeyStore())
+        }
+
+    override fun signIfPresent(transcript: ByteArray): ByteArray? =
+        synchronized(keyAccessLock) {
+            val material = readMaterial(loadKeyStore()) ?: return@synchronized null
+            Signature.getInstance(SIGNATURE_ALGORITHM).run {
+                initSign(material.privateKey)
+                update(transcript)
+                sign()
             }
-            throw error
         }
-    }
 
-    override fun currentOrNull(): AndroidSigningKeyMaterial? = synchronized(keyAccessLock) {
-        readMaterial(loadKeyStore())
-    }
-
-    override fun signIfPresent(transcript: ByteArray): ByteArray? = synchronized(keyAccessLock) {
-        val material = readMaterial(loadKeyStore()) ?: return@synchronized null
-        Signature.getInstance(SIGNATURE_ALGORITHM).run {
-            initSign(material.privateKey)
-            update(transcript)
-            sign()
+    override fun delete(): Unit =
+        synchronized(keyAccessLock) {
+            val store = loadKeyStore()
+            if (store.containsAlias(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)) {
+                store.deleteEntry(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)
+            }
+            check(!store.containsAlias(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)) {
+                "AndroidKeyStore Device Key deletion could not be confirmed"
+            }
         }
-    }
-
-    override fun delete(): Unit = synchronized(keyAccessLock) {
-        val store = loadKeyStore()
-        if (store.containsAlias(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)) {
-            store.deleteEntry(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)
-        }
-        check(!store.containsAlias(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)) {
-            "AndroidKeyStore Device Key deletion could not be confirmed"
-        }
-    }
 
     private fun readMaterial(store: KeyStore): AndroidSigningKeyMaterial? {
         if (!store.containsAlias(ANDROID_DEVICE_PROOF_SIGNING_ALIAS)) {
@@ -117,9 +124,10 @@ internal class AndroidSigningKeyStore : DeviceSigningKeyStore {
         return AndroidSigningKeyMaterial(privateKey, publicKey)
     }
 
-    private fun loadKeyStore(): KeyStore = KeyStore.getInstance(ANDROID_KEY_STORE_PROVIDER).apply {
-        load(null)
-    }
+    private fun loadKeyStore(): KeyStore =
+        KeyStore.getInstance(ANDROID_KEY_STORE_PROVIDER).apply {
+            load(null)
+        }
 
     private companion object {
         const val ANDROID_KEY_STORE_PROVIDER = "AndroidKeyStore"

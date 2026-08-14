@@ -32,8 +32,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.rotki.mobile.android.ui.UiTags
 import org.rotki.mobile.android.pairing.PairingConnectionUiState
+import org.rotki.mobile.android.ui.UiTags
 import org.rotki.mobile.auth.PairingPresentation
 import org.rotki.mobile.auth.PairingRejectionCategory
 import org.rotki.mobile.auth.PairingUiState
@@ -50,7 +50,7 @@ internal fun PairingScreen(
     onRetryCleanup: () -> Unit,
     scanner: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-): Unit {
+) {
     Surface(modifier = modifier.fillMaxSize()) {
         if (connectionState != PairingConnectionUiState.IDLE) {
             PairingConnectionStage(
@@ -61,61 +61,84 @@ internal fun PairingScreen(
                 onRequestLocalNetworkPermission = onRequestLocalNetworkPermission,
                 onRetryCleanup = onRetryCleanup,
             )
-        } else when (presentation.state) {
-            PairingUiState.INTRO -> PairingIntro(onStartScanning)
-            PairingUiState.SCANNING -> ScannerStage(
-                onCancel = onCancelScanning,
-                scanner = scanner,
-            )
-            PairingUiState.CAMERA_DENIED -> PairingProblem(
-                title = "Camera access is off",
-                message = "Allow camera access to scan the one-time QR code shown by Rotki.",
-                primaryLabel = "Try again",
-                onPrimary = onRetryScanning,
-                secondaryLabel = "Open settings",
-                onSecondary = onOpenSettings,
-            )
-            PairingUiState.SCANNER_UNAVAILABLE -> PairingProblem(
-                title = "Camera unavailable",
-                message = "Rotki could not start the QR scanner. Close other camera apps and try again.",
-                primaryLabel = "Try again",
-                onPrimary = onRetryScanning,
-            )
-            PairingUiState.INVALID_QR -> if (
-                presentation.rejectionCategory == PairingRejectionCategory.UNSUPPORTED
-            ) {
-                PairingProblem(
-                    title = "Update Rotki Companion",
-                    message = "This pairing code uses a newer format. Update the app before trying again.",
-                    primaryLabel = "Back",
-                    onPrimary = onCancelScanning,
-                )
-            } else {
-                PairingProblem(
-                    title = "That is not a Rotki pairing code",
-                    message = "Nothing was saved. Scan a fresh code from your Rotki profile.",
-                    primaryLabel = "Scan again",
-                    onPrimary = onRetryScanning,
-                )
+        } else {
+            when (presentation.state) {
+                PairingUiState.INTRO -> {
+                    PairingIntro(onStartScanning)
+                }
+
+                PairingUiState.SCANNING -> {
+                    ScannerStage(
+                        onCancel = onCancelScanning,
+                        scanner = scanner,
+                    )
+                }
+
+                PairingUiState.CAMERA_DENIED -> {
+                    PairingProblem(
+                        title = "Camera access is off",
+                        message = "Allow camera access to scan the one-time QR code shown by Rotki.",
+                        primaryLabel = "Try again",
+                        onPrimary = onRetryScanning,
+                        secondaryLabel = "Open settings",
+                        onSecondary = onOpenSettings,
+                    )
+                }
+
+                PairingUiState.SCANNER_UNAVAILABLE -> {
+                    PairingProblem(
+                        title = "Camera unavailable",
+                        message = "Rotki could not start the QR scanner. Close other camera apps and try again.",
+                        primaryLabel = "Try again",
+                        onPrimary = onRetryScanning,
+                    )
+                }
+
+                PairingUiState.INVALID_QR -> {
+                    if (
+                        presentation.rejectionCategory == PairingRejectionCategory.UNSUPPORTED
+                    ) {
+                        PairingProblem(
+                            title = "Update Rotki Companion",
+                            message = "This pairing code uses a newer format. Update the app before trying again.",
+                            primaryLabel = "Back",
+                            onPrimary = onCancelScanning,
+                        )
+                    } else {
+                        PairingProblem(
+                            title = "That is not a Rotki pairing code",
+                            message = "Nothing was saved. Scan a fresh code from your Rotki profile.",
+                            primaryLabel = "Scan again",
+                            onPrimary = onRetryScanning,
+                        )
+                    }
+                }
+
+                PairingUiState.EXPIRED_QR -> {
+                    PairingProblem(
+                        title = "This pairing code expired",
+                        message = "Create a new code in Rotki, then scan it before its timer ends.",
+                        primaryLabel = "Scan a new code",
+                        onPrimary = onRetryScanning,
+                    )
+                }
+
+                PairingUiState.CONNECTING -> {
+                    ConnectingStage()
+                }
             }
-            PairingUiState.EXPIRED_QR -> PairingProblem(
-                title = "This pairing code expired",
-                message = "Create a new code in Rotki, then scan it before its timer ends.",
-                primaryLabel = "Scan a new code",
-                onPrimary = onRetryScanning,
-            )
-            PairingUiState.CONNECTING -> ConnectingStage()
         }
     }
 }
 
 @Composable
-private fun PairingIntro(onStartScanning: () -> Unit): Unit {
+private fun PairingIntro(onStartScanning: () -> Unit) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp)
-            .testTag(UiTags.PAIRING_INTRO),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 32.dp)
+                .testTag(UiTags.PAIRING_INTRO),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         RotkiWordmark()
@@ -135,10 +158,11 @@ private fun PairingIntro(onStartScanning: () -> Unit): Unit {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = onStartScanning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag(UiTags.PAIRING_SCAN_BUTTON),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .testTag(UiTags.PAIRING_SCAN_BUTTON),
             ) {
                 Text("Scan pairing QR")
             }
@@ -157,11 +181,12 @@ private fun PairingIntro(onStartScanning: () -> Unit): Unit {
 private fun ScannerStage(
     onCancel: () -> Unit,
     scanner: @Composable () -> Unit,
-): Unit {
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(20.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         RotkiWordmark()
@@ -178,24 +203,26 @@ private fun ScannerStage(
             )
         }
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color.Black)
-                .testTag(UiTags.PAIRING_SCANNER)
-                .semantics { contentDescription = "QR scanner" },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color.Black)
+                    .testTag(UiTags.PAIRING_SCANNER)
+                    .semantics { contentDescription = "QR scanner" },
             contentAlignment = Alignment.Center,
         ) {
             scanner()
             Box(
-                modifier = Modifier
-                    .size(248.dp)
-                    .border(
-                        width = 3.dp,
-                        color = Color.White.copy(alpha = 0.92f),
-                        shape = RoundedCornerShape(24.dp),
-                    ),
+                modifier =
+                    Modifier
+                        .size(248.dp)
+                        .border(
+                            width = 3.dp,
+                            color = Color.White.copy(alpha = 0.92f),
+                            shape = RoundedCornerShape(24.dp),
+                        ),
             )
         }
         FilledTonalButton(
@@ -216,12 +243,13 @@ private fun PairingProblem(
     onPrimary: (() -> Unit)? = null,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
-): Unit {
+) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .testTag(UiTags.PAIRING_ERROR),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .testTag(UiTags.PAIRING_ERROR),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         RotkiWordmark()
@@ -230,10 +258,11 @@ private fun PairingProblem(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
+                modifier =
+                    Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -260,9 +289,10 @@ private fun PairingProblem(
             if (primaryLabel != null && onPrimary != null) {
                 Button(
                     onClick = onPrimary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
                 ) {
                     Text(primaryLabel)
                 }
@@ -270,9 +300,10 @@ private fun PairingProblem(
             if (secondaryLabel != null && onSecondary != null) {
                 FilledTonalButton(
                     onClick = onSecondary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
                 ) {
                     Text(secondaryLabel)
                 }
@@ -282,12 +313,13 @@ private fun PairingProblem(
 }
 
 @Composable
-private fun ConnectingStage(): Unit {
+private fun ConnectingStage() {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .testTag(UiTags.PAIRING_CONNECTING),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .testTag(UiTags.PAIRING_CONNECTING),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -301,7 +333,9 @@ private fun ConnectingStage(): Unit {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Keep Rotki Companion open while it creates a device key and securely registers it with your Engine.",
+            text =
+                "Keep Rotki Companion open while it creates a device key and securely " +
+                    "registers it with your Engine.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
@@ -317,85 +351,128 @@ private fun PairingConnectionStage(
     onOpenSettings: () -> Unit,
     onRequestLocalNetworkPermission: () -> Unit,
     onRetryCleanup: () -> Unit,
-): Unit {
+) {
     when (state) {
-        PairingConnectionUiState.IDLE -> Unit
-        PairingConnectionUiState.CONNECTING -> ConnectingStage()
-        PairingConnectionUiState.CLEANING_UP -> CleanupProgressStage()
-        PairingConnectionUiState.REGISTERED -> RegisteredStage()
-        PairingConnectionUiState.LOCAL_NETWORK_PERMISSION_REQUIRED -> PairingProblem(
-            title = "Local network access needed",
-            message = "Allow nearby device access, then scan the pairing code again. The code was not saved.",
-            primaryLabel = "Allow access",
-            onPrimary = onRequestLocalNetworkPermission,
-            secondaryLabel = "Open settings",
-            onSecondary = onOpenSettings,
-        )
-        PairingConnectionUiState.PAIRING_EXPIRED -> PairingProblem(
-            title = "This pairing code expired",
-            message = "Create a fresh code in Rotki, then scan it before its timer ends.",
-            primaryLabel = "Scan a new code",
-            onPrimary = onScanAgain,
-        )
-        PairingConnectionUiState.PAIRING_UNAVAILABLE -> PairingProblem(
-            title = "This pairing code is no longer available",
-            message = "The code may have expired or already been used. Create a new one in Rotki.",
-            primaryLabel = "Scan a new code",
-            onPrimary = onScanAgain,
-        )
-        PairingConnectionUiState.INCOMPATIBLE -> PairingProblem(
-            title = "Rotki needs an update",
-            message = "This Engine does not support the Companion protocol required by this app.",
-            primaryLabel = "Back",
-            onPrimary = onBack,
-        )
-        PairingConnectionUiState.RATE_LIMITED -> PairingProblem(
-            title = "Rotki Engine is busy",
-            message = "Wait a moment, create a fresh pairing code in Rotki, then scan it again.",
-            primaryLabel = "Scan a new code",
-            onPrimary = onScanAgain,
-        )
-        PairingConnectionUiState.NETWORK_UNAVAILABLE -> PairingProblem(
-            title = "Rotki Engine is out of reach",
-            message = "Check this device's connection to your Engine, then scan the code again.",
-            primaryLabel = "Scan again",
-            onPrimary = onScanAgain,
-        )
-        PairingConnectionUiState.LOCAL_SECURITY_UNAVAILABLE -> PairingProblem(
-            title = "Secure device key unavailable",
-            message = "Rotki Companion could not create the protected key required to register this device.",
-            primaryLabel = "Back",
-            onPrimary = onBack,
-        )
-        PairingConnectionUiState.LOCAL_STORAGE_UNAVAILABLE -> PairingProblem(
-            title = "Device registration was not saved",
-            message = "Nothing is considered paired. Check available storage and scan a fresh code.",
-            primaryLabel = "Scan a new code",
-            onPrimary = onScanAgain,
-        )
-        PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE -> PairingProblem(
-            title = "Local cleanup could not be verified",
-            message = "Rotki Companion remains locked because removal of the local device key " +
-                "and registration record could not be confirmed. Do not pair again yet.",
-            primaryLabel = "Retry cleanup",
-            onPrimary = onRetryCleanup,
-        )
-        PairingConnectionUiState.UNEXPECTED -> PairingProblem(
-            title = "Device registration did not finish",
-            message = "No portfolio data was stored. Return to Rotki and create a fresh pairing code.",
-            primaryLabel = "Scan a new code",
-            onPrimary = onScanAgain,
-        )
+        PairingConnectionUiState.IDLE -> {
+            Unit
+        }
+
+        PairingConnectionUiState.CONNECTING -> {
+            ConnectingStage()
+        }
+
+        PairingConnectionUiState.CLEANING_UP -> {
+            CleanupProgressStage()
+        }
+
+        PairingConnectionUiState.REGISTERED -> {
+            RegisteredStage()
+        }
+
+        PairingConnectionUiState.LOCAL_NETWORK_PERMISSION_REQUIRED -> {
+            PairingProblem(
+                title = "Local network access needed",
+                message = "Allow nearby device access, then scan the pairing code again. The code was not saved.",
+                primaryLabel = "Allow access",
+                onPrimary = onRequestLocalNetworkPermission,
+                secondaryLabel = "Open settings",
+                onSecondary = onOpenSettings,
+            )
+        }
+
+        PairingConnectionUiState.PAIRING_EXPIRED -> {
+            PairingProblem(
+                title = "This pairing code expired",
+                message = "Create a fresh code in Rotki, then scan it before its timer ends.",
+                primaryLabel = "Scan a new code",
+                onPrimary = onScanAgain,
+            )
+        }
+
+        PairingConnectionUiState.PAIRING_UNAVAILABLE -> {
+            PairingProblem(
+                title = "This pairing code is no longer available",
+                message = "The code may have expired or already been used. Create a new one in Rotki.",
+                primaryLabel = "Scan a new code",
+                onPrimary = onScanAgain,
+            )
+        }
+
+        PairingConnectionUiState.INCOMPATIBLE -> {
+            PairingProblem(
+                title = "Rotki needs an update",
+                message = "This Engine does not support the Companion protocol required by this app.",
+                primaryLabel = "Back",
+                onPrimary = onBack,
+            )
+        }
+
+        PairingConnectionUiState.RATE_LIMITED -> {
+            PairingProblem(
+                title = "Rotki Engine is busy",
+                message = "Wait a moment, create a fresh pairing code in Rotki, then scan it again.",
+                primaryLabel = "Scan a new code",
+                onPrimary = onScanAgain,
+            )
+        }
+
+        PairingConnectionUiState.NETWORK_UNAVAILABLE -> {
+            PairingProblem(
+                title = "Rotki Engine is out of reach",
+                message = "Check this device's connection to your Engine, then scan the code again.",
+                primaryLabel = "Scan again",
+                onPrimary = onScanAgain,
+            )
+        }
+
+        PairingConnectionUiState.LOCAL_SECURITY_UNAVAILABLE -> {
+            PairingProblem(
+                title = "Secure device key unavailable",
+                message = "Rotki Companion could not create the protected key required to register this device.",
+                primaryLabel = "Back",
+                onPrimary = onBack,
+            )
+        }
+
+        PairingConnectionUiState.LOCAL_STORAGE_UNAVAILABLE -> {
+            PairingProblem(
+                title = "Device registration was not saved",
+                message = "Nothing is considered paired. Check available storage and scan a fresh code.",
+                primaryLabel = "Scan a new code",
+                onPrimary = onScanAgain,
+            )
+        }
+
+        PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE -> {
+            PairingProblem(
+                title = "Local cleanup could not be verified",
+                message =
+                    "Rotki Companion remains locked because removal of the local device key " +
+                        "and registration record could not be confirmed. Do not pair again yet.",
+                primaryLabel = "Retry cleanup",
+                onPrimary = onRetryCleanup,
+            )
+        }
+
+        PairingConnectionUiState.UNEXPECTED -> {
+            PairingProblem(
+                title = "Device registration did not finish",
+                message = "No portfolio data was stored. Return to Rotki and create a fresh pairing code.",
+                primaryLabel = "Scan a new code",
+                onPrimary = onScanAgain,
+            )
+        }
     }
 }
 
 @Composable
-private fun CleanupProgressStage(): Unit {
+private fun CleanupProgressStage() {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .testTag(UiTags.PAIRING_CONNECTING),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .testTag(UiTags.PAIRING_CONNECTING),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -418,20 +495,22 @@ private fun CleanupProgressStage(): Unit {
 }
 
 @Composable
-private fun RegisteredStage(): Unit {
+private fun RegisteredStage() {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .testTag(UiTags.PAIRING_REGISTERED),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+                .testTag(UiTags.PAIRING_REGISTERED),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -450,7 +529,9 @@ private fun RegisteredStage(): Unit {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "The device key and Engine registration are saved. Device proof and portfolio sync are the next development step.",
+            text =
+                "The device key and Engine registration are saved. Device proof and portfolio sync " +
+                    "are the next development step.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
@@ -459,16 +540,17 @@ private fun RegisteredStage(): Unit {
 }
 
 @Composable
-private fun RotkiWordmark(): Unit {
+private fun RotkiWordmark() {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
+            modifier =
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -487,30 +569,33 @@ private fun RotkiWordmark(): Unit {
 }
 
 @Composable
-private fun PairingIllustration(): Unit {
+private fun PairingIllustration() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .size(112.dp)
-                .border(
-                    width = 8.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(18.dp),
-                ),
+            modifier =
+                Modifier
+                    .size(112.dp)
+                    .border(
+                        width = 8.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(18.dp),
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(MaterialTheme.colorScheme.tertiary),
+                modifier =
+                    Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(MaterialTheme.colorScheme.tertiary),
             )
         }
     }

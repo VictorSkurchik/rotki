@@ -1,8 +1,8 @@
 package org.rotki.mobile.core.network
 
+import org.rotki.mobile.core.protocol.generated.ProtocolRetryPolicy
 import kotlin.math.min
 import kotlin.random.Random
-import org.rotki.mobile.core.protocol.generated.ProtocolRetryPolicy
 
 internal enum class RequestReplayPolicy {
     SAFE_READ,
@@ -84,20 +84,29 @@ internal class RetryPolicy(
             return RetryDecision.Stop(RetryStopReason.FAILURE_NOT_RETRYABLE)
         }
 
-        val maximumAttempts = when (replayPolicy) {
-            RequestReplayPolicy.SAFE_READ -> ProtocolRetryPolicy.SafeGetMaximumAttempts
-            RequestReplayPolicy.IDEMPOTENT_WRITE ->
-                ProtocolRetryPolicy.IdempotentWriteMaximumAttempts
-            RequestReplayPolicy.NEVER -> ProtocolRetryPolicy.ChallengeOrProofMaximumAttempts
-        }
+        val maximumAttempts =
+            when (replayPolicy) {
+                RequestReplayPolicy.SAFE_READ -> {
+                    ProtocolRetryPolicy.SafeGetMaximumAttempts
+                }
+
+                RequestReplayPolicy.IDEMPOTENT_WRITE -> {
+                    ProtocolRetryPolicy.IdempotentWriteMaximumAttempts
+                }
+
+                RequestReplayPolicy.NEVER -> {
+                    ProtocolRetryPolicy.ChallengeOrProofMaximumAttempts
+                }
+            }
         if (completedAttempts >= maximumAttempts) {
             return RetryDecision.Stop(RetryStopReason.ATTEMPT_BUDGET_EXHAUSTED)
         }
 
         val responseFailure = failure as? RetryFailure.HttpResponse
-        val retryAfterSeconds = responseFailure
-            ?.takeIf { response -> response.statusCode == HTTP_TOO_MANY_REQUESTS }
-            ?.retryAfterSeconds
+        val retryAfterSeconds =
+            responseFailure
+                ?.takeIf { response -> response.statusCode == HTTP_TOO_MANY_REQUESTS }
+                ?.retryAfterSeconds
         if (retryAfterSeconds != null &&
             retryAfterSeconds > ProtocolRetryPolicy.MaximumRetryAfterSeconds
         ) {
@@ -117,26 +126,39 @@ internal class RetryPolicy(
         while (remainingDoublings > 0 &&
             exponentialWindow < ProtocolRetryPolicy.MaximumDelayMilliseconds
         ) {
-            exponentialWindow = min(
-                exponentialWindow * 2,
-                ProtocolRetryPolicy.MaximumDelayMilliseconds,
-            )
+            exponentialWindow =
+                min(
+                    exponentialWindow * 2,
+                    ProtocolRetryPolicy.MaximumDelayMilliseconds,
+                )
             remainingDoublings -= 1
         }
         return jitterSource.nextLong(exponentialWindow + 1)
     }
 
-    private fun RetryFailure.isRetryable(): Boolean = when (this) {
-        RetryFailure.PreResponseTransport -> true
-        RetryFailure.CompleteResponseTransport,
-        RetryFailure.ContractViolation,
-        -> false
-        is RetryFailure.HttpResponse ->
-            statusCode in ProtocolRetryPolicy.RetryableHttpStatuses &&
-                (typedError == TypedErrorRetryDisposition.RETRYABLE ||
-                    (typedError == TypedErrorRetryDisposition.NOT_PRESENT &&
-                        statusCode in ENVELOPE_OPTIONAL_GATEWAY_STATUSES))
-    }
+    private fun RetryFailure.isRetryable(): Boolean =
+        when (this) {
+            RetryFailure.PreResponseTransport -> {
+                true
+            }
+
+            RetryFailure.CompleteResponseTransport,
+            RetryFailure.ContractViolation,
+            -> {
+                false
+            }
+
+            is RetryFailure.HttpResponse -> {
+                statusCode in ProtocolRetryPolicy.RetryableHttpStatuses &&
+                    (
+                        typedError == TypedErrorRetryDisposition.RETRYABLE ||
+                            (
+                                typedError == TypedErrorRetryDisposition.NOT_PRESENT &&
+                                    statusCode in ENVELOPE_OPTIONAL_GATEWAY_STATUSES
+                            )
+                    )
+            }
+        }
 
     private companion object {
         private const val MILLIS_PER_SECOND: Long = 1_000

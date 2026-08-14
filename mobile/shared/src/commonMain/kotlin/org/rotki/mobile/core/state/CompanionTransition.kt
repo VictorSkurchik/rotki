@@ -35,14 +35,18 @@ internal enum class CompanionTransitionEvent(
     }
 }
 
-public enum class DeviceSessionEffect(public val code: String) {
+public enum class DeviceSessionEffect(
+    public val code: String,
+) {
     ABSENT("absent"),
     DELETE("delete"),
     KEEP("keep"),
     REPLACE("replace"),
 }
 
-public enum class SnapshotEffect(public val code: String) {
+public enum class SnapshotEffect(
+    public val code: String,
+) {
     ABSENT("absent"),
     DELETE("delete"),
     KEEP("keep"),
@@ -51,7 +55,9 @@ public enum class SnapshotEffect(public val code: String) {
     UNLOCK("unlock"),
 }
 
-public enum class BearerEffect(public val code: String) {
+public enum class BearerEffect(
+    public val code: String,
+) {
     ABSENT("absent"),
     DELETE("delete"),
     KEEP("keep"),

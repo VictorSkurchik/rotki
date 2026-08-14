@@ -10,7 +10,7 @@ internal class PairingCodeAnalyzer(
     private val onPairingCode: (String) -> Unit,
     private val onFailure: (PairingCodeScannerFailure) -> Unit,
 ) : ImageAnalysis.Analyzer {
-    override fun analyze(image: ImageProxy): Unit {
+    override fun analyze(image: ImageProxy) {
         val lease = CloseOnce(image::close)
         val session = deliveryGate.currentSession()
         if (session == null) {
@@ -25,7 +25,11 @@ internal class PairingCodeAnalyzer(
                         is PairingFrameDecodeResult.Detected -> {
                             deliveryGate.offer(session, result.payload, onPairingCode)
                         }
-                        PairingFrameDecodeResult.Empty -> Unit
+
+                        PairingFrameDecodeResult.Empty -> {
+                            Unit
+                        }
+
                         PairingFrameDecodeResult.Failed -> {
                             deliveryGate.fail(session) {
                                 onFailure(PairingCodeScannerFailure.DECODER_FAILED)

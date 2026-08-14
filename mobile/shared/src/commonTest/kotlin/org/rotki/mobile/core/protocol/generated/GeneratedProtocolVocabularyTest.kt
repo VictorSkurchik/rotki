@@ -35,23 +35,27 @@ class GeneratedProtocolVocabularyTest {
             WebSocketEventType.entries.mapTo(mutableSetOf(), WebSocketEventType::wireValue),
         )
 
-        val enumDomains = mapOf(
-            "auth_realms" to ProtocolAuthRealm.entries.associate { it.wireValue to it.name },
-            "authorities" to ProtocolAuthority.entries.associate { it.wireValue to it.name },
-            "capabilities" to ProtocolCapability.entries.associate { it.wireValue to it.name },
-            "device_session_states" to DeviceSessionState.entries.associate { it.wireValue to it.name },
-            "error_actions" to ProtocolErrorAction.entries.associate { it.wireValue to it.name },
-            "http_error_codes" to HttpErrorCode.entries.associate { it.wireValue to it.name },
-            "operation_error_codes" to OperationErrorCode.entries.associate { it.wireValue to it.name },
-            "platforms" to CompanionPlatform.entries.associate { it.wireValue to it.name },
-            "root_states" to ProtocolRootState.entries.associate { it.wireValue to it.name },
-            "source_error_codes" to SourceErrorCode.entries.associate { it.wireValue to it.name },
-            "websocket_event_types" to WebSocketEventType.entries.associate { it.wireValue to it.name },
-        )
+        val enumDomains =
+            mapOf(
+                "auth_realms" to ProtocolAuthRealm.entries.associate { it.wireValue to it.name },
+                "authorities" to ProtocolAuthority.entries.associate { it.wireValue to it.name },
+                "capabilities" to ProtocolCapability.entries.associate { it.wireValue to it.name },
+                "device_session_states" to DeviceSessionState.entries.associate { it.wireValue to it.name },
+                "error_actions" to ProtocolErrorAction.entries.associate { it.wireValue to it.name },
+                "http_error_codes" to HttpErrorCode.entries.associate { it.wireValue to it.name },
+                "operation_error_codes" to OperationErrorCode.entries.associate { it.wireValue to it.name },
+                "platforms" to CompanionPlatform.entries.associate { it.wireValue to it.name },
+                "root_states" to ProtocolRootState.entries.associate { it.wireValue to it.name },
+                "source_error_codes" to SourceErrorCode.entries.associate { it.wireValue to it.name },
+                "websocket_event_types" to WebSocketEventType.entries.associate { it.wireValue to it.name },
+            )
         enumDomains.forEach { (domain, actual) ->
-            val expected = names.getValue(domain).jsonObject.mapValues { (_, value) ->
-                value.jsonObject.getValue("kotlin").jsonPrimitive.content
-            }
+            val expected =
+                names.getValue(domain).jsonObject.mapValues { (_, value) ->
+                    value.jsonObject
+                        .getValue("kotlin")
+                        .jsonPrimitive.content
+                }
             assertEquals(expected, actual, domain)
         }
         assertTrue(ProtocolCapability.entries.all { capability -> capability.minimumVersion == 1 })
@@ -66,7 +70,13 @@ class GeneratedProtocolVocabularyTest {
             ProtocolFixtureData.golden,
             ProtocolFixtureData.clientPolicy,
         ).forEach { document ->
-            assertEquals(1, document.getValue("schema_version").jsonPrimitive.content.toInt())
+            assertEquals(
+                1,
+                document
+                    .getValue("schema_version")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
         }
     }
 }

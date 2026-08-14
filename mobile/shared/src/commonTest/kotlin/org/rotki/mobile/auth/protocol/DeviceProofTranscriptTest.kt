@@ -18,19 +18,22 @@ class DeviceProofTranscriptTest {
 
     @Test
     fun `golden proof transcript is assembled byte for byte`() {
-        val origin = assertIs<EngineOriginParseOutcome.Accepted>(
-            EngineOrigin.parse(proof.string("canonical_engine_origin")),
-        ).origin
-        val deviceSessionId = assertIs<ProtocolValueParseOutcome.Accepted<DeviceSessionId>>(
-            DeviceSessionId.parse(proof.string("device_session_id")),
-        ).value
-        val challenge = assertIs<AuthContractOutcome.Accepted<AuthorizationChallenge>>(
-            ChallengeResultDto(
-                challengeId = proof.string("challenge_id"),
-                nonce = proof.string("nonce"),
-                expiresAt = proof.long("expires_at"),
-            ).toDomain(),
-        ).value
+        val origin =
+            assertIs<EngineOriginParseOutcome.Accepted>(
+                EngineOrigin.parse(proof.string("canonical_engine_origin")),
+            ).origin
+        val deviceSessionId =
+            assertIs<ProtocolValueParseOutcome.Accepted<DeviceSessionId>>(
+                DeviceSessionId.parse(proof.string("device_session_id")),
+            ).value
+        val challenge =
+            assertIs<AuthContractOutcome.Accepted<AuthorizationChallenge>>(
+                ChallengeResultDto(
+                    challengeId = proof.string("challenge_id"),
+                    nonce = proof.string("nonce"),
+                    expiresAt = proof.long("expires_at"),
+                ).toDomain(),
+            ).value
 
         val transcript = encodeDeviceProofTranscript(origin, deviceSessionId, challenge)
 
@@ -40,6 +43,7 @@ class DeviceProofTranscriptTest {
 }
 
 private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
+
 private fun JsonObject.long(name: String): Long = string(name).toLong()
 
 private fun String.hexToByteArray(): ByteArray {

@@ -5,14 +5,14 @@ import org.junit.Test
 
 class AndroidDeviceLabelProviderTest {
     @Test
-    fun `uses the trimmed device model as the registration label`(): Unit {
+    fun `uses the trimmed device model as the registration label`() {
         val provider = AndroidDeviceLabelProvider { "  Pixel 10 Pro  " }
 
         assertEquals("Pixel 10 Pro", provider.label())
     }
 
     @Test
-    fun `allows a valid label containing 64 Unicode scalars`(): Unit {
+    fun `allows a valid label containing 64 Unicode scalars`() {
         val label = "📱".repeat(64)
         val provider = AndroidDeviceLabelProvider { label }
 
@@ -20,7 +20,7 @@ class AndroidDeviceLabelProviderTest {
     }
 
     @Test
-    fun `falls back for absent blank or oversized models`(): Unit {
+    fun `falls back for absent blank or oversized models`() {
         listOf<String?>(
             null,
             "",
@@ -38,7 +38,7 @@ class AndroidDeviceLabelProviderTest {
     }
 
     @Test
-    fun `falls back for malformed or forbidden Unicode`(): Unit {
+    fun `falls back for malformed or forbidden Unicode`() {
         listOf(
             "bad\u0000model",
             "bad\u200Bmodel",
@@ -57,17 +57,18 @@ class AndroidDeviceLabelProviderTest {
     }
 
     @Test
-    fun `supplementary emoji remains valid after code point category validation`(): Unit {
+    fun `supplementary emoji remains valid after code point category validation`() {
         assertEquals("Pixel 📱", AndroidDeviceLabelProvider { "Pixel 📱" }.label())
     }
 
     @Test
-    fun `reads only the injected model seam once per label`(): Unit {
+    fun `reads only the injected model seam once per label`() {
         var reads = 0
-        val provider = AndroidDeviceLabelProvider {
-            reads += 1
-            "Pixel 8"
-        }
+        val provider =
+            AndroidDeviceLabelProvider {
+                reads += 1
+                "Pixel 8"
+            }
 
         assertEquals("Pixel 8", provider.label())
         assertEquals(1, reads)

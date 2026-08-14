@@ -1,21 +1,21 @@
 package org.rotki.mobile.auth
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
 import org.rotki.mobile.auth.protocol.PairingQrParser
 import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionTransitionOutcome
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class PairingFlowTest {
     @Test
-    fun `QR outcomes map to the complete public presentation vocabulary`(): Unit {
+    fun `QR outcomes map to the complete public presentation vocabulary`() {
         assertEquals(
             setOf(
                 PairingUiState.INTRO,
@@ -58,10 +58,11 @@ class PairingFlowTest {
             ),
             QrCase(
                 name = "unsupported",
-                wire = validQr(expiresAt = NOW + 1).replace(
-                    "\"format_version\":1",
-                    "\"format_version\":2",
-                ),
+                wire =
+                    validQr(expiresAt = NOW + 1).replace(
+                        "\"format_version\":1",
+                        "\"format_version\":2",
+                    ),
                 expectedState = PairingUiState.INVALID_QR,
                 expectedRejection = PairingRejectionCategory.UNSUPPORTED,
             ),
@@ -91,7 +92,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `permission reset and retry are deterministic`(): Unit {
+    fun `permission reset and retry are deterministic`() {
         val flow = CompanionFacade().pairingFlow(Clock { NOW })
 
         assertEquals(PairingUiState.INTRO, flow.presentation.value.state)
@@ -122,7 +123,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `accepted scan enters facade connecting once and ignores later scans and controls`(): Unit {
+    fun `accepted scan enters facade connecting once and ignores later scans and controls`() {
         val facade = CompanionFacade()
         val flow = facade.pairingFlow(Clock { NOW })
         flow.startScanning()
@@ -147,7 +148,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `background before registration cancels the ephemeral pairing attempt`(): Unit {
+    fun `background before registration cancels the ephemeral pairing attempt`() {
         val facade = CompanionFacade()
         val flow = facade.pairingFlow(Clock { NOW })
         flow.startScanning()
@@ -162,7 +163,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `terminal connection outcome clears an unconsumed QR credential`(): Unit {
+    fun `terminal connection outcome clears an unconsumed QR credential`() {
         val facade = CompanionFacade()
         val flow = facade.pairingFlow(Clock { NOW })
         flow.startScanning()
@@ -175,7 +176,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `background cancels registration even after its one-shot QR handoff`(): Unit {
+    fun `background cancels registration even after its one-shot QR handoff`() {
         val facade = CompanionFacade()
         val flow = facade.pairingFlow(Clock { NOW })
         flow.startScanning()
@@ -191,7 +192,7 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `stale flow cannot replace or cancel the active registration attempt`(): Unit {
+    fun `stale flow cannot replace or cancel the active registration attempt`() {
         val facade = CompanionFacade()
         val activeFlow = facade.pairingFlow(Clock { NOW })
         val staleFlow = facade.pairingFlow(Clock { NOW })
@@ -209,17 +210,18 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `public representations never contain QR authority or credentials`(): Unit {
+    fun `public representations never contain QR authority or credentials`() {
         val facade = CompanionFacade()
         val flow = facade.pairingFlow(Clock { NOW })
         flow.startScanning()
         flow.submitQr(validQr(expiresAt = NOW + 1))
 
-        val representations = listOf(
-            flow.toString(),
-            flow.presentation.value.toString(),
-            facade.status.value.toString(),
-        ).joinToString()
+        val representations =
+            listOf(
+                flow.toString(),
+                flow.presentation.value.toString(),
+                facade.status.value.toString(),
+            ).joinToString()
         listOf(ORIGIN, PAIRING_ID, CREDENTIAL, "rotki_companion_pairing").forEach { secret ->
             assertFalse(secret in representations, secret)
         }
@@ -227,11 +229,12 @@ class PairingFlowTest {
     }
 
     @Test
-    fun `lock racing accepted qr cannot leave connecting without ownership`(): Unit {
+    fun `lock racing accepted qr cannot leave connecting without ownership`() {
         val facade = CompanionFacade()
-        val parsed = PairingQrParser(Clock { NOW }).parse(
-            validQr(expiresAt = NOW + 1).encodeToByteArray(),
-        )
+        val parsed =
+            PairingQrParser(Clock { NOW }).parse(
+                validQr(expiresAt = NOW + 1).encodeToByteArray(),
+            )
         val pairingQr = assertIs<PairingQrParseOutcome.Accepted>(parsed).pairingQr
 
         val outcome = facade.acceptPairing(pairingQr) { facade.lock() }
