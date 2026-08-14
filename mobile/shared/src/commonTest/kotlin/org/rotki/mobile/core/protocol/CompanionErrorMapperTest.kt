@@ -4,7 +4,6 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.core.network.CompanionJson
 import org.rotki.mobile.core.protocol.dto.CompanionErrorDto
 import org.rotki.mobile.core.protocol.dto.CompanionFailureEnvelopeDto
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode

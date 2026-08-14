@@ -508,8 +508,11 @@ QR material or creates an Apple framework.
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
 vertical remains the reference slice. Strict QR decoding, registration transport, protocol DTOs,
 Ktor boundaries, and the remaining protocol-dependent security contracts are still physically
-coupled inside `:shared`. Next move coherent protocol and network leaves, then complete the security
-API; only after those edges are available should the decoder and registration implementation move into a real
+located inside `:shared`. Protocol now owns the strict JSON configuration and generic envelopes, while
+auth owns its success envelopes, removing the former protocol-to-network/auth package edges without
+claiming module extraction. Next add a non-exported codec boundary, move coherent protocol and network
+leaves, then complete the security API; only after those edges are available should the decoder and
+registration implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed
 Navigation Compose.

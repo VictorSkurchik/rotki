@@ -10,6 +10,7 @@ import io.ktor.http.HttpMethod
 import org.rotki.mobile.auth.protocol.AuthContractOutcome
 import org.rotki.mobile.auth.protocol.DeviceLabel
 import org.rotki.mobile.auth.protocol.DeviceSession
+import org.rotki.mobile.auth.protocol.DeviceSessionEnvelopeDto
 import org.rotki.mobile.auth.protocol.RegisterDeviceSessionRequestDto
 import org.rotki.mobile.auth.protocol.matchesRegistration
 import org.rotki.mobile.core.network.CompanionHttpResponseOutcome
@@ -20,7 +21,6 @@ import org.rotki.mobile.core.protocol.IdempotencyKey
 import org.rotki.mobile.core.protocol.PairingCredential
 import org.rotki.mobile.core.protocol.PairingId
 import org.rotki.mobile.core.protocol.X963PublicKey
-import org.rotki.mobile.core.protocol.dto.DeviceSessionEnvelopeDto
 import org.rotki.mobile.core.protocol.dto.ProtocolDiscoveryEnvelopeDto
 import org.rotki.mobile.core.protocol.dto.ProtocolNegotiationOutcome
 import org.rotki.mobile.core.protocol.dto.negotiate

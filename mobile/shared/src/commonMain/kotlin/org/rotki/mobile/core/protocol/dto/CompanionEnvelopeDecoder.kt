@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
-import org.rotki.mobile.core.network.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJson
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
 import org.rotki.mobile.core.protocol.hasValidJsonSyntax

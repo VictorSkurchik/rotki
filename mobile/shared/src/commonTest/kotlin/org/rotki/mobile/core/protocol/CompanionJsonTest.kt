@@ -1,4 +1,4 @@
-package org.rotki.mobile.core.network
+package org.rotki.mobile.core.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

@@ -6,7 +6,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
-import org.rotki.mobile.core.network.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJson
 import org.rotki.mobile.core.protocol.StrictJsonBooleanSerializer
 import org.rotki.mobile.core.protocol.StrictJsonIntSerializer
 import org.rotki.mobile.core.protocol.StrictJsonLongSerializer

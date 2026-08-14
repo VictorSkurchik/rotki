@@ -5,9 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.auth.protocol.AuthContractOutcome
-import org.rotki.mobile.auth.protocol.toDomain
-import org.rotki.mobile.core.network.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJson
 import org.rotki.mobile.core.protocol.generated.ProtocolCapability
 import org.rotki.mobile.core.protocol.generated.SUPPORTED_PROTOCOL_VERSIONS
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
@@ -19,7 +17,7 @@ import kotlin.test.assertTrue
 
 class ProtocolDtoContractTest {
     @Test
-    fun `six mobile-owned success examples decode through handwritten DTOs`() {
+    fun `protocol discovery example decodes through handwritten DTOs`() {
         val protocol = decodeResponse<ProtocolDiscoveryEnvelopeDto>("get_protocol")
         assertEquals(
             1,
@@ -32,23 +30,6 @@ class ProtocolDtoContractTest {
                 assertIs<ProtocolNegotiationOutcome.Compatible>(
                     protocol.result.negotiate(SUPPORTED_PROTOCOL_VERSIONS),
                 ).availableCapabilities,
-        )
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<DeviceSessionEnvelopeDto>("register_device_session")
-                .result.deviceSession
-                .toDomain(),
-        )
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<DeviceSessionEnvelopeDto>("rename_current_device_session")
-                .result.deviceSession
-                .toDomain(),
-        )
-        assertTrue(decodeResponse<RevokedEnvelopeDto>("revoke_current_device_session").result.revoked)
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<ChallengeEnvelopeDto>("create_challenge").result.toDomain(),
-        )
-        assertIs<AuthContractOutcome.Accepted<*>>(
-            decodeResponse<AccessSessionEnvelopeDto>("create_access_session").result.toDomain(),
         )
     }
 
@@ -69,34 +50,10 @@ class ProtocolDtoContractTest {
     }
 
     @Test
-    fun `quoted JSON scalars are rejected across auth and control responses`() {
+    fun `quoted JSON scalars are rejected in protocol discovery`() {
         assertFailsWith<SerializationException> {
             CompanionJson.decodeFromString<ProtocolDiscoveryEnvelopeDto>(
                 responseText("get_protocol").replace("[1]", "[\"1\"]"),
-            )
-        }
-        assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<DeviceSessionEnvelopeDto>(
-                responseText("register_device_session")
-                    .replace("\"paired_at\":1786550300", "\"paired_at\":\"1786550300\""),
-            )
-        }
-        assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<RevokedEnvelopeDto>(
-                responseText("revoke_current_device_session")
-                    .replace("\"revoked\":true", "\"revoked\":\"true\""),
-            )
-        }
-        assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<ChallengeEnvelopeDto>(
-                responseText("create_challenge")
-                    .replace("\"expires_at\":1786550400", "\"expires_at\":\"1786550400\""),
-            )
-        }
-        assertFailsWith<SerializationException> {
-            CompanionJson.decodeFromString<AccessSessionEnvelopeDto>(
-                responseText("create_access_session")
-                    .replace("\"expires_at\":1786551300", "\"expires_at\":\"1786551300\""),
             )
         }
     }

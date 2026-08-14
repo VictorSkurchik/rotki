@@ -27,9 +27,12 @@ credential and are not exported as additional Apple APIs.
 Strict QR decoding, registration transport, and the facade-backed in-memory implementation remain
 in this umbrella for now. Protocol-dependent device-proof, Pairing-record, and idempotency ports also
 remain here until the protocol leaf exists. The next extractions are coherent protocol and network
-leaves, followed by completion of the security API. Only then can a real `:feature:pairing:data`
-implementation depend on those leaves without introducing `shared <-> data` cycles; no data module
-is declared yet.
+leaves, followed by completion of the security API. Inside `:shared`, strict JSON configuration is
+already protocol-owned and auth-specific success envelopes are auth-owned, so protocol no longer
+imports network or auth packages. A non-exported codec boundary must still replace the network
+layer's direct use of the internal JSON instance before those packages become separate modules. Only
+then can a real `:feature:pairing:data` implementation depend on the leaves without introducing
+`shared <-> data` cycles; no data module is declared yet.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned

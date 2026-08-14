@@ -86,6 +86,9 @@ submission contract plus opaque session/attempt ports, and presentation owns the
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than depending directly on
 `CompanionFacade`; a non-exported adapter scoped to one facade supplies their current implementation.
 Strict protocol decoding and transport remain in `:shared` until their lower-level dependencies move.
+Their package direction is already untangled: protocol owns strict JSON and generic envelopes, while
+auth owns auth-specific success envelopes. Physical protocol/network extraction still requires a
+non-exported codec boundary so network does not consume protocol's internal `Json` instance directly.
 
 ```text
 mobile/

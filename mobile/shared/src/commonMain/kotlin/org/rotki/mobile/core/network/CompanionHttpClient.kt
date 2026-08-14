@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.websocket.ChannelOverflow
+import org.rotki.mobile.core.protocol.CompanionJson
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 
 internal fun createCompanionHttpClient(engine: HttpClientEngine): HttpClient =

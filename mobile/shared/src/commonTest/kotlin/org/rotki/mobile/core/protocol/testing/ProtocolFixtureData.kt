@@ -4,7 +4,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.rotki.mobile.core.network.CompanionJson
+import org.rotki.mobile.core.protocol.CompanionJson
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_CLIENT_POLICY_CASES_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_GENERATED_NAMES_JSON
 import org.rotki.mobile.core.protocol.generated.PROTOCOL_GOLDEN_VECTORS_JSON
