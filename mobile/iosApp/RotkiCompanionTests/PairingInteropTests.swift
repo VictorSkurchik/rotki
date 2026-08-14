@@ -152,3 +152,15 @@ private func compilePairingConnectionSurface(
     )
     return facade.pairingConnection(configuration: configuration)
 }
+
+private func compileSecurityStoreSurface(
+    store: any SecureSnapshotStore,
+    readOutcome: any SecureSnapshotReadOutcome,
+    writeOutcome: any SecureSnapshotWriteOutcome,
+    deleteOutcome: any SecureSnapshotDeleteOutcome
+) {
+    store.discardPlaintext()
+    _ = readOutcome
+    _ = writeOutcome
+    _ = deleteOutcome
+}

@@ -94,6 +94,7 @@ jobs:
           ./gradlew --no-daemon \
             :core:common:dependencies \
             :core:model:dependencies \
+            :core:security-api:dependencies \
             :feature:pairing:domain:dependencies \
             :feature:pairing:presentation:dependencies \
             :shared:dependencies \

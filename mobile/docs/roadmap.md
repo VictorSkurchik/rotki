@@ -485,9 +485,13 @@ extracted leaf and owns the complete `ExactDecimal` slice: implementation, priva
 vectors, and generator. `:core:common` now owns `Clock`, the application-visibility/controller
 contracts, and the exhaustive lifecycle policy. Its autonomous contract tests moved with it, while
 the authored lifecycle-fixture parity test remains in `:shared` beside the generated protocol assets.
-`:shared` consumes both leaves as API dependencies and exports them through the single `RotkiShared`
-Apple framework. The host and Apple aggregate gates discover the modules rather than requiring
-additional frameworks or hand-maintained test lists. The root `checkModuleGraph` gate rejects
+The first `:core:security-api` tranche owns the secret-free Pairing cleanup journal plus the secure
+Snapshot-store contract and its revocable application-owned plaintext handle; its autonomous
+revocation test moved with it. Protocol-dependent device-proof, Pairing-record, and idempotency ports
+remain in `:shared` until their value types can move without a cycle. `:shared` consumes all three
+core leaves as API dependencies and exports them through the single `RotkiShared` Apple framework.
+The host and Apple aggregate gates discover the modules rather than requiring additional frameworks
+or hand-maintained test lists. The root `checkModuleGraph` gate rejects
 unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
 the extracted Clean Architecture boundaries.
 
@@ -503,9 +507,9 @@ QR material or creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
 vertical remains the reference slice. Strict QR decoding, registration transport, protocol DTOs,
-Ktor boundaries, and platform security contracts are still physically coupled inside `:shared`.
-With core common extracted, next move coherent protocol, network, and security leaves; only after
-those edges are available should the decoder and registration implementation move into a real
+Ktor boundaries, and the remaining protocol-dependent security contracts are still physically
+coupled inside `:shared`. Next move coherent protocol and network leaves, then complete the security
+API; only after those edges are available should the decoder and registration implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed
 Navigation Compose.

@@ -38,6 +38,7 @@ kotlin {
             isStatic = true
             export(project(":core:model"))
             export(project(":core:common"))
+            export(project(":core:security-api"))
         }
     }
 
@@ -45,6 +46,7 @@ kotlin {
         commonMain.dependencies {
             api(project(":core:common"))
             api(project(":core:model"))
+            api(project(":core:security-api"))
             api(libs.kotlinx.coroutines.core)
             implementation(libs.ionspin.bignum)
             implementation(libs.kotlinx.serialization.json)

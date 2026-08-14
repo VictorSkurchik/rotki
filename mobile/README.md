@@ -15,6 +15,9 @@ The production build currently contains:
 - `core:model`: the first extracted KMP leaf module. It owns the project-defined
   `ExactDecimal` value type, its private BigNum backend, common characterization tests,
   generated vectors, and no UI or platform implementation;
+- `core:security-api`: the first platform-neutral security-contract tranche. It owns the
+  secret-free Pairing cleanup journal plus the secure Snapshot-store contract and its revocable
+  application-owned plaintext handle, with no native implementation or infrastructure dependency;
 - `feature:pairing:domain`: platform-neutral Pairing submission contracts, coarse secret-free
   outcomes, and opaque session/attempt ports;
 - `feature:pairing:presentation`: the pure synchronous Pairing UDF state/action/reducer layer,
@@ -24,8 +27,8 @@ The production build currently contains:
   lifecycle-aware Device Key registration, and durable cleanup recovery. Its existing `PairingFlow`
   and `PairingConnection` remain ABI-compatible adapters over the extracted feature ports and no
   longer depend directly on `CompanionFacade`; one facade-scoped internal adapter supplies both.
-  `shared` re-exports `core:common` and `core:model` instead of creating additional Apple
-  frameworks;
+  `shared` re-exports `core:common`, `core:model`, and `core:security-api` instead of creating
+  additional Apple frameworks;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;

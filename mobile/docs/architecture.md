@@ -74,16 +74,18 @@ rules without carrying private configuration.
 
 ## Target Gradle module graph
 
-The current `:core:common`, `:core:model`, `:feature:pairing:domain`,
-`:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are the first migration state,
-not the final boundary. Create target modules only when moving or adding real production code.
-`:core:common` owns `Clock`, application visibility/controller contracts, and the lifecycle policy;
-`:core:model` owns `ExactDecimal` plus its characterization assets. Pairing domain owns the
-secret-free submission contract plus opaque session/attempt ports, and presentation owns the pure
-UDF reducer. The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather
-than depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies
-their current implementation. Strict protocol decoding and transport remain in `:shared` until
-their lower-level dependencies move.
+The current `:core:common`, `:core:model`, `:core:security-api`,
+`:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are
+the first migration state, not the final boundary. Create target modules only when moving or adding
+real production code. `:core:common` owns `Clock`, application visibility/controller contracts, and
+the lifecycle policy; `:core:model` owns `ExactDecimal` plus its characterization assets; and the
+first `:core:security-api` tranche owns the secret-free cleanup journal and revocable Snapshot
+secure-store contract plus its application-owned plaintext handle. Protocol-dependent security
+ports remain in `:shared` until their value dependencies move. Pairing domain owns the secret-free
+submission contract plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
+The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than depending directly on
+`CompanionFacade`; a non-exported adapter scoped to one facade supplies their current implementation.
+Strict protocol decoding and transport remain in `:shared` until their lower-level dependencies move.
 
 ```text
 mobile/
@@ -345,10 +347,11 @@ Rules for the final system and its implementation:
 Do not perform a big-bang package move. Use this order:
 
 1. Add convention plugins and extract stable core common/model/protocol/network/security contracts.
-   The reusable KMP library convention plus `:core:common` and `:core:model` leaves are in place.
-   Common owns `Clock` and application-lifecycle contracts, while its authored protocol-fixture
-   parity test remains in `:shared`; protocol, network, and security boundaries remain in the
-   umbrella until their own coherent slices move.
+   The reusable KMP library convention plus `:core:common`, `:core:model`, and the first
+   `:core:security-api` tranche are in place. Common owns `Clock` and application-lifecycle
+   contracts, while its authored protocol-fixture parity test remains in `:shared`. Security API
+   owns the cleanup journal and Snapshot-store boundary; protocol-dependent security ports,
+   protocol decoding, and network execution remain in the umbrella until their coherent slices move.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
    submission/session/attempt domain contracts and pure presentation reducer are extracted.
    `PairingFlow` and `PairingConnection` now use a facade-scoped port adapter, including the recovered

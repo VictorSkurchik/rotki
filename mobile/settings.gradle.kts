@@ -20,6 +20,7 @@ rootProject.name = "rotki-mobile"
 include(":androidApp")
 include(":core:common")
 include(":core:model")
+include(":core:security-api")
 include(":feature:pairing:domain")
 include(":feature:pairing:presentation")
 include(":shared")

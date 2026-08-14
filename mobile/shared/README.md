@@ -6,11 +6,13 @@ migrating incrementally into Clean Architecture core and feature modules while A
 native UI and platform-security adapters.
 
 The extracted core leaves are `:core:model`, which owns `ExactDecimal`, its private numeric backend,
-characterization tests, vectors, and generator, and `:core:common`, which owns `Clock`, application
-visibility/controller contracts, and the pure lifecycle policy. `:shared` has API dependencies on
-both modules and exports them through `RotkiShared`; neither leaf produces a second framework. The
-common leaf owns its autonomous contract matrix, while the authored lifecycle-fixture parity test
-remains here beside the generated protocol assets and JSON decoder.
+characterization tests, vectors, and generator; `:core:common`, which owns `Clock`, application
+visibility/controller contracts, and the pure lifecycle policy; and the first
+`:core:security-api` tranche, which owns the secret-free Pairing cleanup journal and revocable
+secure Snapshot-store contract plus its application-owned plaintext handle. `:shared` has API
+dependencies on all three modules and exports them through `RotkiShared`; none produces a second
+framework. The common and security leaves own their autonomous tests, while the authored
+lifecycle-fixture parity test remains here beside the generated protocol assets and JSON decoder.
 
 Pairing now has implementation-only `:feature:pairing:domain` and
 `:feature:pairing:presentation` boundaries. The public `PairingFlow` stays here as the stable
@@ -23,9 +25,11 @@ replacement attempt from being silently deleted. The feature modules retain no Q
 credential and are not exported as additional Apple APIs.
 
 Strict QR decoding, registration transport, and the facade-backed in-memory implementation remain
-in this umbrella for now. With core common established, the next extractions are coherent protocol,
-network, and security leaves. Only then can a real `:feature:pairing:data` implementation depend on
-those leaves without introducing `shared <-> data` cycles; no data module is declared yet.
+in this umbrella for now. Protocol-dependent device-proof, Pairing-record, and idempotency ports also
+remain here until the protocol leaf exists. The next extractions are coherent protocol and network
+leaves, followed by completion of the security API. Only then can a real `:feature:pairing:data`
+implementation depend on those leaves without introducing `shared <-> data` cycles; no data module
+is declared yet.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned
