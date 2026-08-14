@@ -28,13 +28,15 @@ import org.rotki.mobile.android.security.AndroidSecureSnapshotStore
 import org.rotki.mobile.android.security.AndroidSnapshotKeyStore
 import org.rotki.mobile.android.security.AtomicSnapshotFile
 import org.rotki.mobile.android.security.BiometricCryptoBroker
-import org.rotki.mobile.android.storage.AndroidPairingCleanupJournal
-import org.rotki.mobile.android.storage.AndroidPairingRecordStore
+import org.rotki.mobile.android.storage.createAndroidPairingCleanupJournal
+import org.rotki.mobile.android.storage.createAndroidPairingRecordStore
 import org.rotki.mobile.auth.PairingConnection
 import org.rotki.mobile.auth.PairingConnectionConfiguration
 import org.rotki.mobile.auth.PairingConnectionOutcome
 import org.rotki.mobile.auth.PairingDevicePlatform
 import org.rotki.mobile.core.ports.ApplicationVisibilityController
+import org.rotki.mobile.core.ports.PairingCleanupJournal
+import org.rotki.mobile.core.ports.PairingRecordStore
 import javax.crypto.Cipher
 
 /** One retained security graph for the lifetime of the Android application process. */
@@ -42,11 +44,11 @@ internal class AndroidSecurityComposition(
     private val applicationContext: Context,
 ) {
     val visibility: ApplicationVisibilityController = ApplicationVisibilityController()
-    val pairingRecordStore: AndroidPairingRecordStore =
-        AndroidPairingRecordStore(applicationContext)
+    val pairingRecordStore: PairingRecordStore =
+        createAndroidPairingRecordStore(applicationContext)
     val deviceProofSigner: AndroidDeviceProofSigner = AndroidDeviceProofSigner()
-    val pairingCleanupJournal: AndroidPairingCleanupJournal =
-        AndroidPairingCleanupJournal(applicationContext)
+    val pairingCleanupJournal: PairingCleanupJournal =
+        createAndroidPairingCleanupJournal(applicationContext)
     private val startupReconciler: AndroidPairingStartupReconciler =
         AndroidPairingStartupReconciler(
             readJournal = pairingCleanupJournal::read,

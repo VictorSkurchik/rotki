@@ -37,6 +37,8 @@ val ktlintEngineVersion =
 
 data class ModuleBoundaryRule(
     val allowedProjectDependencies: Set<String>,
+    val allowedExternalModules: Set<Pair<String, String>> = emptySet(),
+    val allowedTestExternalModules: Set<Pair<String, String>> = emptySet(),
     val forbiddenGroupPrefixes: Set<String> = emptySet(),
     val forbiddenModules: Set<Pair<String, String>> = emptySet(),
     val forbiddenPluginIds: Set<String> = emptySet(),
@@ -92,11 +94,28 @@ val featureModuleBoundaryRules =
             ),
         ":android:platform" to
             ModuleBoundaryRule(
-                allowedProjectDependencies = setOf(":core:common"),
+                allowedProjectDependencies =
+                    setOf(
+                        ":core:common",
+                        ":core:protocol",
+                        ":core:security-api",
+                    ),
+                allowedExternalModules =
+                    setOf(
+                        "org.jetbrains.kotlinx" to "kotlinx-coroutines-core",
+                    ),
+                allowedTestExternalModules =
+                    setOf(
+                        "androidx.test" to "core",
+                        "androidx.test" to "runner",
+                        "androidx.test.ext" to "junit",
+                        "junit" to "junit",
+                    ),
                 forbiddenGroupPrefixes =
                     featureInfrastructureGroupPrefixes +
                         setOf(
                             "com.google.mlkit",
+                            "junit",
                             "org.jetbrains.kotlinx",
                         ),
                 forbiddenModules =
@@ -279,6 +298,9 @@ subprojects {
         val isSourceSetDependencyBucket =
             isCanBeDeclared &&
                 sourceSetDependencyBucketSuffixes.any(dependencyConfigurationName::endsWith)
+        val isTestDependencyBucket =
+            isSourceSetDependencyBucket &&
+                dependencyConfigurationName.contains("test", ignoreCase = true)
         dependencies.configureEach {
             val dependency = this
             if (dependency is ProjectDependency && dependency.path != sourceProjectPath) {
@@ -295,13 +317,23 @@ subprojects {
             }
 
             dependency.group?.let { dependencyGroup ->
+                val dependencyCoordinates = dependencyGroup to dependency.name
+                val allowedByNarrowException =
+                    dependencyCoordinates in boundaryRule.allowedExternalModules ||
+                        (
+                            isTestDependencyBucket &&
+                                dependencyCoordinates in boundaryRule.allowedTestExternalModules
+                        )
                 val forbiddenByGroup =
                     boundaryRule.forbiddenGroupPrefixes.any(dependencyGroup::startsWith)
                 val forbiddenByModule =
                     boundaryRule.forbiddenModules.any { (group, modulePrefix) ->
                         dependencyGroup == group && dependency.name.startsWith(modulePrefix)
                     }
-                require(!forbiddenByGroup && !forbiddenByModule) {
+                require(
+                    allowedByNarrowException ||
+                        (!forbiddenByGroup && !forbiddenByModule),
+                ) {
                     "$sourceProjectPath may not depend on $dependencyGroup:${dependency.name}"
                 }
             }

@@ -113,6 +113,132 @@ jobs:
         working-directory: mobile
         run: ./gradlew --no-daemon mobileCheck
 
+      - name: Verify Android platform AAR boundary
+        working-directory: mobile
+        run: |
+          aar='android/platform/build/outputs/aar/platform-debug.aar'
+          classes_jar="$RUNNER_TEMP/android-platform-classes.jar"
+          manifest="$RUNNER_TEMP/android-platform-AndroidManifest.xml"
+          public_api="$RUNNER_TEMP/android-platform-public-api.txt"
+          lifecycle_api="$RUNNER_TEMP/android-companion-lifecycle-api.txt"
+          lifecycle_holder_api="$RUNNER_TEMP/android-companion-lifecycle-holder-api.txt"
+          record_holder_api="$RUNNER_TEMP/android-pairing-record-store-api.txt"
+          cleanup_holder_api="$RUNNER_TEMP/android-pairing-cleanup-journal-api.txt"
+          r_txt="$RUNNER_TEMP/android-platform-R.txt"
+          test -f "$aar"
+
+          actual_entries="$(unzip -Z1 "$aar" | LC_ALL=C sort)"
+          expected_entries="$(
+            printf '%s\n' \
+              'AndroidManifest.xml' \
+              'META-INF/com/android/build/gradle/aar-metadata.properties' \
+              'R.txt' \
+              'classes.jar' \
+              | LC_ALL=C sort
+          )"
+          if [[ "$actual_entries" != "$expected_entries" ]]; then
+            echo '::error::Unexpected files or resources leaked into the Android platform AAR'
+            diff <(printf '%s\n' "$expected_entries") <(printf '%s\n' "$actual_entries") || true
+            exit 1
+          fi
+
+          unzip -p "$aar" R.txt > "$r_txt"
+          if [[ -s "$r_txt" ]]; then
+            echo '::error::Android platform resources leaked into R.txt'
+            cat "$r_txt"
+            exit 1
+          fi
+
+          unzip -p "$aar" AndroidManifest.xml > "$manifest"
+          python3 - "$manifest" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          manifest = ET.parse(sys.argv[1]).getroot()
+          android = "{http://schemas.android.com/apk/res/android}"
+          expected_uses_sdk = {f"{android}minSdkVersion": "28"}
+          children = list(manifest)
+          if (
+              manifest.tag != "manifest"
+              or manifest.attrib != {"package": "org.rotki.mobile.android.platform"}
+              or len(children) != 1
+              or children[0].tag != "uses-sdk"
+              or children[0].attrib != expected_uses_sdk
+              or list(children[0])
+          ):
+              raise SystemExit(
+                  "Android platform components, permissions, features, or attributes "
+                  "leaked into the AAR manifest"
+              )
+          PY
+
+          unzip -p "$aar" classes.jar > "$classes_jar"
+          while IFS= read -r class_entry; do
+            class_name="${class_entry%.class}"
+            class_name="${class_name//\//.}"
+            javap -classpath "$classes_jar" -public "$class_name"
+          done < <(jar tf "$classes_jar" | grep -E '\.class$' | LC_ALL=C sort) > "$public_api"
+
+          actual_public_types="$(
+            grep -E '^public (.* )?(class|interface|enum) ' "$public_api" \
+              | sed 's/ {$//' \
+              | LC_ALL=C sort -u
+          )"
+          expected_public_types="$(
+            printf '%s\n' \
+              'public final class org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycleKt' \
+              'public final class org.rotki.mobile.android.storage.AndroidPairingCleanupJournalKt' \
+              'public final class org.rotki.mobile.android.storage.AndroidPairingRecordStoreKt' \
+              'public interface org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle' \
+              | LC_ALL=C sort
+          )"
+          if [[ "$actual_public_types" != "$expected_public_types" ]]; then
+            echo '::error::Android platform public JVM type boundary changed'
+            diff \
+              <(printf '%s\n' "$expected_public_types") \
+              <(printf '%s\n' "$actual_public_types") \
+              || true
+            exit 1
+          fi
+
+          resume_method='public abstract void onResume();'
+          pause_method='public abstract void onPause();'
+          background_method='public abstract void onBackgroundOrSystemLock();'
+          lifecycle_factory='public static final org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle createAndroidCompanionLifecycle(org.rotki.mobile.core.ports.ApplicationVisibilityController, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>);'
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle \
+            > "$lifecycle_api"
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycleKt \
+            > "$lifecycle_holder_api"
+          if [[ "$(grep -Ec '^  public ' "$lifecycle_api")" -ne 3 ]] || \
+             [[ "$(grep -Fc "$resume_method" "$lifecycle_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$pause_method" "$lifecycle_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$background_method" "$lifecycle_api")" -ne 1 ]] || \
+             [[ "$(grep -Ec '^  public ' "$lifecycle_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$lifecycle_factory" "$lifecycle_holder_api")" -ne 1 ]]; then
+            echo '::error::Android platform lifecycle API changed'
+            cat "$lifecycle_api" "$lifecycle_holder_api"
+            exit 1
+          fi
+
+          record_factory='public static final org.rotki.mobile.core.ports.PairingRecordStore createAndroidPairingRecordStore(android.content.Context);'
+          cleanup_factory='public static final org.rotki.mobile.core.ports.PairingCleanupJournal createAndroidPairingCleanupJournal(android.content.Context);'
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.storage.AndroidPairingRecordStoreKt \
+            > "$record_holder_api"
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.storage.AndroidPairingCleanupJournalKt \
+            > "$cleanup_holder_api"
+          if [[ "$(grep -Ec '^  public ' "$record_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$record_factory" "$record_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Ec '^  public ' "$cleanup_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$cleanup_factory" "$cleanup_holder_api")" -ne 1 ]]; then
+            echo '::error::Android platform storage factory API changed'
+            cat "$record_holder_api" "$cleanup_holder_api"
+            exit 1
+          fi
+
   android-security:
     name: 'Android security (${{ matrix.label }})'
     runs-on: ubuntu-24.04
@@ -125,10 +251,12 @@ jobs:
         include:
           - label: 'API 28 floor'
             task: pixel2Api28DevDebugAndroidTest
+            platform_task: pixel2Api28DebugAndroidTest
             system-image: 'system-images;android-28;google_apis;x86_64'
             artifact: api28
           - label: 'API 36 stable'
             task: pixel8Api36DevDebugAndroidTest
+            platform_task: pixel8Api36DebugAndroidTest
             system-image: 'system-images;android-36;google_apis;x86_64'
             artifact: api36
     steps:
@@ -164,14 +292,17 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Android security instrumentation
+      - name: Run Android security and platform storage instrumentation
         working-directory: mobile
         run: |
           ./gradlew --no-daemon \
             ':androidApp:${{ matrix.task }}' \
             -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+          ./gradlew --no-daemon \
+            ':android:platform:${{ matrix.platform_task }}' \
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
 
-      - name: Upload Android security results
+      - name: Upload Android security and platform results
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
@@ -179,6 +310,8 @@ jobs:
           path: |
             mobile/androidApp/build/reports/androidTests/managedDevice/**
             mobile/androidApp/build/outputs/androidTest-results/managedDevice/**
+            mobile/android/platform/build/reports/androidTests/managedDevice/**
+            mobile/android/platform/build/outputs/androidTest-results/managedDevice/**
           if-no-files-found: warn
           retention-days: 14
 
@@ -234,6 +367,7 @@ jobs:
           forbidden_pattern+='|org_koin|io_insert_koin|Koin(Component|Application|Module|Scope|ViewModel)?|startKoin|koinViewModel|RotkiCompanionApplication|AndroidSecurityComposition|androidAppModule|viewModelOf|singleOf'
           forbidden_pattern+='|androidx_navigation|org_rotki_mobile_android_navigation|AndroidNavigation|Nav(Host(Controller)?|Controller|BackStackEntry)|OverviewRoute|PortfolioRoute|HistoryRoute|SourcesRoute|HomeDestination|HomeNavHost|CompanionHome|HomeConnectionBanner(State)?'
           forbidden_pattern+='|org_rotki_mobile_android_platform|AndroidPlatform|AndroidCompanionLifecycle|createAndroidCompanionLifecycle|DefaultAndroidCompanionLifecycle|CompanionLifecycleController'
+          forbidden_pattern+='|org_rotki_mobile_android_storage|AndroidPairing(RecordStore|CleanupJournal|Storage)|createAndroidPairing(RecordStore|CleanupJournal)|PairingRecord(Codec|DecodeOutcome)|pairing-record\.bin|pairing-cleanup\.marker|rotki-pairing-cleanup-v1'
           forbidden_pattern+='|swift_name\("DeviceSession"\)|swift_name\("DeviceLabel"\)'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
             echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform internals leaked into the Swift framework header'

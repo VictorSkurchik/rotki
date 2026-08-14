@@ -47,21 +47,21 @@ The production build currently contains:
   only the stable public surfaces of `core:common`, `core:model`, `core:protocol`, and
   `core:security-api` through the single framework. Protocol credentials, data/network seams, codec
   mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
-- `android:platform`: the first Android platform leaf. It exposes only the process lifecycle
-  callback bridge and factory over `core:common`'s `ApplicationVisibilityController`; the app
-  supplies lock, authentication-cancellation, and plaintext-discard callbacks. It owns no
-  Activity/Application, receiver, Koin, UI, security, permission, or storage implementation and is
-  not exported to Swift. Durable Pairing storage is the next planned platform slice;
+- `android:platform`: the Android lifecycle and durable Pairing-storage leaf. Its public factories
+  expose only the lifecycle boundary plus `core:security-api` record/journal ports. Private atomic
+  adapters preserve the backup-excluded filenames, strict binary format, fail-closed journal, and
+  process-wide serialization across factory instances. It owns no Activity/Application, receiver,
+  Koin, UI, cryptographic key, or permission implementation and is not exported to Swift;
 - `android:navigation`: an Android-only leaf with no project dependencies. It owns the typed,
   argument-free Overview, Portfolio, History, and Sources destinations plus their authenticated
   `NavHost` and interim placeholder shell. The app maps authoritative root status to its narrow
   `HomeConnectionBannerState` input before entering the host;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, an Android-only Koin process composition root, CameraX/ML Kit
-  scanning, Android Keystore-backed Device Keys, atomic Pairing records, and Android 17
-  local-network permission recovery. It owns the fail-closed privacy and root-state guard outside
-  `NavHost`, creates the navigation leaf only after authenticated authority is present, and owns the
-  process callbacks delegated to the platform lifecycle bridge. Room and the complete Atomic
+  scanning, Android Keystore-backed Device Keys, and Android 17 local-network permission recovery.
+  It retains one platform storage pair, owns the fail-closed privacy and root-state guard outside
+  `NavHost`, creates the navigation leaf only after authenticated authority is present, and supplies
+  the process callbacks delegated to the platform lifecycle bridge. Room and the complete Atomic
   Design-based Rotki design system remain deliberately deferred;
 - `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
   unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,

@@ -15,16 +15,23 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 
-/** Atomic, backup-excluded, secret-free journal for unfinished Pairing cleanup. */
-internal class AndroidPairingCleanupJournal private constructor(
-    private val file: AtomicFile,
-) : PairingCleanupJournal {
-    private val operationMutex: Mutex = Mutex()
-
-    constructor(context: Context) : this(
-        AtomicFile(File(context.noBackupFilesDir, FILE_NAME)),
+/**
+ * Creates a backup-excluded, atomic cleanup journal for this application process.
+ *
+ * The adapter resolves its file eagerly and does not retain [context]. All instances coordinate
+ * through one process-wide lock because they address the same canonical file.
+ */
+public fun createAndroidPairingCleanupJournal(context: Context): PairingCleanupJournal =
+    DefaultAndroidPairingCleanupJournal(
+        AtomicFile(File(context.noBackupFilesDir, PAIRING_CLEANUP_FILE_NAME)),
     )
 
+private const val PAIRING_CLEANUP_FILE_NAME: String = "pairing-cleanup.marker"
+
+/** Atomic, backup-excluded, secret-free journal for unfinished Pairing cleanup. */
+private class DefaultAndroidPairingCleanupJournal(
+    private val file: AtomicFile,
+) : PairingCleanupJournal {
     override suspend fun read(): PairingCleanupJournalReadOutcome =
         operationMutex.withLock {
             withContext(Dispatchers.IO) { readUnlocked() }
@@ -108,11 +115,9 @@ internal class AndroidPairingCleanupJournal private constructor(
             output.toByteArray()
         }
 
-    internal fun baseFileForTest(): File = file.baseFile
-
     private companion object {
-        const val FILE_NAME: String = "pairing-cleanup.marker"
         const val MAX_MARKER_BYTES: Int = 128
         val MARKER: ByteArray = "rotki-pairing-cleanup-v1\n".encodeToByteArray()
+        val operationMutex: Mutex = Mutex()
     }
 }
