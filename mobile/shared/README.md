@@ -5,10 +5,12 @@ for the Portfolio Companion. ADR-0090 supersedes the single-module target: share
 migrating incrementally into Clean Architecture core and feature modules while Android and iOS keep
 native UI and platform-security adapters.
 
-The first extracted leaf is `:core:model`, which owns `ExactDecimal`, its private numeric backend,
-characterization tests, vectors, and generator. `:shared` has an API dependency on that module and
-exports it through `RotkiShared`; it does not produce a second framework. New stable leaves should
-follow the same incremental pattern, while behavior that has not yet moved remains here.
+The extracted core leaves are `:core:model`, which owns `ExactDecimal`, its private numeric backend,
+characterization tests, vectors, and generator, and `:core:common`, which owns `Clock`, application
+visibility/controller contracts, and the pure lifecycle policy. `:shared` has API dependencies on
+both modules and exports them through `RotkiShared`; neither leaf produces a second framework. The
+common leaf owns its autonomous contract matrix, while the authored lifecycle-fixture parity test
+remains here beside the generated protocol assets and JSON decoder.
 
 Pairing now has implementation-only `:feature:pairing:domain` and
 `:feature:pairing:presentation` boundaries. The public `PairingFlow` stays here as the stable
@@ -21,8 +23,8 @@ replacement attempt from being silently deleted. The feature modules retain no Q
 credential and are not exported as additional Apple APIs.
 
 Strict QR decoding, registration transport, and the facade-backed in-memory implementation remain
-in this umbrella for now. The next extraction establishes coherent core common, protocol, network,
-and security leaves first. Only then can a real `:feature:pairing:data` implementation depend on
+in this umbrella for now. With core common established, the next extractions are coherent protocol,
+network, and security leaves. Only then can a real `:feature:pairing:data` implementation depend on
 those leaves without introducing `shared <-> data` cycles; no data module is declared yet.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,

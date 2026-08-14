@@ -65,6 +65,17 @@ val featureModuleBoundaryRules =
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
                 forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
             ),
+        ":core:common" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
+                forbiddenModules =
+                    setOf(
+                        "org.jetbrains.kotlinx" to "kotlinx-serialization",
+                    ),
+                forbiddenPluginIds =
+                    forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
+            ),
         ":feature:pairing:domain" to
             ModuleBoundaryRule(
                 allowedProjectDependencies = emptySet(),
@@ -82,6 +93,7 @@ val featureModuleBoundaryRules =
                 allowedProjectDependencies =
                     setOf(
                         ":core:model",
+                        ":core:common",
                         ":feature:pairing:domain",
                         ":feature:pairing:presentation",
                     ),

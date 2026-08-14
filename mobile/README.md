@@ -9,6 +9,9 @@ migrated incrementally to that target rather than through a build-breaking rewri
 
 The production build currently contains:
 
+- `core:common`: platform-neutral `Clock`, application-visibility/controller contracts, and the
+  exhaustive lifecycle policy. It exposes only the coroutines `StateFlow` API required by that
+  contract and has no protocol, transport, persistence, UI, or platform implementation;
 - `core:model`: the first extracted KMP leaf module. It owns the project-defined
   `ExactDecimal` value type, its private BigNum backend, common characterization tests,
   generated vectors, and no UI or platform implementation;
@@ -21,7 +24,8 @@ The production build currently contains:
   lifecycle-aware Device Key registration, and durable cleanup recovery. Its existing `PairingFlow`
   and `PairingConnection` remain ABI-compatible adapters over the extracted feature ports and no
   longer depend directly on `CompanionFacade`; one facade-scoped internal adapter supplies both.
-  `shared` re-exports `core:model` instead of creating a second Apple framework;
+  `shared` re-exports `core:common` and `core:model` instead of creating additional Apple
+  frameworks;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;

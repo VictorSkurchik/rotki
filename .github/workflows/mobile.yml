@@ -92,6 +92,7 @@ jobs:
         working-directory: mobile
         run: |
           ./gradlew --no-daemon \
+            :core:common:dependencies \
             :core:model:dependencies \
             :feature:pairing:domain:dependencies \
             :feature:pairing:presentation:dependencies \

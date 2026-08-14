@@ -482,9 +482,12 @@ Implementation status (2026-08-14): the central ktlint/detekt convention, `quali
 `qualityFormat`, `mobileCheck` dependency, and hosted CI gate are implemented. A reusable KMP library
 convention now owns the common JVM, Android host, and Apple target policy. `:core:model` is the first
 extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
-vectors, and generator. `:shared` consumes it as an API dependency and exports it through the single
-`RotkiShared` Apple framework. The host and Apple aggregate gates discover the new module rather than
-requiring a second framework or hand-maintained test list. The root `checkModuleGraph` gate rejects
+vectors, and generator. `:core:common` now owns `Clock`, the application-visibility/controller
+contracts, and the exhaustive lifecycle policy. Its autonomous contract tests moved with it, while
+the authored lifecycle-fixture parity test remains in `:shared` beside the generated protocol assets.
+`:shared` consumes both leaves as API dependencies and exports them through the single `RotkiShared`
+Apple framework. The host and Apple aggregate gates discover the modules rather than requiring
+additional frameworks or hand-maintained test lists. The root `checkModuleGraph` gate rejects
 unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
 the extracted Clean Architecture boundaries.
 
@@ -501,8 +504,8 @@ QR material or creates an Apple framework.
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
 vertical remains the reference slice. Strict QR decoding, registration transport, protocol DTOs,
 Ktor boundaries, and platform security contracts are still physically coupled inside `:shared`.
-Next extract coherent core common, protocol, network, and security leaves; only after those edges are
-available should the decoder and registration implementation move into a real
+With core common extracted, next move coherent protocol, network, and security leaves; only after
+those edges are available should the decoder and registration implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed
 Navigation Compose.

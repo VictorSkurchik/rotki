@@ -37,11 +37,13 @@ kotlin {
             binaryOption("bundleId", "com.rotki.companion.shared")
             isStatic = true
             export(project(":core:model"))
+            export(project(":core:common"))
         }
     }
 
     sourceSets {
         commonMain.dependencies {
+            api(project(":core:common"))
             api(project(":core:model"))
             api(libs.kotlinx.coroutines.core)
             implementation(libs.ionspin.bignum)
