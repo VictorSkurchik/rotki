@@ -19,6 +19,7 @@ rootProject.name = "rotki-mobile"
 
 include(":androidApp")
 include(":android:navigation")
+include(":android:platform")
 include(":core:common")
 include(":core:model")
 include(":core:network")

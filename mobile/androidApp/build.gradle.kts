@@ -84,6 +84,7 @@ android {
 
 dependencies {
     implementation(project(":android:navigation"))
+    implementation(project(":android:platform"))
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.biometric)

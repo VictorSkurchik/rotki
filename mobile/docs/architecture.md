@@ -76,12 +76,12 @@ rules without carrying private configuration.
 
 The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
 `:core:security-api`, test-only `:core:testing`, `:feature:pairing:domain`,
-`:feature:pairing:data`, `:feature:pairing:presentation`, `:android:navigation`, `:shared`, and
-`:androidApp` modules are the first migration state, not the final boundary. Create target modules
-only when moving or adding real production code. `:core:common` owns `Clock`, application
-visibility/controller contracts, and the lifecycle policy; `:core:model` owns `ExactDecimal` plus
-its characterization assets; and the completed `:core:security-api` boundary owns the Pairing
-cleanup journal, Device-proof signer,
+`:feature:pairing:data`, `:feature:pairing:presentation`, `:android:navigation`,
+`:android:platform`, `:shared`, and `:androidApp` modules are the first migration state, not the final
+boundary. Create target modules only when moving or adding real production code. `:core:common` owns
+`Clock`, application visibility/controller contracts, and the lifecycle policy. `:core:model` owns
+`ExactDecimal` plus its characterization assets; and the completed `:core:security-api` boundary
+owns the Pairing cleanup journal, Device-proof signer,
 idempotency-key generator, Pairing-record persistence, and revocable Snapshot secure-store contracts.
 Its sole project edge is to the value types in `:core:protocol`. The physical `:core:protocol` leaf
 owns the strict Companion JSON codec, duplicate-member/syntax scanner, strict scalar
@@ -118,12 +118,21 @@ without defining a new host grammar.
 The Android application starts Koin exactly once and retains the security/session graph for the
 process. Its biometric broker binds the current Activity explicitly and releases it in `onDestroy`
 instead of constructor-capturing an Activity for the process lifetime. The physical
-`:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four typed,
-argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative shared
-status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,
+`:android:platform` module contains the first narrow lifecycle slice: a public callback boundary and
+factory over `:core:common`'s `ApplicationVisibilityController`. The application still owns the
+process composition, Activity/Application hooks, screen-off receiver, `FLAG_SECURE`, authoritative
+state, security, permission, and storage implementations and supplies process-safe lock,
+authentication-cancellation, and plaintext-discard callbacks to that bridge. The platform module
+does not depend on `:shared` or `:core:security-api` and is not exported to Swift. Durable Pairing
+storage is the next planned platform extraction; concrete storage and codec types remain private.
+
+The physical `:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four
+typed, argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative
+shared status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,
 lock, recovery, incompatible, and revoked selection remains a fail-closed state guard in
-`:androidApp` outside `NavHost`, so a saved back stack cannot bypass it. Android platform/feature
-modules, the Room KMP owner, and the complete design system have not been created yet.
+`:androidApp` outside `NavHost`, so a saved back stack cannot bypass it. Android platform adapters
+beyond this lifecycle slice, Android feature modules, the Room KMP owner, and the complete design
+system have not been created yet.
 
 ```text
 mobile/
@@ -143,7 +152,7 @@ mobile/
 ├── android/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
 │   ├── navigation/          # typed Navigation Compose contracts and root graphs
-│   ├── platform/            # Android security, lifecycle, permission adapters
+│   ├── platform/            # lifecycle bridge first; security/storage/permission slices follow
 │   └── feature/<feature>/   # ViewModel, Route, Screen, feature-local UI and Koin module
 ├── shared/                  # thin Apple-framework aggregation and Swift-safe facade
 ├── androidApp/              # Android application and top-level composition root
@@ -155,6 +164,8 @@ Expected dependency direction:
 ```mermaid
 flowchart LR
     AndroidApp["androidApp composition root"] --> AndroidNavigation["android navigation leaf"]
+    AndroidApp --> AndroidPlatform["android lifecycle platform leaf"]
+    AndroidPlatform --> Common["core common"]
     AndroidApp["androidApp composition root"] --> AndroidFeature["Android feature UI"]
     AndroidFeature --> Presentation["feature presentation"]
     Presentation --> Domain["feature domain"]
@@ -184,6 +195,9 @@ Rules:
   code is not.
 - `android:navigation` is a project-dependency-free Android leaf. It accepts only UI-safe root input
   selected by the application and never imports shared/KMP state, Koin, data, or platform adapters.
+- `android:platform` currently exposes only the lifecycle callback bridge and depends solely on
+  `:core:common`. It does not own Koin, an Activity/Application, receivers, UI/navigation,
+  biometric/security/storage/permission implementations, or authoritative Pairing state.
 - Cross-feature dependencies use the other feature's public domain/API contract. Importing another
   feature's data, DI, ViewModel, or internal UI package is forbidden.
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
@@ -239,9 +253,10 @@ network, database, cryptographic, or repository work.
 - Koin definitions are verified in tests. Tests replace ports with explicit fakes rather than
   mutating a global container from individual test bodies.
 - iOS uses its native/manual composition boundary. Koin must not become a cross-platform API.
-- The current bootstrap implementation keeps its focused platform and Pairing definitions in
-  `:androidApp`; physical `android/platform` and `android/feature/*` extraction follows only with a
-  real slice and must not change the process, Activity, or ViewModel lifetimes above.
+- The first physical `android/platform` slice owns only the lifecycle callback bridge. Focused
+  security, storage, permission, and Pairing definitions remain in `:androidApp`; later platform and
+  `android/feature/*` extraction follows only with a real slice and must not change the process,
+  Activity, or ViewModel lifetimes above.
 
 ## Android MVI and unidirectional data flow
 
@@ -418,9 +433,11 @@ Do not perform a big-bang package move. Use this order:
    facade-scoped port adapter, including the recovered cleanup barrier; data has no dependency on
    `:shared`. Keep the facade-owned connection transaction in the stable shared wrapper until its
    opaque attempt and cleanup capabilities can move without reversing the dependency graph.
-3. Introduce Android Koin modules and replace the manual composition root slice by slice. The first
-   process-scoped platform/Pairing composition is implemented inside `:androidApp`; physical Android
-   feature/platform modules remain incremental follow-up work.
+3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
+   process-scoped platform/Pairing composition remains in `:androidApp`; the first physical
+   `:android:platform` slice owns only the lifecycle callback bridge over `:core:common`. Durable
+   Pairing storage is the next platform slice, while security, permission, and Android feature
+   extraction remain incremental follow-up work.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. The four authenticated placeholder destinations and their
    host are now typed, navigation-backed, and physically owned by the project-dependency-free

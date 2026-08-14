@@ -9,8 +9,8 @@ import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.rotki.mobile.CompanionFacade
-import org.rotki.mobile.android.lifecycle.AndroidApplicationVisibility
-import org.rotki.mobile.android.lifecycle.CompanionLifecycleController
+import org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle
+import org.rotki.mobile.android.lifecycle.createAndroidCompanionLifecycle
 import org.rotki.mobile.android.pairing.AndroidDeviceLabelProvider
 import org.rotki.mobile.android.pairing.AndroidEpochClock
 import org.rotki.mobile.android.pairing.AndroidPairingStartupReconciler
@@ -34,13 +34,14 @@ import org.rotki.mobile.auth.PairingConnection
 import org.rotki.mobile.auth.PairingConnectionConfiguration
 import org.rotki.mobile.auth.PairingConnectionOutcome
 import org.rotki.mobile.auth.PairingDevicePlatform
+import org.rotki.mobile.core.ports.ApplicationVisibilityController
 import javax.crypto.Cipher
 
 /** One retained security graph for the lifetime of the Android application process. */
 internal class AndroidSecurityComposition(
     private val applicationContext: Context,
 ) {
-    val visibility: AndroidApplicationVisibility = AndroidApplicationVisibility()
+    val visibility: ApplicationVisibilityController = ApplicationVisibilityController()
     val pairingRecordStore: AndroidPairingRecordStore =
         AndroidPairingRecordStore(applicationContext)
     val deviceProofSigner: AndroidDeviceProofSigner = AndroidDeviceProofSigner()
@@ -111,12 +112,12 @@ internal class AndroidSecurityComposition(
             materialCleaner = materialCleaner,
             file = snapshotFile,
         )
-    val lifecycleController: CompanionLifecycleController =
-        CompanionLifecycleController(
+    val lifecycleController: AndroidCompanionLifecycle =
+        createAndroidCompanionLifecycle(
             visibility = visibility,
-            snapshotStore = snapshotStore,
             lockCompanion = { facade.lock() },
             cancelPendingAuthentication = biometricBroker::cancelPending,
+            discardSnapshotPlaintext = snapshotStore::discardPlaintext,
             discardAdditionalPlaintext = { },
         )
 

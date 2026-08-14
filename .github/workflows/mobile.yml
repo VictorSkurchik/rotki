@@ -233,9 +233,10 @@ jobs:
           forbidden_pattern+='|RegisterDeviceSessionRequestDto|DeviceSession(Result|Envelope)?Dto|DeviceLabelParseOutcome|AuthContractOutcome|encodeCompanionJson|matchesRegistration|isValidDeviceLabel|parse(DeviceLabel|PairingDeviceLabel)'
           forbidden_pattern+='|org_koin|io_insert_koin|Koin(Component|Application|Module|Scope|ViewModel)?|startKoin|koinViewModel|RotkiCompanionApplication|AndroidSecurityComposition|androidAppModule|viewModelOf|singleOf'
           forbidden_pattern+='|androidx_navigation|org_rotki_mobile_android_navigation|AndroidNavigation|Nav(Host(Controller)?|Controller|BackStackEntry)|OverviewRoute|PortfolioRoute|HistoryRoute|SourcesRoute|HomeDestination|HomeNavHost|CompanionHome|HomeConnectionBanner(State)?'
+          forbidden_pattern+='|org_rotki_mobile_android_platform|AndroidPlatform|AndroidCompanionLifecycle|createAndroidCompanionLifecycle|DefaultAndroidCompanionLifecycle|CompanionLifecycleController'
           forbidden_pattern+='|swift_name\("DeviceSession"\)|swift_name\("DeviceLabel"\)'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
-            echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation internals leaked into the Swift framework header'
+            echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform internals leaked into the Swift framework header'
             exit 1
           fi
           required_swift_names=(

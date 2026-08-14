@@ -68,7 +68,7 @@ val featureModuleBoundaryRules =
     mapOf(
         ":androidApp" to
             ModuleBoundaryRule(
-                allowedProjectDependencies = setOf(":android:navigation", ":shared"),
+                allowedProjectDependencies = setOf(":android:navigation", ":android:platform", ":shared"),
             ),
         ":android:navigation" to
             ModuleBoundaryRule(
@@ -88,6 +88,30 @@ val featureModuleBoundaryRules =
                         "com.android.kotlin.multiplatform.library",
                         "org.jetbrains.compose",
                         "org.jetbrains.kotlin.multiplatform",
+                    ),
+            ),
+        ":android:platform" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":core:common"),
+                forbiddenGroupPrefixes =
+                    featureInfrastructureGroupPrefixes +
+                        setOf(
+                            "com.google.mlkit",
+                            "org.jetbrains.kotlinx",
+                        ),
+                forbiddenModules =
+                    setOf(
+                        "org.jetbrains.kotlinx" to "kotlinx-serialization",
+                    ),
+                forbiddenPluginIds =
+                    setOf(
+                        "com.android.application",
+                        "com.android.kotlin.multiplatform.library",
+                        "org.jetbrains.compose",
+                        "org.jetbrains.kotlin.android",
+                        "org.jetbrains.kotlin.multiplatform",
+                        "org.jetbrains.kotlin.plugin.compose",
+                        "org.jetbrains.kotlin.plugin.serialization",
                     ),
             ),
         ":core:model" to
@@ -332,6 +356,9 @@ tasks.register("mobileCheck") {
         ":android:navigation:assembleDebug",
         ":android:navigation:lintDebug",
         ":android:navigation:test",
+        ":android:platform:assembleDebug",
+        ":android:platform:lintDebug",
+        ":android:platform:test",
         ":androidApp:test",
         ":androidApp:assembleDebug",
         ":androidApp:lintDevDebug",

@@ -531,12 +531,21 @@ creates an Apple framework.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
-`:android:navigation` leaf now owns the authenticated placeholder host and its typed, argument-free
-Overview, Portfolio, History, and Sources destinations instead of a saved integer tab index. It has
-no project dependencies; `:androidApp` maps authoritative shared status to its narrow
+`:android:platform` module now owns the first narrow lifecycle slice: the
+`AndroidCompanionLifecycle` callback boundary and factory over `:core:common`'s
+`ApplicationVisibilityController`. `:androidApp` still owns process composition,
+Activity/Application hooks, the screen-off receiver, `FLAG_SECURE`, authoritative state, biometric
+and cryptographic policy, permissions, and storage; it supplies only process-safe callbacks to the
+platform bridge. The platform leaf has no `:shared` or security-contract dependency and creates no
+Apple framework. Durable Pairing storage is the next planned platform extraction, with concrete
+file and codec types remaining private.
+
+The physical `:android:navigation` leaf now owns the authenticated placeholder host and its typed,
+argument-free Overview, Portfolio, History, and Sources destinations instead of a saved integer tab
+index. It has no project dependencies; `:androidApp` maps authoritative shared status to its narrow
 `HomeConnectionBannerState` input. Privacy and the fail-closed root-state decision remain in the app
 outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be bypassed
-through a retained back stack. The target physical `android/platform` and Android feature modules
+through a retained back stack. Remaining Android platform adapters and Android feature modules
 remain incremental follow-up work.
 
 The existing Auth/Pairing vertical remains the reference slice. The real
