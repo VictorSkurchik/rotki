@@ -67,9 +67,9 @@ jobs:
             'platforms;android-37.0' \
             'build-tools;36.0.0'
 
-      - name: Verify generated shared contracts
+      - name: Verify generated mobile contracts
         run: |
-          python mobile/shared/tools/generate_exact_decimal_vectors.py
+          python mobile/core/model/tools/generate_exact_decimal_vectors.py
           python tools/scripts/generate_companion_protocol_vocabulary.py --check
           python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 
@@ -88,24 +88,22 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Verify shared has no UI dependencies
-        working-directory: mobile
-        run: |
-          ./gradlew --no-daemon :shared:dependencies > "$RUNNER_TEMP/shared-dependencies.txt"
-          if grep -E 'androidx\.compose|org\.jetbrains\.compose' "$RUNNER_TEMP/shared-dependencies.txt"; then
-            echo '::error::UI dependencies are forbidden in the shared module'
-            exit 1
-          fi
-
-      - name: Run shared and Android gates
+      - name: Verify non-UI KMP modules have no UI dependencies
         working-directory: mobile
         run: |
           ./gradlew --no-daemon \
-            :shared:jvmTest \
-            :shared:testAndroidHostTest \
-            :androidApp:test \
-            :androidApp:lintDevDebug \
-            :androidApp:assembleDebug
+            :core:model:dependencies \
+            :shared:dependencies \
+            > "$RUNNER_TEMP/non-ui-kmp-dependencies.txt"
+          if grep -E 'androidx\.compose|org\.jetbrains\.compose' \
+            "$RUNNER_TEMP/non-ui-kmp-dependencies.txt"; then
+            echo '::error::UI dependencies are forbidden in core:model and shared'
+            exit 1
+          fi
+
+      - name: Run KMP and Android gates
+        working-directory: mobile
+        run: ./gradlew --no-daemon mobileCheck
 
   android-security:
     name: 'Android security (${{ matrix.label }})'
@@ -205,9 +203,15 @@ jobs:
 
       - name: Run iOS gates
         working-directory: mobile
+        run: ./gradlew --no-daemon appleCheck
+
+      - name: Run iOS host tests
+        working-directory: mobile
         run: |
-          ./gradlew --no-daemon \
-            :shared:iosSimulatorArm64Test \
-            :shared:linkDebugTestIosArm64 \
-            :shared:linkDebugFrameworkIosArm64 \
-            :shared:linkDebugFrameworkIosSimulatorArm64
+          xcodebuild test \
+            -project iosApp/RotkiCompanion.xcodeproj \
+            -scheme RotkiCompanion \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath iosApp/build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO

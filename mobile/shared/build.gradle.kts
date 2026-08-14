@@ -36,13 +36,15 @@ kotlin {
             baseName = "RotkiShared"
             binaryOption("bundleId", "com.rotki.companion.shared")
             isStatic = true
+            export(project(":core:model"))
         }
     }
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.ionspin.bignum)
+            api(project(":core:model"))
             api(libs.kotlinx.coroutines.core)
+            implementation(libs.ionspin.bignum)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.core)

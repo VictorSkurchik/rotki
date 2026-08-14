@@ -1,6 +1,8 @@
 [versions]
 activity-compose = "1.13.0"
 agp = "9.1.0"
+android-compile-sdk = "37"
+android-min-sdk = "28"
 androidx-biometric = "1.1.0"
 androidx-camera = "1.6.1"
 androidx-fragment = "1.9.0"
@@ -14,6 +16,8 @@ coroutines = "1.11.0"
 detekt = "2.0.0-alpha.5"
 junit = "4.13.2"
 kotlin = "2.4.10"
+ios-deployment-target = "17.0"
+jvm-toolchain = "17"
 ktlint-engine = "1.8.0"
 ktlint-gradle = "14.2.0"
 ktor = "3.5.2"
@@ -21,6 +25,7 @@ mlkit-barcode-scanning = "17.3.0"
 serialization = "1.11.0"
 
 [libraries]
+android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "androidx-biometric" }
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "androidx-camera" }
@@ -41,8 +46,10 @@ androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "andro
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test" }
 ionspin-bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
 junit = { module = "junit:junit", version.ref = "junit" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "serialization" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }

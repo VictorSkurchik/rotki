@@ -72,8 +72,10 @@ rules without carrying private configuration.
 
 ## Target Gradle module graph
 
-The current `:shared` and `:androidApp` modules are the migration source, not the final boundary.
-Create target modules only when moving or adding real production code.
+The current `:core:model`, `:shared`, and `:androidApp` modules are the first migration state, not the
+final boundary. Create target modules only when moving or adding real production code. `:core:model`
+is the first extracted leaf and owns `ExactDecimal` plus its characterization assets; `:shared`
+depends on and exports it through the single `RotkiShared` Apple framework.
 
 ```text
 mobile/
@@ -329,7 +331,9 @@ Rules for the final system and its implementation:
 
 Do not perform a big-bang package move. Use this order:
 
-1. Add convention plugins and extract stable core model/network/security contracts.
+1. Add convention plugins and extract stable core model/network/security contracts. The reusable
+   KMP library convention and first `:core:model` leaf are in place; network and security contracts
+   remain in the umbrella until their own coherent slices move.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to

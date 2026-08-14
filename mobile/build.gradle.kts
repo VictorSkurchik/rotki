@@ -16,11 +16,14 @@ plugins {
 
 val exactGeneratedKotlinPathsByProject =
     mapOf(
+        ":core:model" to
+            setOf(
+                "**/GeneratedExactDecimalVectors.kt",
+            ),
         ":shared" to
             setOf(
                 "**/GeneratedProtocolVocabulary.kt",
                 "**/GeneratedProtocolFixtures.kt",
-                "**/GeneratedExactDecimalVectors.kt",
             ),
     )
 val ktlintEngineVersion =
@@ -93,6 +96,7 @@ val qualityCheck =
         description = "Runs non-mutating Kotlin formatting and static-analysis checks."
         dependsOn(allprojects.map { it.tasks.named("ktlintCheck") })
         dependsOn(allprojects.map { it.tasks.named("detekt") })
+        dependsOn(gradle.includedBuild("build-logic").task(":qualityCheck"))
         // Android exposes reliable typed aggregates. Detekt 2.0's KMP compilation tasks currently
         // report incomplete compiler resolution, so shared code uses generic detekt plus real
         // JVM, Android, and Apple compilation/link gates until that analyzer boundary is stable.
@@ -110,6 +114,7 @@ tasks.register("qualityFormat") {
     group = "formatting"
     description = "Formats handwritten Kotlin sources and Gradle Kotlin scripts with ktlint."
     dependsOn(allprojects.map { it.tasks.named("ktlintFormat") })
+    dependsOn(gradle.includedBuild("build-logic").task(":qualityFormat"))
 }
 
 tasks.register("mobileCheck") {
@@ -120,7 +125,30 @@ tasks.register("mobileCheck") {
         ":androidApp:test",
         ":androidApp:assembleDebug",
         ":androidApp:lintDevDebug",
-        ":shared:jvmTest",
-        ":shared:testAndroidHostTest",
+    )
+    dependsOn(
+        allprojects.map { project ->
+            project.tasks.matching { task ->
+                task.name == "jvmTest" ||
+                    task.name == "testAndroidHostTest"
+            }
+        },
+    )
+}
+
+tasks.register("appleCheck") {
+    group = "verification"
+    description = "Runs KMP iOS Simulator tests, device test links, and umbrella framework links."
+    dependsOn(
+        allprojects.map { project ->
+            project.tasks.matching { task ->
+                task.name == "iosSimulatorArm64Test" ||
+                    task.name == "linkDebugTestIosArm64"
+            }
+        },
+    )
+    dependsOn(
+        ":shared:linkDebugFrameworkIosArm64",
+        ":shared:linkDebugFrameworkIosSimulatorArm64",
     )
 }

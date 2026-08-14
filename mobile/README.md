@@ -9,9 +9,13 @@ migrated incrementally to that target rather than through a build-breaking rewri
 
 The production build currently contains:
 
-- `shared`: project-owned domain and behavior for Android, JVM test execution,
-  `iosArm64`, and `iosSimulatorArm64`, including strict Pairing QR parsing, Capability
-  discovery, lifecycle-aware Device Key registration, and durable cleanup recovery;
+- `core:model`: the first extracted KMP leaf module. It owns the project-defined
+  `ExactDecimal` value type, its private BigNum backend, common characterization tests,
+  generated vectors, and no UI or platform implementation;
+- `shared`: the single Swift-facing `RotkiShared` framework umbrella and the migration home for
+  behavior not yet extracted, including strict Pairing QR parsing, Capability discovery,
+  lifecycle-aware Device Key registration, and durable cleanup recovery. It re-exports
+  `core:model` instead of creating a second Apple framework;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;
@@ -19,7 +23,7 @@ The production build currently contains:
   unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
   persistence, and native iOS security remain deliberately disabled until their gates.
 
-Run the host-side Android and shared checks from this directory:
+Run the host-side KMP and Android checks from this directory:
 
 ```bash
 ./gradlew --no-daemon mobileCheck
@@ -38,7 +42,7 @@ quality, or apply the canonical formatter locally:
 Verify the checked-in cross-platform contract fixtures from the repository root:
 
 ```bash
-uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
+uv run python mobile/core/model/tools/generate_exact_decimal_vectors.py
 uv run python tools/scripts/generate_companion_protocol_vocabulary.py --check
 uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 ```
@@ -46,11 +50,11 @@ uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --chec
 On Apple Silicon macOS, add the Kotlin/Native gates:
 
 ```bash
-./gradlew --no-daemon :shared:iosSimulatorArm64Test \
-  :shared:linkDebugTestIosArm64 \
-  :shared:linkDebugFrameworkIosSimulatorArm64 \
-  :shared:linkDebugFrameworkIosArm64
+./gradlew --no-daemon appleCheck
 ```
+
+`appleCheck` runs the iOS Simulator tests and device-test links for every KMP module, then links
+the two `RotkiShared` umbrella frameworks consumed by the native iOS host.
 
 Build and test the SwiftUI host on an installed iOS Simulator:
 

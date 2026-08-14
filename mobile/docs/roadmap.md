@@ -60,8 +60,9 @@ multiplatform before feature expansion.
    origin and listener. Do not introduce a second WebSocket URL or port.
 4. Expected failures are stable wire codes mapped into typed shared outcomes. Display
    strings never become protocol or domain values.
-5. Exact financial values stay decimal strings on the wire and `ExactDecimal` in shared
-   code. `Float` or `Double` may appear only inside an explicit rendering projection.
+5. Exact financial values stay decimal strings on the wire and use `ExactDecimal` from
+   `:core:model` in shared KMP behavior. `Float` or `Double` may appear only inside an explicit
+   rendering projection.
 6. Each protocol change includes Engine tests, shared serialization tests, and a live golden
    Profile contract test. Mocks alone cannot satisfy a gate.
 7. No production code may add analytics, crash upload, trust-all TLS, cleartext fallback,
@@ -142,12 +143,13 @@ Exit: byte-identical canonical output and identical comparison/arithmetic result
 and iOS. If the candidate fails, replace only its private backend. No snapshot schema or
 financial DTO merges before this passes.
 
-Implementation status (2026-08-13): complete and migrated into `mobile/shared` by M2.1.
+Implementation status (2026-08-13): complete and migrated into the production build by M2.1.
 The 72 vectors generated from Python `FVal` pass byte-for-byte on JVM, Android host, and
 `iosSimulatorArm64`, and the `iosArm64` test binary links. BigNum 0.3.10's direct division
 incorrectly truncated `2 / 3`, so the private backend performs exact BigInteger
 quotient/remainder HALF_EVEN rounding while the public type and serialized schema remain
-candidate-independent. Tool pins and the observed limitation are retained in
+candidate-independent. M2.4 subsequently extracted the complete slice from `:shared` into the
+`:core:model` leaf without introducing another Apple framework. Tool pins and the observed limitation are retained in
 `mobile/docs/characterization/exact-decimal.md`. This completes P0.2 but not Gate G0,
 which still requires the deferred physical portion of P0.3.
 
@@ -477,12 +479,18 @@ extracting modules. Make `mobileCheck` depend on it, keep Android Lint as a sepa
 real production code and keep every platform buildable throughout the migration.
 
 Implementation status (2026-08-14): the central ktlint/detekt convention, `qualityCheck`,
-`qualityFormat`, `mobileCheck` dependency, and hosted CI gate are implemented. Module extraction,
+`qualityFormat`, `mobileCheck` dependency, and hosted CI gate are implemented. A reusable KMP library
+convention now owns the common JVM, Android host, and Apple target policy. `:core:model` is the first
+extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
+vectors, and generator. `:shared` consumes it as an API dependency and exports it through the single
+`RotkiShared` Apple framework. The host and Apple aggregate gates discover the new module rather than
+requiring a second framework or hand-maintained test list.
+
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical is the reference slice: first extract its core/domain/data/presentation boundaries, then
-replace manual Android composition and tab selection with Koin and typed Navigation Compose. Room is
-introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot remains
-an atomic document and is never stored as plaintext database rows. The complete Atomic Design
+vertical is the next reference slice: extract its coherent core/domain/data/presentation boundaries,
+then replace manual Android composition and tab selection with Koin and typed Navigation Compose.
+Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
+remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
 component system is deliberately deferred to Phase 7 and Claude Design.
 
 ## Phase 3 — Coherent Engine data plane
@@ -1176,12 +1184,10 @@ pnpm run lint
 # Starling topology/proxy
 cargo test -p starling-proxy
 
-# Shared and Android (run from mobile/)
+# KMP and Android (run from mobile/)
 ./gradlew qualityCheck
-./gradlew :shared:jvmTest :shared:testAndroidHostTest
-./gradlew :shared:iosSimulatorArm64Test :shared:linkDebugTestIosArm64 \
-  :shared:linkDebugFrameworkIosArm64 :shared:linkDebugFrameworkIosSimulatorArm64
-./gradlew :androidApp:test :androidApp:lintDevDebug :androidApp:assembleDebug
+./gradlew mobileCheck
+./gradlew appleCheck
 ./gradlew :androidApp:pixel2Api28DevDebugAndroidTest \
   -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
 ./gradlew :androidApp:pixel8Api36DevDebugAndroidTest \
@@ -1190,7 +1196,7 @@ cargo test -p starling-proxy
 ./gradlew :androidApp:connectedTracerDebugAndroidTest
 
 # Generated cross-platform contracts
-uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
+uv run python mobile/core/model/tools/generate_exact_decimal_vectors.py
 uv run python tools/scripts/generate_companion_protocol_vocabulary.py --check
 uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 

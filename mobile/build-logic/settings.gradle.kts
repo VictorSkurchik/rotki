@@ -1,5 +1,4 @@
 pluginManagement {
-    includeBuild("build-logic")
     repositories {
         google()
         gradlePluginPortal()
@@ -12,11 +11,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        gradlePluginPortal()
+    }
+    versionCatalogs {
+        create("libs") {
+            from(files("../gradle/libs.versions.toml"))
+        }
     }
 }
 
-rootProject.name = "rotki-mobile"
-
-include(":androidApp")
-include(":core:model")
-include(":shared")
+rootProject.name = "build-logic"
