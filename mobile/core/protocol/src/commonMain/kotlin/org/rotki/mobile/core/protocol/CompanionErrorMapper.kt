@@ -1,27 +1,37 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol
 
 import org.rotki.mobile.core.protocol.dto.CompanionErrorDto
+import org.rotki.mobile.core.protocol.dto.CompanionFailureEnvelopeDto
 import org.rotki.mobile.core.protocol.generated.HttpErrorCode
 import org.rotki.mobile.core.protocol.generated.ProtocolErrorAction
+import kotlin.native.HiddenFromObjC
 
-internal sealed interface CompanionFailure {
-    data class Known(
-        internal val statusCode: Int,
-        internal val code: HttpErrorCode,
-        internal val retryable: Boolean,
-        internal val action: ProtocolErrorAction,
-        internal val localEffect: CompanionFailureLocalEffect,
+@HiddenFromObjC
+public sealed interface CompanionFailure {
+    @ConsistentCopyVisibility
+    public data class Known internal constructor(
+        public val statusCode: Int,
+        public val code: HttpErrorCode,
+        public val retryable: Boolean,
+        public val action: ProtocolErrorAction,
+        public val localEffect: CompanionFailureLocalEffect,
     ) : CompanionFailure
 
-    data object UnexpectedEngineError : CompanionFailure
+    public data object UnexpectedEngineError : CompanionFailure
 }
 
-internal enum class CompanionFailureLocalEffect {
+@HiddenFromObjC
+public enum class CompanionFailureLocalEffect {
     KEEP,
     DELETE_PAIRING_AND_SNAPSHOT,
     NOT_ESTABLISHED,
     UNCHANGED,
 }
+
+@HiddenFromObjC
+public fun CompanionFailureEnvelopeDto.toDomain(statusCode: Int): CompanionFailure = error.toDomain(statusCode)
 
 internal fun CompanionErrorDto.toDomain(statusCode: Int): CompanionFailure {
     val knownCode =

@@ -82,20 +82,23 @@ the lifecycle policy; `:core:model` owns `ExactDecimal` plus its characterizatio
 first `:core:security-api` tranche owns the secret-free cleanup journal and revocable Snapshot
 secure-store contract plus its application-owned plaintext handle. The physical `:core:protocol`
 leaf owns the strict Companion JSON codec, duplicate-member/syntax scanner, strict scalar
-serializers, generated protocol vocabulary, and fixed-width protocol value types. It has no DTOs,
-Engine-origin parsing, transport, or Apple framework of its own. Stable public value types are
-exported through `RotkiShared`; credentials, raw-byte helpers, codec mechanics, and generated
-vocabulary remain hidden from Objective-C and Swift. Protocol-dependent security ports remain in
-`:shared` until the remaining Engine-origin dependency and security tranche move. Pairing domain owns the secret-free
+serializers, generated protocol vocabulary, fixed-width protocol value types, and the bounded HTTP
+control-envelope decoder with discovery negotiation and authored error mapping. It has no Auth or
+WebSocket DTOs, Engine-origin parsing, transport, or Apple framework of its own. Stable public value
+types are exported through `RotkiShared`; credentials, DTO/decoder seams, raw-byte helpers, codec
+mechanics, and generated vocabulary remain hidden from Objective-C and Swift. Protocol-dependent
+security ports remain in `:shared` until the remaining Engine-origin dependency and security tranche
+move. Pairing domain owns the secret-free
 submission contract plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
 depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
-current implementation. Strict QR decoding, protocol DTOs, Engine-origin parsing, and transport
-remain in `:shared`. Raw `Json` is sealed behind the Kotlin-only codec in `:core:protocol`, hidden
-from Objective-C and Swift. The Ktor transport wraps its sensitive encoded bytes in `OutgoingContent`
-with a constant, redacted diagnostic representation and no longer installs `ContentNegotiation`.
-The next protocol tranche moves Engine-origin and DTO/error/decoder ownership after making their
-cross-module seams explicit; the network leaf follows.
+current implementation. Strict QR decoding, Auth and WebSocket DTOs, Engine-origin parsing, and
+transport remain in `:shared`. Raw `Json` is sealed behind the Kotlin-only codec in
+`:core:protocol`, hidden from Objective-C and Swift. The Ktor transport wraps its sensitive encoded
+bytes in `OutgoingContent` with a constant, redacted diagnostic representation and no longer
+installs `ContentNegotiation`.
+The next protocol tranches separate the security-sensitive Engine-origin parser and the WebSocket
+decoder; the network leaf follows.
 
 ```text
 mobile/

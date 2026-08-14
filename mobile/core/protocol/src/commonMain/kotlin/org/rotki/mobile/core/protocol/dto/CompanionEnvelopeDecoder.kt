@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol.dto
 
 import kotlinx.serialization.DeserializationStrategy
@@ -9,9 +11,11 @@ import org.rotki.mobile.core.protocol.CompanionJsonCodec
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
 import org.rotki.mobile.core.protocol.hasValidJsonSyntax
+import kotlin.native.HiddenFromObjC
 
-internal object CompanionEnvelopeDecoder {
-    internal fun <T> decodeSuccess(
+@HiddenFromObjC
+public object CompanionEnvelopeDecoder {
+    public fun <T> decodeSuccess(
         text: String,
         deserializer: DeserializationStrategy<T>,
     ): CompanionEnvelopeDecodeOutcome<T> =
@@ -21,7 +25,7 @@ internal object CompanionEnvelopeDecoder {
             deserializer = deserializer,
         )
 
-    internal fun decodeFailure(text: String): CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
+    public fun decodeFailure(text: String): CompanionEnvelopeDecodeOutcome<CompanionFailureEnvelopeDto> =
         decode(
             text = text,
             expectedShape = CompanionEnvelopeShape.FAILURE,
@@ -67,12 +71,16 @@ internal object CompanionEnvelopeDecoder {
     }
 }
 
-internal sealed interface CompanionEnvelopeDecodeOutcome<out T> {
-    data class Decoded<T>(
-        internal val value: T,
-    ) : CompanionEnvelopeDecodeOutcome<T>
+@HiddenFromObjC
+public sealed interface CompanionEnvelopeDecodeOutcome<out T> {
+    @ConsistentCopyVisibility
+    public data class Decoded<T> internal constructor(
+        public val value: T,
+    ) : CompanionEnvelopeDecodeOutcome<T> {
+        public override fun toString(): String = "Decoded(redacted)"
+    }
 
-    data object ContractFailure : CompanionEnvelopeDecodeOutcome<Nothing>
+    public data object ContractFailure : CompanionEnvelopeDecodeOutcome<Nothing>
 }
 
 private enum class CompanionEnvelopeShape {

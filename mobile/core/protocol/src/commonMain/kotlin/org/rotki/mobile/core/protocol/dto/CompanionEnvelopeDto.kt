@@ -1,8 +1,11 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.rotki.mobile.core.protocol.StrictJsonBooleanSerializer
+import kotlin.native.HiddenFromObjC
 
 @Serializable
 internal class CompanionErrorDto(
@@ -17,7 +20,8 @@ internal class CompanionErrorDto(
 )
 
 @Serializable
-internal class ProtocolDiscoveryEnvelopeDto(
+@HiddenFromObjC
+public class ProtocolDiscoveryEnvelopeDto internal constructor(
     @SerialName("result")
     internal val result: ProtocolDiscoveryResultDto,
     @SerialName("message")
@@ -25,7 +29,8 @@ internal class ProtocolDiscoveryEnvelopeDto(
 )
 
 @Serializable
-internal class CompanionFailureEnvelopeDto(
+@HiddenFromObjC
+public class CompanionFailureEnvelopeDto internal constructor(
     @SerialName("result")
     internal val result: Nothing?,
     @SerialName("message")

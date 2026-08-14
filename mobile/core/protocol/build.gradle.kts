@@ -1,5 +1,6 @@
 plugins {
     id("rotki.kmp.library")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {

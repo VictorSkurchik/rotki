@@ -8,7 +8,10 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.IOException
 import org.rotki.mobile.core.protocol.dto.CompanionEnvelopeDecodeOutcome
 import org.rotki.mobile.core.protocol.dto.ProtocolDiscoveryEnvelopeDto
+import org.rotki.mobile.core.protocol.dto.ProtocolNegotiationOutcome
+import org.rotki.mobile.core.protocol.dto.negotiate
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
+import org.rotki.mobile.core.protocol.generated.SUPPORTED_PROTOCOL_VERSIONS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,7 +35,11 @@ class CompanionHttpEnvelopeBoundaryTest {
                         is CompanionEnvelopeDecodeOutcome.Decoded -> outcome.value
                         CompanionEnvelopeDecodeOutcome.ContractFailure -> fail("Expected decoded response")
                     }
-                assertEquals(listOf(1), decoded.result.supportedProtocolVersions)
+                val negotiation =
+                    assertIs<ProtocolNegotiationOutcome.Compatible>(
+                        decoded.negotiate(SUPPORTED_PROTOCOL_VERSIONS),
+                    )
+                assertEquals(1, negotiation.selectedVersion)
             }
         }
 

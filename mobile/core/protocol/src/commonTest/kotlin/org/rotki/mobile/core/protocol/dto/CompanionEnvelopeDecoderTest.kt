@@ -3,6 +3,7 @@ package org.rotki.mobile.core.protocol.dto
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.fail
 
@@ -124,6 +125,15 @@ class CompanionEnvelopeDecoderTest {
         assertSuccessContractFailure(overDepth)
     }
 
+    @Test
+    fun `decoded outcome does not expose its generic value`() {
+        val outcome = CompanionEnvelopeDecodeOutcome.Decoded(SeededPayload(SEEDED_SECRET))
+        val rendered = outcome.toString()
+
+        assertEquals("Decoded(redacted)", rendered)
+        assertFalse(rendered.contains(SEEDED_SECRET))
+    }
+
     private fun assertSuccessContractFailure(text: String) {
         assertIs<CompanionEnvelopeDecodeOutcome.ContractFailure>(
             CompanionEnvelopeDecoder.decodeSuccess(
@@ -133,6 +143,12 @@ class CompanionEnvelopeDecoderTest {
         )
     }
 }
+
+private data class SeededPayload(
+    val value: String,
+)
+
+private const val SEEDED_SECRET: String = "seeded_secret"
 
 private const val SUCCESS_WITH_ADDITIVE_FIELDS: String =
     """{"result":{"supported_protocol_versions":[1],"capabilities":{"device_sessions":1},"future_result":true},"message":"","future_envelope":true}"""

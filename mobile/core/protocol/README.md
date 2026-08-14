@@ -6,11 +6,13 @@ This platform-neutral KMP leaf is a deliberately narrow protocol extraction. It 
 - duplicate-member and JSON-syntax scanning;
 - strict JSON scalar serializers;
 - the generated protocol vocabulary;
-- fixed-width protocol IDs, credentials, signatures, public keys, and their fail-closed parsers.
+- fixed-width protocol IDs, credentials, signatures, public keys, and their fail-closed parsers;
+- generic HTTP control envelopes, bounded preflight decoding, discovery negotiation, and authored
+  error mapping.
 
-Protocol DTOs, Engine-origin parsing, error mapping, and network transport remain in `:shared` for
-the next migration tranche. This module has no project, Ktor, database, Compose, Koin, native UI, or
-platform implementation dependency.
+Auth and WebSocket DTOs, Engine-origin parsing, and network transport remain in `:shared` for later
+migration tranches. This module has no project, Ktor, database, Compose, Koin, native UI, or platform
+implementation dependency.
 
 `DeviceSessionId`, `IdempotencyKey`, `P1363Signature`, `X963PublicKey`, and their parse outcomes keep
 their established native API and are exported through the single `RotkiShared` umbrella. Secret

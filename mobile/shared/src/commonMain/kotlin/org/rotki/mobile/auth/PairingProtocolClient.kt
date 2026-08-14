@@ -52,7 +52,7 @@ internal class PairingProtocolClient(
             is CompanionHttpResponseOutcome.Success -> {
                 when (
                     val negotiation =
-                        response.value.result.negotiate(
+                        response.value.negotiate(
                             SUPPORTED_PROTOCOL_VERSIONS,
                         )
                 ) {
@@ -76,7 +76,7 @@ internal class PairingProtocolClient(
                 if (response.statusCode == HTTP_NOT_FOUND) {
                     PairingDiscoveryOutcome.Incompatible
                 } else {
-                    val failure = response.envelope.error.toCompanionFailure(response.statusCode)
+                    val failure = response.envelope.toCompanionFailure(response.statusCode)
                     if (failure.isIncompatibleProtocol()) {
                         PairingDiscoveryOutcome.Incompatible
                     } else {
@@ -163,7 +163,7 @@ internal class PairingProtocolClient(
             is CompanionHttpResponseOutcome.Failure -> {
                 PairingRegistrationRemoteOutcome.Rejected(
                     statusCode = response.statusCode,
-                    failure = response.envelope.error.toCompanionFailure(response.statusCode),
+                    failure = response.envelope.toCompanionFailure(response.statusCode),
                     retryAfterSeconds = response.retryAfterSeconds,
                 )
             }

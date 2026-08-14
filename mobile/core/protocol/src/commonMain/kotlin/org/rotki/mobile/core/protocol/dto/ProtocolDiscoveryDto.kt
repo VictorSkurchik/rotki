@@ -1,9 +1,12 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.rotki.mobile.core.protocol.StrictJsonIntSerializer
 import org.rotki.mobile.core.protocol.generated.ProtocolCapability
+import kotlin.native.HiddenFromObjC
 
 @Serializable
 internal class ProtocolDiscoveryResultDto(
@@ -20,18 +23,24 @@ internal class ProtocolDiscoveryResultDto(
     >,
 )
 
-internal sealed interface ProtocolNegotiationOutcome {
-    data class Compatible(
-        internal val selectedVersion: Int,
+@HiddenFromObjC
+public sealed interface ProtocolNegotiationOutcome {
+    @ConsistentCopyVisibility
+    public data class Compatible internal constructor(
+        public val selectedVersion: Int,
         internal val availableCapabilities: Set<ProtocolCapability>,
     ) : ProtocolNegotiationOutcome
 
-    data object Incompatible : ProtocolNegotiationOutcome
+    public data object Incompatible : ProtocolNegotiationOutcome
 
-    data object ContractFailure : ProtocolNegotiationOutcome
+    public data object ContractFailure : ProtocolNegotiationOutcome
 }
 
-internal fun ProtocolDiscoveryResultDto.negotiate(supportedClientVersions: Set<Int>): ProtocolNegotiationOutcome {
+@HiddenFromObjC
+public fun ProtocolDiscoveryEnvelopeDto.negotiate(supportedClientVersions: Set<Int>): ProtocolNegotiationOutcome =
+    result.negotiate(supportedClientVersions)
+
+private fun ProtocolDiscoveryResultDto.negotiate(supportedClientVersions: Set<Int>): ProtocolNegotiationOutcome {
     if (supportedProtocolVersions.any { version -> version <= 0 } ||
         capabilities.values.any { version -> version <= 0 }
     ) {
