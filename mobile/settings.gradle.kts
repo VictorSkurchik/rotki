@@ -19,4 +19,6 @@ rootProject.name = "rotki-mobile"
 
 include(":androidApp")
 include(":core:model")
+include(":feature:pairing:domain")
+include(":feature:pairing:presentation")
 include(":shared")

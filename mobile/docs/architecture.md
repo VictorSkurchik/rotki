@@ -64,18 +64,22 @@ rules without carrying private configuration.
 - Suppressions name the exact rule ID, use the smallest declaration or expression scope, and include
   an adjacent reason. File-wide, wildcard, `all`, and unexplained suppressions are forbidden. Test
   code remains analyzed; a test-specific exception must still be narrow and centrally reviewable.
-- Keep the current shared-UI dependency check, and add Gradle module-graph and forbidden-import
-  guards as modules are extracted. Those guards enforce Clean Architecture separately; passing
-  ktlint or detekt is never evidence that dependency direction is correct.
+- Keep the current non-UI dependency check. The root `checkModuleGraph` task rejects unregistered
+  production modules, forbidden project edges, infrastructure dependencies, and platform plugins
+  at the Pairing domain/presentation boundaries; `mobileCheck` requires it. Extend its allowlist and
+  layer rules with every new module. Passing ktlint or detekt is never evidence that dependency
+  direction is correct.
 - ktlint/detekt upgrades are isolated build changes. Apply and review mechanical formatting
   separately from behavioral changes.
 
 ## Target Gradle module graph
 
-The current `:core:model`, `:shared`, and `:androidApp` modules are the first migration state, not the
-final boundary. Create target modules only when moving or adding real production code. `:core:model`
-is the first extracted leaf and owns `ExactDecimal` plus its characterization assets; `:shared`
-depends on and exports it through the single `RotkiShared` Apple framework.
+The current `:core:model`, `:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and
+`:androidApp` modules are the first migration state, not the final boundary. Create target modules
+only when moving or adding real production code. `:core:model` owns `ExactDecimal` plus its
+characterization assets. The first feature extraction places secret-free Pairing submission
+contracts in domain and the pure UDF reducer in presentation, while `:shared` retains its stable
+Swift-facing adapter, strict decoder, and orchestration until the data seams are ready.
 
 ```text
 mobile/
@@ -334,7 +338,9 @@ Do not perform a big-bang package move. Use this order:
 1. Add convention plugins and extract stable core model/network/security contracts. The reusable
    KMP library convention and first `:core:model` leaf are in place; network and security contracts
    remain in the umbrella until their own coherent slices move.
-2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior.
+2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
+   first domain contracts and pure presentation reducer are extracted; QR decoding, remote
+   registration, and facade-owned attempt coordination remain the next bounded seams.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. Do not build the full component catalog yet.

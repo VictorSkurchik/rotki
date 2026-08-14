@@ -93,11 +93,13 @@ jobs:
         run: |
           ./gradlew --no-daemon \
             :core:model:dependencies \
+            :feature:pairing:domain:dependencies \
+            :feature:pairing:presentation:dependencies \
             :shared:dependencies \
             > "$RUNNER_TEMP/non-ui-kmp-dependencies.txt"
           if grep -E 'androidx\.compose|org\.jetbrains\.compose' \
             "$RUNNER_TEMP/non-ui-kmp-dependencies.txt"; then
-            echo '::error::UI dependencies are forbidden in core:model and shared'
+            echo '::error::UI dependencies are forbidden in non-UI KMP modules'
             exit 1
           fi
 

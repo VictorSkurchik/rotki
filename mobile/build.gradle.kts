@@ -1,6 +1,7 @@
 import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
 import dev.detekt.gradle.extensions.FailOnSeverity
+import org.gradle.api.artifacts.ProjectDependency
 import org.jlleitschuh.gradle.ktlint.KtlintExtension
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
@@ -29,6 +30,65 @@ val exactGeneratedKotlinPathsByProject =
 val ktlintEngineVersion =
     libs.versions.ktlint.engine
         .get()
+
+data class ModuleBoundaryRule(
+    val allowedProjectDependencies: Set<String>,
+    val forbiddenGroupPrefixes: Set<String> = emptySet(),
+    val forbiddenModules: Set<Pair<String, String>> = emptySet(),
+    val forbiddenPluginIds: Set<String> = emptySet(),
+)
+
+val nativeUiDependencyGroupPrefixes =
+    setOf(
+        "androidx.",
+        "io.insert-koin",
+        "org.jetbrains.compose",
+    )
+val featureInfrastructureGroupPrefixes = nativeUiDependencyGroupPrefixes + "io.ktor"
+val forbiddenNonUiKmpPluginIds =
+    setOf(
+        "com.android.application",
+        "com.android.library",
+        "org.jetbrains.compose",
+        "org.jetbrains.kotlin.android",
+        "org.jetbrains.kotlin.plugin.compose",
+    )
+val featureModuleBoundaryRules =
+    mapOf(
+        ":androidApp" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":shared"),
+            ),
+        ":core:model" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
+        ":feature:pairing:domain" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes + "org.jetbrains.kotlinx",
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
+            ),
+        ":feature:pairing:presentation" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":feature:pairing:domain"),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes + "org.jetbrains.kotlinx",
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
+            ),
+        ":shared" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies =
+                    setOf(
+                        ":core:model",
+                        ":feature:pairing:domain",
+                        ":feature:pairing:presentation",
+                    ),
+                forbiddenGroupPrefixes = nativeUiDependencyGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
+    )
 
 allprojects {
     val exactGeneratedKotlinPaths = exactGeneratedKotlinPathsByProject[path].orEmpty()
@@ -90,6 +150,51 @@ allprojects {
     }
 }
 
+subprojects {
+    if (!buildFile.exists()) return@subprojects
+
+    val sourceProjectPath = path
+    val boundaryRule =
+        requireNotNull(featureModuleBoundaryRules[sourceProjectPath]) {
+            "Declare a module-boundary rule for $sourceProjectPath before adding it to the build"
+        }
+
+    configurations.configureEach {
+        dependencies.configureEach {
+            val dependency = this
+            if (dependency is ProjectDependency && dependency.path != sourceProjectPath) {
+                require(dependency.path in boundaryRule.allowedProjectDependencies) {
+                    "$sourceProjectPath may not depend on ${dependency.path}"
+                }
+            }
+
+            dependency.group?.let { dependencyGroup ->
+                val forbiddenByGroup =
+                    boundaryRule.forbiddenGroupPrefixes.any(dependencyGroup::startsWith)
+                val forbiddenByModule =
+                    boundaryRule.forbiddenModules.any { (group, modulePrefix) ->
+                        dependencyGroup == group && dependency.name.startsWith(modulePrefix)
+                    }
+                require(!forbiddenByGroup && !forbiddenByModule) {
+                    "$sourceProjectPath may not depend on $dependencyGroup:${dependency.name}"
+                }
+            }
+        }
+    }
+
+    boundaryRule.forbiddenPluginIds.forEach { pluginId ->
+        pluginManager.withPlugin(pluginId) {
+            error("$sourceProjectPath may not apply $pluginId")
+        }
+    }
+}
+
+val checkModuleGraph =
+    tasks.register("checkModuleGraph") {
+        group = "verification"
+        description = "Verifies allowed project edges and forbidden layer dependencies."
+    }
+
 val qualityCheck =
     tasks.register("qualityCheck") {
         group = "verification"
@@ -119,8 +224,8 @@ tasks.register("qualityFormat") {
 
 tasks.register("mobileCheck") {
     group = "verification"
-    description = "Runs host-side shared and Android checks available on the current OS."
-    dependsOn(qualityCheck)
+    description = "Runs host-side KMP and Android checks available on the current OS."
+    dependsOn(checkModuleGraph, qualityCheck)
     dependsOn(
         ":androidApp:test",
         ":androidApp:assembleDebug",

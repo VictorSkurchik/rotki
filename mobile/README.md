@@ -12,10 +12,15 @@ The production build currently contains:
 - `core:model`: the first extracted KMP leaf module. It owns the project-defined
   `ExactDecimal` value type, its private BigNum backend, common characterization tests,
   generated vectors, and no UI or platform implementation;
+- `feature:pairing:domain`: platform-neutral Pairing submission contracts and coarse,
+  secret-free outcomes;
+- `feature:pairing:presentation`: the pure synchronous Pairing UDF state/action/reducer layer,
+  depending only on Pairing domain contracts;
 - `shared`: the single Swift-facing `RotkiShared` framework umbrella and the migration home for
   behavior not yet extracted, including strict Pairing QR parsing, Capability discovery,
-  lifecycle-aware Device Key registration, and durable cleanup recovery. It re-exports
-  `core:model` instead of creating a second Apple framework;
+  lifecycle-aware Device Key registration, and durable cleanup recovery. Its existing
+  `PairingFlow` remains an ABI-compatible adapter over the extracted feature logic, and it
+  re-exports `core:model` instead of creating a second Apple framework;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, CameraX/ML Kit scanning, Android Keystore-backed Device
   Keys, atomic Pairing records, and Android 17 local-network permission recovery;
@@ -30,7 +35,7 @@ Run the host-side KMP and Android checks from this directory:
 ```
 
 `mobileCheck` includes the non-mutating ktlint/detekt gate. Run it directly while iterating on Kotlin
-quality, or apply the canonical formatter locally:
+quality and the Clean Architecture module-graph guard, or apply the canonical formatter locally:
 
 ```bash
 ./gradlew --no-daemon --continue qualityCheck

@@ -484,11 +484,21 @@ convention now owns the common JVM, Android host, and Apple target policy. `:cor
 extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
 vectors, and generator. `:shared` consumes it as an API dependency and exports it through the single
 `RotkiShared` Apple framework. The host and Apple aggregate gates discover the new module rather than
-requiring a second framework or hand-maintained test list.
+requiring a second framework or hand-maintained test list. The root `checkModuleGraph` gate rejects
+unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
+the extracted Clean Architecture boundaries.
+
+The first Auth/Pairing boundary is also extracted without changing the native API:
+`:feature:pairing:domain` owns the one-shot submission contract and coarse outcomes, while
+`:feature:pairing:presentation` owns the synchronous UDF state/action/reducer. `:shared` keeps the
+existing Swift-facing `PairingFlow` as an adapter over those modules and retains QR decoding,
+registration transport, and facade-owned attempt coordination until their domain ports remove the
+current dependency cycles. Neither feature module stores QR material or creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical is the next reference slice: extract its coherent core/domain/data/presentation boundaries,
-then replace manual Android composition and tab selection with Koin and typed Navigation Compose.
+vertical remains the reference slice: next extract its decoder/registration data boundary and
+facade-owned attempt port, then replace manual Android composition and tab selection with Koin and
+typed Navigation Compose.
 Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
 remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
 component system is deliberately deferred to Phase 7 and Claude Design.

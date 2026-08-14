@@ -93,7 +93,8 @@ class PairingFlowTest {
 
     @Test
     fun `permission reset and retry are deterministic`() {
-        val flow = CompanionFacade().pairingFlow(Clock { NOW })
+        val facade = CompanionFacade()
+        val flow = facade.pairingFlow(Clock { NOW })
 
         assertEquals(PairingUiState.INTRO, flow.presentation.value.state)
         flow.cameraPermissionDenied()
@@ -120,6 +121,8 @@ class PairingFlowTest {
         // A scanner callback arriving after reset cannot silently begin pairing.
         flow.submitQr(validQr(expiresAt = NOW + 1))
         assertEquals(PairingUiState.INTRO, flow.presentation.value.state)
+        assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)
+        assertNull(facade.takePendingPairingForConnection())
     }
 
     @Test
@@ -132,6 +135,8 @@ class PairingFlowTest {
         assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
         assertEquals(PairingUiState.CONNECTING, flow.presentation.value.state)
 
+        // A late scanner callback cannot replace the authority already owned by this attempt.
+        flow.submitQr(validQr(expiresAt = NOW + 2))
         flow.submitQr("malformed")
         flow.cameraPermissionDenied()
         flow.retryScanning()
@@ -140,9 +145,11 @@ class PairingFlowTest {
         assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
         assertEquals(PairingUiState.CONNECTING, flow.presentation.value.state)
         assertNull(flow.presentation.value.rejectionCategory)
+        val pendingPairing = assertNotNull(facade.takePendingPairingForConnection())
+        assertEquals(NOW + 1, pendingPairing.pairingQr.expiresAtEpochSeconds)
         assertEquals(
             "PairingQr(redacted)",
-            assertNotNull(facade.takePendingPairingForConnection()).pairingQr.toString(),
+            pendingPairing.pairingQr.toString(),
         )
         assertNull(facade.takePendingPairingForConnection())
     }
@@ -204,6 +211,7 @@ class PairingFlowTest {
         staleFlow.submitQr(validQr(expiresAt = NOW + 2))
 
         assertEquals(PairingUiState.SCANNING, staleFlow.presentation.value.state)
+        assertNull(facade.takePendingPairingForConnection())
         facade.lock()
         activeFlow.reset()
         assertEquals(CompanionRootState.Unpaired, facade.status.value.rootState)

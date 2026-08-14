@@ -10,6 +10,12 @@ characterization tests, vectors, and generator. `:shared` has an API dependency 
 exports it through `RotkiShared`; it does not produce a second framework. New stable leaves should
 follow the same incremental pattern, while behavior that has not yet moved remains here.
 
+Pairing now has implementation-only `:feature:pairing:domain` and
+`:feature:pairing:presentation` boundaries. The public `PairingFlow` stays here as the stable
+Swift/Kotlin adapter: it invokes the existing strict QR/facade integration and delegates its
+presentation transitions to the feature reducer. The feature modules retain no QR payload or
+credential and are not exported as additional Apple APIs.
+
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned
 feature boundaries and will be created only when their first real vertical slices land. New code follows

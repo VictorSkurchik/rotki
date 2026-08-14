@@ -3,6 +3,7 @@ package org.rotki.mobile.auth
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.auth.protocol.PairingQr
 import org.rotki.mobile.auth.protocol.PairingQrParseOutcome
@@ -11,6 +12,14 @@ import org.rotki.mobile.auth.protocol.PairingQrRejection
 import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.state.CompanionRootState
 import org.rotki.mobile.core.state.CompanionTransitionOutcome
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionGateway
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionOutcome
+import org.rotki.mobile.feature.pairing.domain.PairingSubmissionRejection
+import org.rotki.mobile.feature.pairing.presentation.PairingAction
+import org.rotki.mobile.feature.pairing.presentation.PairingFailureCategory
+import org.rotki.mobile.feature.pairing.presentation.PairingReducer
+import org.rotki.mobile.feature.pairing.presentation.PairingScreenState
+import org.rotki.mobile.feature.pairing.presentation.PairingState
 import kotlin.time.Clock as KotlinClock
 
 /** A platform-neutral screen state suitable for direct use from Kotlin or Swift UI code. */
@@ -46,7 +55,11 @@ public class PairingPresentation internal constructor(
 }
 
 /**
- * Owns the small, synchronous pairing-screen state machine shared by Android and iOS.
+ * Stable native-facing adapter over the platform-neutral Pairing reducer and existing QR/facade
+ * integration.
+ *
+ * Synchronous commands must be delivered serially by the platform UI owner on its main executor.
+ * Concurrent or reentrant command delivery is unsupported.
  *
  * A successful scan hands the decoded QR directly to the facade's private, in-memory connection
  * context. It never becomes part of the public presentation state.
@@ -65,97 +78,167 @@ public class PairingFlow internal constructor(
         clock = Clock { KotlinClock.System.now().epochSeconds },
     )
 
+    private val submissionGateway: PairingSubmissionGateway =
+        PairingSubmissionGateway(::submitPairing)
     private val mutablePresentation: MutableStateFlow<PairingPresentation> =
         MutableStateFlow(
-            if (facade.status.value.rootState == CompanionRootState.Connecting) {
-                CONNECTING_PRESENTATION
-            } else {
-                INTRO_PRESENTATION
-            },
+            PairingReducer
+                .initial(
+                    sessionIsConnecting = facade.status.value.rootState == CompanionRootState.Connecting,
+                ).toPublicPresentation(),
         )
 
     public val presentation: StateFlow<PairingPresentation> = mutablePresentation.asStateFlow()
 
-    public fun startScanning(): Unit = moveUnlessConnecting(SCANNING_PRESENTATION)
+    public fun startScanning(): Unit = dispatch(PairingAction.StartScanning)
 
-    public fun cameraPermissionDenied() {
-        if (mutablePresentation.value.state == PairingUiState.SCANNING) {
-            mutablePresentation.value = CAMERA_DENIED_PRESENTATION
-        }
-    }
+    public fun cameraPermissionDenied(): Unit = dispatch(PairingAction.CameraPermissionDenied)
 
-    public fun scannerUnavailable() {
-        if (mutablePresentation.value.state == PairingUiState.SCANNING) {
-            mutablePresentation.value = SCANNER_UNAVAILABLE_PRESENTATION
-        }
-    }
+    public fun scannerUnavailable(): Unit = dispatch(PairingAction.ScannerUnavailable)
 
     public fun submitQr(rawPayload: String) {
-        if (mutablePresentation.value.state != PairingUiState.SCANNING) return
+        if (!PairingReducer.acceptsSubmission(mutablePresentation.value.toFeatureState())) return
 
-        when (val outcome = parser.parse(rawPayload.encodeToByteArray())) {
-            is PairingQrParseOutcome.Accepted -> acceptQr(outcome.pairingQr)
-            is PairingQrParseOutcome.Rejected -> rejectQr(outcome.reason)
-        }
+        dispatch(
+            PairingAction.SubmissionCompleted(
+                submissionGateway.submit(rawPayload),
+            ),
+        )
     }
 
-    public fun retryScanning() {
-        when (mutablePresentation.value.state) {
-            PairingUiState.CAMERA_DENIED,
-            PairingUiState.EXPIRED_QR,
-            PairingUiState.INVALID_QR,
-            PairingUiState.SCANNER_UNAVAILABLE,
-            -> mutablePresentation.value = SCANNING_PRESENTATION
+    public fun retryScanning(): Unit = dispatch(PairingAction.RetryScanning)
 
-            PairingUiState.CONNECTING,
-            PairingUiState.INTRO,
-            PairingUiState.SCANNING,
-            -> Unit
-        }
-    }
-
-    public fun reset() {
-        if (
-            mutablePresentation.value.state != PairingUiState.CONNECTING ||
-            facade.status.value.rootState == CompanionRootState.Unpaired
-        ) {
-            mutablePresentation.value = INTRO_PRESENTATION
-        }
-    }
+    public fun reset(): Unit =
+        dispatch(
+            PairingAction.Reset(
+                sessionIsUnpaired = facade.status.value.rootState == CompanionRootState.Unpaired,
+            ),
+        )
 
     override fun toString(): String = "PairingFlow(redacted)"
 
-    private fun acceptQr(pairingQr: PairingQr) {
-        val outcome = facade.acceptPairing(pairingQr)
-        if (outcome is CompanionTransitionOutcome.Applied) {
-            mutablePresentation.value = CONNECTING_PRESENTATION
+    private fun dispatch(action: PairingAction) {
+        mutablePresentation.update { currentPresentation ->
+            PairingReducer
+                .reduce(currentPresentation.toFeatureState(), action)
+                .toPublicPresentation()
         }
     }
 
-    private fun rejectQr(reason: PairingQrRejection) {
-        mutablePresentation.value =
-            when (reason) {
-                PairingQrRejection.EXPIRED -> EXPIRED_PRESENTATION
-
-                PairingQrRejection.UNSUPPORTED_FORMAT -> UNSUPPORTED_PRESENTATION
-
-                PairingQrRejection.DUPLICATE_MEMBER,
-                PairingQrRejection.INVALID_CREDENTIAL,
-                PairingQrRejection.INVALID_ORIGIN,
-                PairingQrRejection.INVALID_PAIRING_ID,
-                PairingQrRejection.INVALID_SHAPE,
-                PairingQrRejection.INVALID_UTF8,
-                PairingQrRejection.TOO_LARGE,
-                -> MALFORMED_PRESENTATION
+    private fun submitPairing(rawPayload: String): PairingSubmissionOutcome =
+        when (val outcome = parser.parse(rawPayload.encodeToByteArray())) {
+            is PairingQrParseOutcome.Accepted -> {
+                acceptQr(outcome.pairingQr)
             }
+
+            is PairingQrParseOutcome.Rejected -> {
+                PairingSubmissionOutcome.Rejected(outcome.reason.toDomainRejection())
+            }
+        }
+
+    private fun acceptQr(pairingQr: PairingQr): PairingSubmissionOutcome =
+        if (facade.acceptPairing(pairingQr) is CompanionTransitionOutcome.Applied) {
+            PairingSubmissionOutcome.Accepted
+        } else {
+            PairingSubmissionOutcome.Ignored
+        }
+}
+
+private fun PairingQrRejection.toDomainRejection(): PairingSubmissionRejection =
+    when (this) {
+        PairingQrRejection.EXPIRED -> PairingSubmissionRejection.EXPIRED
+
+        PairingQrRejection.UNSUPPORTED_FORMAT -> PairingSubmissionRejection.UNSUPPORTED
+
+        PairingQrRejection.DUPLICATE_MEMBER,
+        PairingQrRejection.INVALID_CREDENTIAL,
+        PairingQrRejection.INVALID_ORIGIN,
+        PairingQrRejection.INVALID_PAIRING_ID,
+        PairingQrRejection.INVALID_SHAPE,
+        PairingQrRejection.INVALID_UTF8,
+        PairingQrRejection.TOO_LARGE,
+        -> PairingSubmissionRejection.MALFORMED
     }
 
-    private fun moveUnlessConnecting(presentation: PairingPresentation) {
-        if (mutablePresentation.value.state != PairingUiState.CONNECTING) {
-            mutablePresentation.value = presentation
+private fun PairingPresentation.toFeatureState(): PairingState =
+    when (state) {
+        PairingUiState.INTRO -> {
+            PairingState(PairingScreenState.INTRO, failure = null)
+        }
+
+        PairingUiState.SCANNING -> {
+            PairingState(PairingScreenState.SCANNING, failure = null)
+        }
+
+        PairingUiState.CAMERA_DENIED -> {
+            PairingState(PairingScreenState.CAMERA_DENIED, failure = null)
+        }
+
+        PairingUiState.SCANNER_UNAVAILABLE -> {
+            PairingState(PairingScreenState.SCANNER_UNAVAILABLE, failure = null)
+        }
+
+        PairingUiState.INVALID_QR -> {
+            val failure =
+                when (rejectionCategory) {
+                    PairingRejectionCategory.MALFORMED -> PairingFailureCategory.MALFORMED
+
+                    PairingRejectionCategory.UNSUPPORTED -> PairingFailureCategory.UNSUPPORTED
+
+                    PairingRejectionCategory.EXPIRED,
+                    null,
+                    -> error("Invalid Pairing rejection category")
+                }
+            PairingState(PairingScreenState.INVALID_QR, failure)
+        }
+
+        PairingUiState.EXPIRED_QR -> {
+            PairingState(PairingScreenState.EXPIRED_QR, PairingFailureCategory.EXPIRED)
+        }
+
+        PairingUiState.CONNECTING -> {
+            PairingState(PairingScreenState.CONNECTING, failure = null)
         }
     }
-}
+
+private fun PairingState.toPublicPresentation(): PairingPresentation =
+    when (screen) {
+        PairingScreenState.INTRO -> {
+            INTRO_PRESENTATION
+        }
+
+        PairingScreenState.SCANNING -> {
+            SCANNING_PRESENTATION
+        }
+
+        PairingScreenState.CAMERA_DENIED -> {
+            CAMERA_DENIED_PRESENTATION
+        }
+
+        PairingScreenState.SCANNER_UNAVAILABLE -> {
+            SCANNER_UNAVAILABLE_PRESENTATION
+        }
+
+        PairingScreenState.INVALID_QR -> {
+            when (failure) {
+                PairingFailureCategory.MALFORMED -> MALFORMED_PRESENTATION
+
+                PairingFailureCategory.UNSUPPORTED -> UNSUPPORTED_PRESENTATION
+
+                PairingFailureCategory.EXPIRED,
+                null,
+                -> error("Invalid Pairing failure category")
+            }
+        }
+
+        PairingScreenState.EXPIRED_QR -> {
+            EXPIRED_PRESENTATION
+        }
+
+        PairingScreenState.CONNECTING -> {
+            CONNECTING_PRESENTATION
+        }
+    }
 
 private val INTRO_PRESENTATION: PairingPresentation =
     PairingPresentation(

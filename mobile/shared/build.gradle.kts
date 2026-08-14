@@ -50,6 +50,8 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
             implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(project(":feature:pairing:domain"))
+            implementation(project(":feature:pairing:presentation"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
