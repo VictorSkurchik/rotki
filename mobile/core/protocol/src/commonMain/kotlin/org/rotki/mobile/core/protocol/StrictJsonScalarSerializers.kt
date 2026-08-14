@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol
 
 import kotlinx.serialization.KSerializer
@@ -9,8 +11,10 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.native.HiddenFromObjC
 
-internal object StrictJsonIntSerializer : KSerializer<Int> {
+@HiddenFromObjC
+public object StrictJsonIntSerializer : KSerializer<Int> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("StrictJsonInt", PrimitiveKind.INT)
 
@@ -26,7 +30,8 @@ internal object StrictJsonIntSerializer : KSerializer<Int> {
     ): Unit = encoder.encodeInt(value)
 }
 
-internal object StrictJsonLongSerializer : KSerializer<Long> {
+@HiddenFromObjC
+public object StrictJsonLongSerializer : KSerializer<Long> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("StrictJsonLong", PrimitiveKind.LONG)
 
@@ -42,7 +47,8 @@ internal object StrictJsonLongSerializer : KSerializer<Long> {
     ): Unit = encoder.encodeLong(value)
 }
 
-internal object StrictJsonBooleanSerializer : KSerializer<Boolean> {
+@HiddenFromObjC
+public object StrictJsonBooleanSerializer : KSerializer<Boolean> {
     override val descriptor: SerialDescriptor =
         PrimitiveSerialDescriptor("StrictJsonBoolean", PrimitiveKind.BOOLEAN)
 

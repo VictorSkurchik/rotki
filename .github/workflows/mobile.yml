@@ -94,6 +94,7 @@ jobs:
           ./gradlew --no-daemon \
             :core:common:dependencies \
             :core:model:dependencies \
+            :core:protocol:dependencies \
             :core:security-api:dependencies \
             :feature:pairing:domain:dependencies \
             :feature:pairing:presentation:dependencies \
@@ -208,6 +209,18 @@ jobs:
       - name: Run iOS gates
         working-directory: mobile
         run: ./gradlew --no-daemon appleCheck
+
+      - name: Verify protocol internals stay out of Swift
+        working-directory: mobile
+        run: |
+          device_header='shared/build/bin/iosArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
+          simulator_header='shared/build/bin/iosSimulatorArm64/debugFramework/RotkiShared.framework/Headers/RotkiShared.h'
+          cmp "$device_header" "$simulator_header"
+          forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
+          if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
+            echo '::error::Kotlin-only protocol internals leaked into the Swift framework header'
+            exit 1
+          fi
 
       - name: Run iOS host tests
         working-directory: mobile

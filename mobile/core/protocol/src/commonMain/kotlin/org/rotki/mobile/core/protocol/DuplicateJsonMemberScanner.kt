@@ -1,8 +1,12 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol
 
 import org.rotki.mobile.core.protocol.generated.ProtocolClientInputLimits
+import kotlin.native.HiddenFromObjC
 
-internal fun hasDuplicateJsonMember(text: String): Boolean =
+@HiddenFromObjC
+public fun hasDuplicateJsonMember(text: String): Boolean =
     try {
         DuplicateJsonMemberScanner(text).scan()
         false
@@ -12,7 +16,8 @@ internal fun hasDuplicateJsonMember(text: String): Boolean =
         false
     }
 
-internal fun hasValidJsonSyntax(text: String): Boolean =
+@HiddenFromObjC
+public fun hasValidJsonSyntax(text: String): Boolean =
     try {
         DuplicateJsonMemberScanner(text).scan()
         true

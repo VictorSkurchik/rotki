@@ -484,12 +484,17 @@ convention now owns the common JVM, Android host, and Apple target policy. `:cor
 extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
 vectors, and generator. `:core:common` now owns `Clock`, the application-visibility/controller
 contracts, and the exhaustive lifecycle policy. Its autonomous contract tests moved with it, while
-the authored lifecycle-fixture parity test remains in `:shared` beside the generated protocol assets.
+the authored lifecycle-fixture parity test remains in `:shared` beside the generated protocol fixtures.
+The first physical `:core:protocol` tranche owns only the strict Companion JSON codec,
+duplicate-member/syntax scanner, strict scalar serializers, and generated protocol vocabulary. It
+owns no DTOs, Engine-origin or protocol value types, network transport, Apple framework, or Swift
+export.
 The first `:core:security-api` tranche owns the secret-free Pairing cleanup journal plus the secure
 Snapshot-store contract and its revocable application-owned plaintext handle; its autonomous
 revocation test moved with it. Protocol-dependent device-proof, Pairing-record, and idempotency ports
 remain in `:shared` until their value types can move without a cycle. `:shared` consumes all three
-core leaves as API dependencies and exports them through the single `RotkiShared` Apple framework.
+Swift-facing core leaves as API dependencies and exports them through the single `RotkiShared` Apple
+framework; it consumes `:core:protocol` only as a non-exported implementation dependency.
 The host and Apple aggregate gates discover the modules rather than requiring additional frameworks
 or hand-maintained test lists. The root `checkModuleGraph` gate rejects
 unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
@@ -507,16 +512,17 @@ QR material or creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
 vertical remains the reference slice. Strict QR decoding, registration transport, protocol DTOs,
-Ktor boundaries, and the remaining protocol-dependent security contracts are still physically
-located inside `:shared`. Protocol now owns the strict JSON configuration and generic envelopes, while
-auth owns its success envelopes, removing the former protocol-to-network/auth package edges without
-claiming module extraction. Raw `Json` is now private behind a Kotlin-only codec hidden from
-Objective-C and Swift. Ktor wraps the sensitive encoded bytes in content with a constant, redacted
+Engine-origin and protocol value types, Ktor boundaries, and the remaining protocol-dependent
+security contracts are still physically located inside `:shared`. The narrow physical
+`:core:protocol` leaf now supplies their strict codec, duplicate-member/syntax scanner, strict scalar
+serializers, and generated vocabulary. Raw `Json` is private behind its Kotlin-only codec hidden from
+Objective-C and Swift. Ktor wraps sensitive encoded bytes in content with a constant, redacted
 diagnostic representation and no longer installs `ContentNegotiation`, so transport does not consume
-the serializer configuration directly. Neither `:core:protocol` nor `:core:network` exists as a
-physical module yet. Next extract the real `:core:protocol` leaf, then the network leaf and the
-remaining security API; only after those edges are available should the decoder and registration
-implementation move into a real
+the serializer configuration directly. This tranche deliberately does not claim DTO, origin,
+primitive, or network ownership and creates no framework or Swift export. Next move origin/value
+primitives and DTOs into the protocol leaf after making their cross-module seams explicit, then
+extract the network leaf and the remaining security API; only after those edges are available should
+the decoder and registration implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed
 Navigation Compose.

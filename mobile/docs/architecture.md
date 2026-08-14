@@ -74,24 +74,26 @@ rules without carrying private configuration.
 
 ## Target Gradle module graph
 
-The current `:core:common`, `:core:model`, `:core:security-api`,
+The current `:core:common`, `:core:model`, `:core:protocol`, `:core:security-api`,
 `:feature:pairing:domain`, `:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are
 the first migration state, not the final boundary. Create target modules only when moving or adding
 real production code. `:core:common` owns `Clock`, application visibility/controller contracts, and
 the lifecycle policy; `:core:model` owns `ExactDecimal` plus its characterization assets; and the
 first `:core:security-api` tranche owns the secret-free cleanup journal and revocable Snapshot
-secure-store contract plus its application-owned plaintext handle. Protocol-dependent security
-ports remain in `:shared` until their value dependencies move. Pairing domain owns the secret-free
+secure-store contract plus its application-owned plaintext handle. The first physical
+`:core:protocol` tranche owns only the strict Companion JSON codec, duplicate-member/syntax scanner,
+strict scalar serializers, and generated protocol vocabulary. It has no DTOs, Engine-origin or
+protocol value types, transport, Apple framework, or Swift export. Protocol-dependent security ports
+remain in `:shared` until their value dependencies move. Pairing domain owns the secret-free
 submission contract plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
-The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than depending directly on
-`CompanionFacade`; a non-exported adapter scoped to one facade supplies their current implementation.
-Strict protocol decoding and transport remain in `:shared` until their lower-level dependencies move.
-Their package direction is already untangled: protocol owns strict JSON and generic envelopes, while
-auth owns auth-specific success envelopes. Raw `Json` is now sealed behind a Kotlin-only protocol
-codec hidden from Objective-C and Swift. The Ktor transport wraps its sensitive encoded bytes in
-`OutgoingContent` with a constant, redacted diagnostic representation and no longer installs
-`ContentNegotiation`. Protocol and network are still packages inside `:shared`, not physical Gradle
-modules; the next extraction is the real `:core:protocol` module.
+The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
+depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
+current implementation. Strict QR decoding, protocol DTOs, origin/value primitives, and transport
+remain in `:shared`. Raw `Json` is sealed behind the Kotlin-only codec in `:core:protocol`, hidden
+from Objective-C and Swift. The Ktor transport wraps its sensitive encoded bytes in `OutgoingContent`
+with a constant, redacted diagnostic representation and no longer installs `ContentNegotiation`.
+The next protocol tranche moves the remaining origin/value and DTO ownership after making their
+cross-module seams explicit; the network leaf follows.
 
 ```text
 mobile/
@@ -131,6 +133,7 @@ flowchart LR
     AndroidApp --> Data
     Shared["shared Swift facade"] --> Presentation
     Shared --> Domain
+    Shared --> Protocol["core protocol implementation"]
 ```
 
 Rules:
@@ -146,7 +149,8 @@ Rules:
 - Cross-feature dependencies use the other feature's public domain/API contract. Importing another
   feature's data, DI, ViewModel, or internal UI package is forbidden.
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
-  placed there merely because both platforms need them.
+  placed there merely because both platforms need them. An implementation dependency such as
+  `:core:protocol` is not automatically exported and must not create an additional Apple framework.
 - Pairing session and attempt capabilities are opaque and scoped to the adapter instance that issued
   them. They have no material getter, are never persisted or logged, and stale or foreign
   capabilities fail closed. Recovery claims its cleanup barrier before deleting key or record

@@ -21,9 +21,12 @@ val exactGeneratedKotlinPathsByProject =
             setOf(
                 "**/GeneratedExactDecimalVectors.kt",
             ),
-        ":shared" to
+        ":core:protocol" to
             setOf(
                 "**/GeneratedProtocolVocabulary.kt",
+            ),
+        ":shared" to
+            setOf(
                 "**/GeneratedProtocolFixtures.kt",
             ),
     )
@@ -65,6 +68,12 @@ val featureModuleBoundaryRules =
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
                 forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
             ),
+        ":core:protocol" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
         ":core:common" to
             ModuleBoundaryRule(
                 allowedProjectDependencies = emptySet(),
@@ -101,6 +110,7 @@ val featureModuleBoundaryRules =
                     setOf(
                         ":core:model",
                         ":core:common",
+                        ":core:protocol",
                         ":core:security-api",
                         ":feature:pairing:domain",
                         ":feature:pairing:presentation",

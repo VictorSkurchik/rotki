@@ -52,6 +52,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.websockets)
+            implementation(project(":core:protocol"))
             implementation(project(":feature:pairing:domain"))
             implementation(project(":feature:pairing:presentation"))
         }
