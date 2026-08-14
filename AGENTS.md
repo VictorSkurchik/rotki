@@ -969,6 +969,50 @@ cohesive change.
   `develop` without a pull request. This is a temporary bootstrap policy, not a permanent
   project rule.
 
+## KMP and Native Mobile Architecture
+
+All new production code under `mobile/` follows
+[`mobile/docs/architecture.md`](mobile/docs/architecture.md) and ADRs 0090–0092. Treat these as
+review requirements, not optional style guidance.
+
+- Use feature-first Clean Architecture modules. Dependencies point inward:
+  native UI -> presentation -> domain, while data implements domain-owned ports. Presentation must
+  not depend on data implementations, and cross-feature imports must target public contracts.
+- Apply SOLID pragmatically: focused responsibilities, constructor injection, consumer-owned ports,
+  and composition. Do not introduce interfaces without a real boundary or substitution need.
+- Keep Android, Compose, Navigation, and Koin out of `commonMain`. Keep domain modules and
+  Swift-facing APIs free of Ktor, Room, and platform implementation types; Room annotations and
+  DAOs belong only to the dedicated KMP database module. Feature data modules consume narrow DAO
+  APIs and own repositories and mappers.
+- Android dependency injection uses Koin only. Assemble modules in the Android application
+  composition root, prefer constructor injection, and never use `KoinComponent`/`get()` as a
+  production service locator. iOS does not consume Koin.
+- Android UI uses Jetpack Compose with MVI and unidirectional data flow: immutable `UiState`, typed
+  `UiAction`, bounded one-shot `UiEffect`, a lifecycle-aware ViewModel, a wiring `Route`, and a
+  stateless `Screen`. Domain transitions already owned by shared state machines must not be
+  duplicated in Android reducers.
+- Android navigation uses typed Navigation Compose destinations. `NavController` stays at the
+  route/navigation-host boundary and never enters a ViewModel, shared module, or domain object.
+- UI remains custom and Material 3-based, but the complete Rotki design system is a dedicated final
+  product-design step through Claude Design after the functional destinations are stable. Until then,
+  use `RotkiTheme`, minimal semantic tokens, and feature-local components; do not prematurely build a
+  generic catalog. The final system follows Atomic Design: tokens, atoms, molecules, organisms, and
+  templates, with screens remaining feature-owned and free of DI/navigation concerns.
+- Room KMP is the only relational database technology for new mobile persistence. The dedicated KMP
+  database module exclusively owns the Room schema, entities, and DAOs; feature data modules own
+  repositories and mappers. Export schemas, write explicit migrations and tests, and never use
+  destructive migration fallback in production. Do not store credentials, private keys, Pairing
+  secrets, or a plaintext Portfolio Snapshot in Room; ADR-0021's encrypted atomic Snapshot remains
+  authoritative.
+- Add modules with real code, not placeholders. Migration from the bootstrap `:shared` module is
+  incremental and must keep JVM, Android, iOS Simulator, iosArm64 linking, and the Swift facade green.
+- Kotlin quality uses centrally configured ktlint for formatting/style and detekt for static
+  analysis. Apply both through the root Gradle quality convention to every handwritten Kotlin
+  source set and make the non-mutating aggregate `qualityCheck` part of `mobileCheck` and CI; keep
+  Android Lint and architecture dependency guards separate. Generated code is checked by its
+  generator instead; suppressions must name an exact rule, stay narrow, and be justified. ktlint has no baseline, and
+  new modules may not introduce a detekt baseline.
+
 ## Client Versioning
 
 The base `versionName` follows [Semantic Versioning](https://semver.org/) as

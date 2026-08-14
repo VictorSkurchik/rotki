@@ -16,7 +16,7 @@ changed. It does not authorize widening Companion Scope.
 | 4 | Real Android tracer bullet | **in progress — Device registration slice** |
 | 5 | Equivalent iOS/SKIE tracer bullet | **host shell only — tracer not started** |
 | 6 | Four complete native destinations | **not started** |
-| 7 | Personal-device hardening and handoff | **not started** |
+| 7 | Full design system, hardening, and handoff | **not started** |
 
 The isolated KMP foundation and native Android/iOS shells are under active development; no
 Portfolio feature or Engine data-plane implementation has started. `CONTEXT.md`, the ADRs,
@@ -37,7 +37,7 @@ flowchart LR
     O --> PF["Portfolio"]
     O --> H["History"]
     O --> S["Sources"]
-    PF --> Z["Phase 7: hardening"]
+    PF --> Z["Phase 7: Claude Design and hardening"]
     H --> Z
     S --> Z
 ```
@@ -464,6 +464,26 @@ device. The Android P0.3 spike therefore remains checked in, and Gate G2 stays o
 the new hosted `Mobile` Android-security matrix is green. Physical Android prompt,
 enrollment-change, OEM/hardware, and secure-deletion checks remain pending and are not
 substituted by emulator results.
+
+### M2.4 — Clean multimodule architecture
+
+Migrate the bootstrap `:shared` and `:androidApp` modules incrementally to the architecture in
+[`architecture.md`](architecture.md): feature-first Clean Architecture modules, a thin Swift-facing
+shared facade, Android-only Koin composition, Compose MVI/UDF, typed Navigation Compose, a custom
+Material 3 foundation, and Room KMP for approved relational persistence. Add a centrally configured
+ktlint and detekt Gradle quality convention plus the non-mutating aggregate `qualityCheck` gate before
+extracting modules. Make `mobileCheck` depend on it, keep Android Lint as a separate gate, and run
+`./gradlew --no-daemon --continue qualityCheck` before compile/tests in CI. Extract modules only with
+real production code and keep every platform buildable throughout the migration.
+
+Implementation status (2026-08-14): the central ktlint/detekt convention, `qualityCheck`,
+`qualityFormat`, `mobileCheck` dependency, and hosted CI gate are implemented. Module extraction,
+Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
+vertical is the reference slice: first extract its core/domain/data/presentation boundaries, then
+replace manual Android composition and tab selection with Koin and typed Navigation Compose. Room is
+introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot remains
+an atomic document and is never stored as plaintext database rows. The complete Atomic Design
+component system is deliberately deferred to Phase 7 and Claude Design.
 
 ## Phase 3 — Coherent Engine data plane
 
@@ -919,7 +939,7 @@ values remain accepted by the existing Full Client contract tests.
 
 ### A4.1 — Pairing vertical
 
-Build a native QR scanner, Pairing screen, manual composition root, and thin Android
+Build a native QR scanner, Pairing screen, Koin-backed Android composition root, and thin Android
 ViewModel adapter. Exercise Capability discovery, Device Key registration, proof, and
 in-memory Access Session acquisition against the real Engine. Process restart must mint a
 new Access Session from the Device Key without Pairing again.
@@ -1061,7 +1081,24 @@ Gate G6: all four destinations work online and from the permitted snapshot data 
 phones; all root states and recovery paths have native UI tests; accessibility and large
 text are usable; no tablet-specific quality gate is implied.
 
-## Phase 7 — Hardening and personal installation
+## Phase 7 — Full design system, hardening, and personal installation
+
+### U7.1 — Full design system through Claude Design
+
+After Gate G6 freezes the functional destinations and their complete loading, empty, degraded,
+offline, error, and recovery states, run one dedicated product-design step through Claude Design.
+Produce proposed Rotki foundations, semantic tokens, Atomic Design component inventory, interaction
+and motion states, accessibility specifications, and native Android/iOS guidance. Explicitly review
+and accept the proposal, version the approved specification in the repository, and only then
+implement the system over Material 3 on Android and native SwiftUI conventions on iOS without moving
+business behavior, navigation ownership, or security state into UI components.
+
+Until this step, retain the rule and target boundaries but use only the minimal `RotkiTheme` and
+feature-local components needed for functional tracer work. Do not grow a speculative reusable
+component catalog or treat temporary UI as the final visual language. Gate G6 still requires usable
+accessibility, large text, and recovery states; only final visual consistency is deferred.
+
+### U7.2 — Hardening and personal installation
 
 Run the final matrix on the owner's Docker Host and physical Android/iPhone devices:
 
@@ -1086,6 +1123,8 @@ Gate G7 / definition of done:
   observed revocation;
 - Refresh is foreground/user-driven, observable, reconnectable, and never duplicated for
   one source;
+- the Claude Design specification is implemented consistently through the native design systems,
+  including dark theme, large text, accessibility semantics, and all functional states;
 - no implementation has crossed the durable Portfolio Companion boundary.
 
 ## Recommended delivery sequence
@@ -1106,10 +1145,13 @@ Gate G7 / definition of done:
 | 12 | D3.2 History-bound measurement | Change 11 |
 | 13 | D3.3 source health and Refresh Operations | Change 11 |
 | 14 | M2.3 Android security adapters | Changes 3 and 4 |
-| 15 | D3.4 live KMP contract harness | Changes 7, 11, and 13 |
-| 16 | A4 Android Pairing-to-offline tracer | Changes 14 and 15 |
-| 17 | I5 iOS/SKIE Pairing-to-offline tracer | Gate G4 |
-| 18+ | O6, then P6/H6, then S6 | Gates G4 and G5 |
+| 15 | M2.4 Clean multimodule architecture | Changes 10 and 14 |
+| 16 | D3.4 live KMP contract harness | Changes 7, 11, and 13 |
+| 17 | A4 Android Pairing-to-offline tracer | Changes 15 and 16 |
+| 18 | I5 iOS/SKIE Pairing-to-offline tracer | Gate G4 |
+| 19 | O6, then P6/H6, then S6 | Gates G4 and G5 |
+| 20 | U7.1 full design system through Claude Design | Gate G6 |
+| 21 | U7.2 personal-device hardening and handoff | Change 20 |
 
 Changes 2 and 3 may run in parallel; Engine changes 5–9 and mobile changes 4/10/14 may
 also run in parallel subject to their declared contracts. Each change is developed on a
@@ -1135,6 +1177,7 @@ pnpm run lint
 cargo test -p starling-proxy
 
 # Shared and Android (run from mobile/)
+./gradlew qualityCheck
 ./gradlew :shared:jvmTest :shared:testAndroidHostTest
 ./gradlew :shared:iosSimulatorArm64Test :shared:linkDebugTestIosArm64 \
   :shared:linkDebugFrameworkIosArm64 :shared:linkDebugFrameworkIosSimulatorArm64
@@ -1146,8 +1189,10 @@ cargo test -p starling-proxy
 ./gradlew :shared:goldenEngineContractTest
 ./gradlew :androidApp:connectedTracerDebugAndroidTest
 
-# ExactDecimal parity source
+# Generated cross-platform contracts
 uv run python mobile/shared/tools/generate_exact_decimal_vectors.py
+uv run python tools/scripts/generate_companion_protocol_vocabulary.py --check
+uv run python mobile/shared/tools/generate_companion_protocol_fixtures.py --check
 
 # iOS build/interop shell; run from mobile/
 xcodebuild test -project iosApp/RotkiCompanion.xcodeproj -scheme RotkiCompanion \
@@ -1168,7 +1213,8 @@ Do not add any of the following while executing this roadmap:
 - public direct Engine exposure, hosted Rotki cloud, discovery, or certificate bypass;
 - mobile Profile password entry or unattended Engine unlock;
 - multiple saved Engines/Profiles, background sync, push, or offline command queue;
-- local relational database, NFTs, staking-specific views, or deep DeFi views;
+- an unbounded or Engine-authoritative local database, NFTs, staking-specific views, or deep DeFi
+  views; Room KMP is limited to bounded Client-owned relational state under ADR-0092;
 - Compose shared UI, tablet-specific UX, store distribution, telemetry, or automatic
   updates;
 - support for direct Python development or Electron-managed Engine Hosts.

@@ -1,0 +1,50 @@
+config:
+  validation: true
+  warningsAsErrors: true
+
+# The rollout thresholds sit just above the reviewed pre-modular implementation.
+# They keep regressions blocking without freezing existing debt in a baseline.
+complexity:
+  ComplexCondition:
+    allowedConditions: 12
+  CyclomaticComplexMethod:
+    allowedComplexity: 45
+  LargeClass:
+    allowedLines: 1500
+  LongMethod:
+    allowedLines: 240
+  LongParameterList:
+    allowedFunctionParameters: 15
+    allowedConstructorParameters: 10
+  TooManyFunctions:
+    allowedFunctionsPerFile: 50
+    allowedFunctionsPerClass: 50
+    allowedFunctionsPerInterface: 50
+    allowedFunctionsPerObject: 50
+    allowedFunctionsPerEnum: 50
+
+coroutines:
+  InjectDispatcher:
+    # Dispatcher injection becomes mandatory with the planned Koin composition-root migration.
+    active: false
+
+naming:
+  FunctionNaming:
+    # ktlint applies the stricter lowercase-or-@Composable convention.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  MatchingDeclarationName:
+    # The scanner file intentionally co-locates its controller and one public Composable entry point.
+    excludes:
+      - '**/PairingCodeScanner.kt'
+
+style:
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 3
+  MagicNumber:
+    # Protocol and crypto numeric-domain review is more useful than lexical literals.
+    active: false
+  MaxLineLength:
+    # ktlint owns the single 120-column formatting policy.
+    active: false
+  ReturnCount:
+    max: 30

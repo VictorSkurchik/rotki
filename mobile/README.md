@@ -3,6 +3,10 @@
 `mobile/` is an isolated Gradle build. It does not orchestrate or alter the repository's
 Python, pnpm, or Cargo builds.
 
+New production code follows the mandatory
+[KMP and native architecture rules](docs/architecture.md). The existing bootstrap modules are
+migrated incrementally to that target rather than through a build-breaking rewrite.
+
 The production build currently contains:
 
 - `shared`: project-owned domain and behavior for Android, JVM test execution,
@@ -20,6 +24,16 @@ Run the host-side Android and shared checks from this directory:
 ```bash
 ./gradlew --no-daemon mobileCheck
 ```
+
+`mobileCheck` includes the non-mutating ktlint/detekt gate. Run it directly while iterating on Kotlin
+quality, or apply the canonical formatter locally:
+
+```bash
+./gradlew --no-daemon --continue qualityCheck
+./gradlew --no-daemon qualityFormat
+```
+
+`qualityFormat` is a local developer command and never runs in CI.
 
 Verify the checked-in cross-platform contract fixtures from the repository root:
 
