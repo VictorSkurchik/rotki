@@ -45,14 +45,21 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import org.rotki.mobile.android.ui.UiTags
 import org.rotki.mobile.android.ui.navigation.HistoryRoute
 import org.rotki.mobile.android.ui.navigation.OverviewRoute
 import org.rotki.mobile.android.ui.navigation.PortfolioRoute
 import org.rotki.mobile.android.ui.navigation.SourcesRoute
-import org.rotki.mobile.core.state.CompanionRootState
-import org.rotki.mobile.core.state.CompanionStatus
-import org.rotki.mobile.core.state.SnapshotCoverage
+
+private const val HOME_SHELL_TEST_TAG: String = "home_shell"
+
+/** Presentation-only connection state; it never grants access to the authenticated graph. */
+public enum class HomeConnectionBannerState {
+    CONNECTED,
+    REFRESHING_COMPLETE,
+    REFRESHING_PARTIAL,
+    DEGRADED,
+    UNREACHABLE,
+}
 
 private enum class HomeDestination(
     val label: String,
@@ -81,17 +88,20 @@ private enum class HomeDestination(
     ),
 }
 
+/**
+ * Renders the authenticated home graph after the application-level authority guard has passed.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CompanionHome(
-    status: CompanionStatus,
+public fun CompanionHome(
+    bannerState: HomeConnectionBannerState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = currentBackStackEntry?.destination
     Scaffold(
-        modifier = modifier.testTag(UiTags.HOME_SHELL),
+        modifier = modifier.testTag(HOME_SHELL_TEST_TAG),
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -132,7 +142,7 @@ internal fun CompanionHome(
                     .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            ConnectionBanner(status)
+            ConnectionBanner(bannerState)
             HomeNavHost(navController)
         }
     }
@@ -188,24 +198,37 @@ private fun <T : Any> NavHostController.navigateTopLevel(route: T) {
 }
 
 @Composable
-private fun ConnectionBanner(status: CompanionStatus) {
+private fun ConnectionBanner(state: HomeConnectionBannerState) {
     val banner =
-        when (status.rootState) {
-            CompanionRootState.Refreshing -> {
+        when (state) {
+            HomeConnectionBannerState.CONNECTED -> {
                 BannerCopy(
-                    label = "Refreshing",
-                    detail =
-                        if (status.snapshotCoverage == SnapshotCoverage.Complete) {
-                            "Keeping your last complete portfolio visible."
-                        } else {
-                            "Keeping available last-known values visible."
-                        },
+                    label = "Connected securely",
+                    detail = "Your Engine remains authoritative.",
                     container = MaterialTheme.colorScheme.primaryContainer,
                     foreground = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
 
-            CompanionRootState.Degraded -> {
+            HomeConnectionBannerState.REFRESHING_COMPLETE -> {
+                BannerCopy(
+                    label = "Refreshing",
+                    detail = "Keeping your last complete portfolio visible.",
+                    container = MaterialTheme.colorScheme.primaryContainer,
+                    foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            HomeConnectionBannerState.REFRESHING_PARTIAL -> {
+                BannerCopy(
+                    label = "Refreshing",
+                    detail = "Keeping available last-known values visible.",
+                    container = MaterialTheme.colorScheme.primaryContainer,
+                    foreground = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            HomeConnectionBannerState.DEGRADED -> {
                 BannerCopy(
                     label = "Some sources need attention",
                     detail = "Last-known values are preserved where possible.",
@@ -214,21 +237,12 @@ private fun ConnectionBanner(status: CompanionStatus) {
                 )
             }
 
-            CompanionRootState.Unreachable -> {
+            HomeConnectionBannerState.UNREACHABLE -> {
                 BannerCopy(
                     label = "Showing offline snapshot",
                     detail = "Rotki will reconnect while this app is open.",
                     container = MaterialTheme.colorScheme.surfaceVariant,
                     foreground = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            else -> {
-                BannerCopy(
-                    label = "Connected securely",
-                    detail = "Your Engine remains authoritative.",
-                    container = MaterialTheme.colorScheme.primaryContainer,
-                    foreground = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
         }

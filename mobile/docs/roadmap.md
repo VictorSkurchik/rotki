@@ -529,14 +529,15 @@ admission cannot be mistaken for stale material and silently removed. Domain and
 store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
 creates an Apple framework.
 
-The first Android-only Koin and typed Navigation Compose tranche is implemented inside
-`:androidApp`. The application starts one Koin process composition, preserving one facade/security
-graph while its biometric broker explicitly binds and releases the current Activity. The authenticated
-placeholder shell now uses typed, argument-free Overview, Portfolio, History, and Sources
-destinations instead of a saved integer tab index. Privacy and the fail-closed root-state decision
-remain outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be
-bypassed through a retained back stack. The target physical `android/platform`,
-`android/navigation`, and Android feature modules remain incremental follow-up work.
+The Android application starts one Koin process composition, preserving one facade/security graph
+while its biometric broker explicitly binds and releases the current Activity. The physical
+`:android:navigation` leaf now owns the authenticated placeholder host and its typed, argument-free
+Overview, Portfolio, History, and Sources destinations instead of a saved integer tab index. It has
+no project dependencies; `:androidApp` maps authoritative shared status to its narrow
+`HomeConnectionBannerState` input. Privacy and the fail-closed root-state decision remain in the app
+outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be bypassed
+through a retained back stack. The target physical `android/platform` and Android feature modules
+remain incremental follow-up work.
 
 The existing Auth/Pairing vertical remains the reference slice. The real
 `:feature:pairing:data` module owns strict QR decoding, registration transport DTOs/mapping,
@@ -1018,7 +1019,9 @@ Implementation status (2026-08-14): the mobile Client now reaches durable Device
 registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery
 screens, a thin ViewModel, immediate privacy cover, one Koin-backed process composition, and typed
 Navigation Compose destinations for the Overview/Portfolio/History/Sources placeholder shell. The
-fail-closed privacy/root-state guard remains outside `NavHost`. `:feature:pairing:data` strictly
+project-dependency-free `:android:navigation` leaf owns that authenticated host, while the
+fail-closed privacy/root-state guard and authoritative status mapping remain in `:androidApp`
+outside `NavHost`. `:feature:pairing:data` strictly
 parses the QR and owns protocol Capability discovery plus the idempotent registration request over
 Ktor. The stable shared wrapper coordinates one-shot authority, Android Device Key creation, bound
 response validation, and durable Pairing-record persistence before committing UI state. Accepted

@@ -5,6 +5,7 @@ import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.android.ui.pairing.PairingScreen
 import org.rotki.mobile.android.ui.privacy.PrivacyCover
 import org.rotki.mobile.android.ui.shell.CompanionHome
+import org.rotki.mobile.android.ui.shell.HomeConnectionBannerState
 import org.rotki.mobile.android.ui.state.RecoveryScreen
 import org.rotki.mobile.android.ui.theme.RotkiTheme
 import org.rotki.mobile.auth.PairingPresentation
@@ -63,7 +64,6 @@ private fun CompanionContent(
     onRetryConnection: () -> Unit,
     scanner: @Composable () -> Unit,
 ) {
-    val hasSnapshot = status.snapshotCoverage != SnapshotCoverage.Absent
     if (pairingConnectionState == PairingConnectionUiState.LOCAL_CLEANUP_INCOMPLETE ||
         pairingConnectionState == PairingConnectionUiState.CLEANING_UP
     ) {
@@ -170,8 +170,9 @@ private fun CompanionContent(
         CompanionRootState.Degraded,
         CompanionRootState.Unreachable,
         -> {
-            if (hasSnapshot) {
-                CompanionHome(status = status)
+            val bannerState = status.toHomeConnectionBannerState()
+            if (bannerState != null) {
+                CompanionHome(bannerState = bannerState)
             } else {
                 RecoveryScreen(
                     symbol = if (status.rootState == CompanionRootState.Unreachable) "…" else "↻",
@@ -201,6 +202,44 @@ private fun CompanionContent(
                         },
                 )
             }
+        }
+    }
+}
+
+internal fun CompanionStatus.toHomeConnectionBannerState(): HomeConnectionBannerState? {
+    if (snapshotCoverage == SnapshotCoverage.Absent) {
+        return null
+    }
+    return when (rootState) {
+        CompanionRootState.Online -> {
+            HomeConnectionBannerState.CONNECTED
+        }
+
+        CompanionRootState.Refreshing -> {
+            when (snapshotCoverage) {
+                SnapshotCoverage.Complete -> HomeConnectionBannerState.REFRESHING_COMPLETE
+                SnapshotCoverage.Degraded -> HomeConnectionBannerState.REFRESHING_PARTIAL
+                SnapshotCoverage.Absent -> null
+            }
+        }
+
+        CompanionRootState.Degraded -> {
+            HomeConnectionBannerState.DEGRADED
+        }
+
+        CompanionRootState.Unreachable -> {
+            HomeConnectionBannerState.UNREACHABLE
+        }
+
+        CompanionRootState.Connecting,
+        CompanionRootState.DeviceLocked,
+        CompanionRootState.EngineLocked,
+        CompanionRootState.Incompatible,
+        CompanionRootState.ProfileMismatch,
+        CompanionRootState.Revoked,
+        CompanionRootState.Unpaired,
+        -> {
+            null
         }
     }
 }

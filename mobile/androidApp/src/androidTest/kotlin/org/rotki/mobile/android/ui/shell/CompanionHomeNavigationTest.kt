@@ -5,13 +5,12 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
-import org.rotki.mobile.core.state.CompanionRootState
-import org.rotki.mobile.core.state.CompanionStatus
-import org.rotki.mobile.core.state.SnapshotCoverage
+import org.rotki.mobile.android.ui.UiTags
 
 class CompanionHomeNavigationTest {
     @get:Rule
@@ -20,9 +19,10 @@ class CompanionHomeNavigationTest {
     @Test
     fun startsAtOverviewAndNavigatesToEveryTopLevelRoute() {
         composeRule.setContent {
-            CompanionHome(status())
+            CompanionHome(HomeConnectionBannerState.CONNECTED)
         }
 
+        composeRule.onNodeWithTag(UiTags.HOME_SHELL).assertIsDisplayed()
         assertSelectedDestination(label = "Overview", title = "Portfolio overview")
 
         listOf(
@@ -39,7 +39,7 @@ class CompanionHomeNavigationTest {
     @Test
     fun reselectIsSingleTopAndBackFromSecondaryReturnsToOverview() {
         composeRule.setContent {
-            CompanionHome(status())
+            CompanionHome(HomeConnectionBannerState.CONNECTED)
         }
         composeRule.onNodeWithText("History").performClick()
         composeRule.onNodeWithText("History").performClick()
@@ -55,7 +55,7 @@ class CompanionHomeNavigationTest {
     fun authorizedDestinationRestoresFromSavedInstanceState() {
         val restorationTester = StateRestorationTester(composeRule)
         restorationTester.setContent {
-            CompanionHome(status())
+            CompanionHome(HomeConnectionBannerState.CONNECTED)
         }
         composeRule.onNodeWithText("History").performClick()
         assertSelectedDestination(label = "History", title = "Recent activity")
@@ -73,9 +73,3 @@ class CompanionHomeNavigationTest {
         composeRule.onNodeWithText(title).assertIsDisplayed()
     }
 }
-
-private fun status(): CompanionStatus =
-    CompanionStatus(
-        rootState = CompanionRootState.Online,
-        snapshotCoverage = SnapshotCoverage.Complete,
-    )

@@ -7,6 +7,7 @@ import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
 
 plugins {
     alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
     alias(libs.plugins.android.multiplatform.library) apply false
     alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.detekt)
@@ -67,7 +68,27 @@ val featureModuleBoundaryRules =
     mapOf(
         ":androidApp" to
             ModuleBoundaryRule(
-                allowedProjectDependencies = setOf(":shared"),
+                allowedProjectDependencies = setOf(":android:navigation", ":shared"),
+            ),
+        ":android:navigation" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = emptySet(),
+                forbiddenGroupPrefixes =
+                    setOf(
+                        "androidx.biometric",
+                        "androidx.camera",
+                        "androidx.room",
+                        "com.google.mlkit",
+                        "io.insert-koin",
+                        "io.ktor",
+                    ),
+                forbiddenPluginIds =
+                    setOf(
+                        "com.android.application",
+                        "com.android.kotlin.multiplatform.library",
+                        "org.jetbrains.compose",
+                        "org.jetbrains.kotlin.multiplatform",
+                    ),
             ),
         ":core:model" to
             ModuleBoundaryRule(
@@ -178,9 +199,14 @@ allprojects {
         }
     }
 
-    pluginManager.withPlugin("com.android.application") {
-        extensions.configure<KtlintExtension> {
-            android.set(true)
+    listOf(
+        "com.android.application",
+        "com.android.library",
+    ).forEach { androidPluginId ->
+        pluginManager.withPlugin(androidPluginId) {
+            extensions.configure<KtlintExtension> {
+                android.set(true)
+            }
         }
     }
 
@@ -303,6 +329,9 @@ tasks.register("mobileCheck") {
     description = "Runs host-side KMP and Android checks available on the current OS."
     dependsOn(checkModuleGraph, qualityCheck)
     dependsOn(
+        ":android:navigation:assembleDebug",
+        ":android:navigation:lintDebug",
+        ":android:navigation:test",
         ":androidApp:test",
         ":androidApp:assembleDebug",
         ":androidApp:lintDevDebug",

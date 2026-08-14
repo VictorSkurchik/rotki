@@ -76,8 +76,8 @@ rules without carrying private configuration.
 
 The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
 `:core:security-api`, test-only `:core:testing`, `:feature:pairing:domain`,
-`:feature:pairing:data`, `:feature:pairing:presentation`, `:shared`, and `:androidApp` modules are the
-first migration state, not the final boundary. Create target modules
+`:feature:pairing:data`, `:feature:pairing:presentation`, `:android:navigation`, `:shared`, and
+`:androidApp` modules are the first migration state, not the final boundary. Create target modules
 only when moving or adding real production code. `:core:common` owns `Clock`, application
 visibility/controller contracts, and the lifecycle policy; `:core:model` owns `ExactDecimal` plus
 its characterization assets; and the completed `:core:security-api` boundary owns the Pairing
@@ -115,15 +115,15 @@ transport wraps its sensitive encoded bytes in `OutgoingContent` with a constant
 diagnostic representation and does not install `ContentNegotiation`.
 The Engine-origin extraction preserves the established canonical bytes and validation precedence
 without defining a new host grammar.
-The first Android composition/navigation tranche remains physically in `:androidApp`: its
-application starts Koin exactly once and retains the security/session graph for the process. Its
-biometric broker binds the current Activity explicitly and releases it in `onDestroy` instead of
-constructor-capturing an Activity for the process lifetime. The authenticated placeholder shell
-replaces its local tab index with four typed, argument-free Navigation Compose destinations. Privacy
-plus root Pairing, lock, recovery,
-incompatible, and revoked selection remains a fail-closed state guard outside `NavHost`, so a saved
-back stack cannot bypass it. The target `android/*` modules, Room KMP owner, and complete design
-system have not been created yet.
+The Android application starts Koin exactly once and retains the security/session graph for the
+process. Its biometric broker binds the current Activity explicitly and releases it in `onDestroy`
+instead of constructor-capturing an Activity for the process lifetime. The physical
+`:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four typed,
+argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative shared
+status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,
+lock, recovery, incompatible, and revoked selection remains a fail-closed state guard in
+`:androidApp` outside `NavHost`, so a saved back stack cannot bypass it. Android platform/feature
+modules, the Room KMP owner, and the complete design system have not been created yet.
 
 ```text
 mobile/
@@ -154,6 +154,7 @@ Expected dependency direction:
 
 ```mermaid
 flowchart LR
+    AndroidApp["androidApp composition root"] --> AndroidNavigation["android navigation leaf"]
     AndroidApp["androidApp composition root"] --> AndroidFeature["Android feature UI"]
     AndroidFeature --> Presentation["feature presentation"]
     Presentation --> Domain["feature domain"]
@@ -181,6 +182,8 @@ Rules:
   call DAOs, HTTP clients, or repository implementations directly.
 - `androidApp` and the iOS composition root are allowed to know concrete implementations. Feature
   code is not.
+- `android:navigation` is a project-dependency-free Android leaf. It accepts only UI-safe root input
+  selected by the application and never imports shared/KMP state, Koin, data, or platform adapters.
 - Cross-feature dependencies use the other feature's public domain/API contract. Importing another
   feature's data, DI, ViewModel, or internal UI package is forbidden.
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
@@ -344,6 +347,9 @@ Rules for the final system and its implementation:
   route strings assembled in feature code are forbidden.
 - `android/navigation` owns the root graph and top-level destinations. Each Android feature exposes
   a graph/destination registration contract rather than editing another feature's graph internals.
+- The physical `:android:navigation` bootstrap leaf currently owns the authenticated root graph. Its
+  only public state input is `HomeConnectionBannerState`; authoritative `CompanionStatus` mapping
+  remains in `:androidApp`, before the host is composed.
 - `NavController` is owned by the route/navigation host. It is not passed into ViewModels, shared
   state machines, domain objects, or Composables below the route boundary.
 - ViewModels emit state or typed effects; the route maps them to navigation operations.
@@ -416,9 +422,11 @@ Do not perform a big-bang package move. Use this order:
    process-scoped platform/Pairing composition is implemented inside `:androidApp`; physical Android
    feature/platform modules remain incremental follow-up work.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
-   migrate Pairing and the four-tab shell. The four authenticated placeholder destinations are now
-   typed and navigation-backed, while the security root guard remains outside `NavHost`; Pairing/root
-   graph migration and the full component catalog remain deferred.
+   migrate Pairing and the four-tab shell. The four authenticated placeholder destinations and their
+   host are now typed, navigation-backed, and physically owned by the project-dependency-free
+   `:android:navigation` leaf. The security root guard and authoritative state mapping remain in
+   `:androidApp` outside `NavHost`; Pairing/root graph migration and the full component catalog remain
+   deferred.
 5. Create the Room KMP module only with its first approved relational use case.
 6. Build Overview, Portfolio, History, and Sources directly in the target module shape.
 7. After the functional destinations and Gate G6 are stable, run a dedicated Claude Design step and
