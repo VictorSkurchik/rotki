@@ -17,10 +17,10 @@ The production build currently contains:
   generated vectors, and no UI or platform implementation;
 - `core:protocol`: a platform-neutral KMP leaf containing the strict Companion JSON codec,
   duplicate-member/syntax scanner, strict scalar serializers, generated wire vocabulary, and
-  fixed-width protocol value types, plus the bounded HTTP control-envelope decoder, discovery
-  negotiation, authored error mapping, and the bounded WebSocket notification decoder with its typed
-  refresh/snapshot notification model. It owns no Auth DTOs, Engine-origin parsing, transport, or
-  Apple framework of its own;
+  fixed-width protocol value types and the Ktor-free Engine-origin parser, plus the bounded HTTP
+  control-envelope decoder, discovery negotiation, authored error mapping, and the bounded WebSocket
+  notification decoder with its typed refresh/snapshot notification model. It owns no Auth DTOs,
+  transport, or Apple framework of its own;
 - `core:security-api`: the first platform-neutral security-contract tranche. It owns the
   secret-free Pairing cleanup journal plus the secure Snapshot-store contract and its revocable
   application-owned plaintext handle, with no native implementation or infrastructure dependency;

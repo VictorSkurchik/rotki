@@ -50,6 +50,30 @@ final class PairingInteropTests: XCTestCase {
         XCTAssertTrue(rejected.reason === ProtocolValueRejection.invalidLength)
     }
 
+    func testEngineOriginSurfaceRemainsExportedByUmbrellaFramework() {
+        let acceptedOutcome: any EngineOriginParseOutcome = EngineOrigin.companion.parse(
+            candidate: "https://rotki.example:4242"
+        )
+        guard let accepted = acceptedOutcome as? EngineOriginParseOutcomeAccepted else {
+            XCTFail("Expected the exported accepted engine-origin outcome type")
+            return
+        }
+
+        XCTAssertEqual(accepted.origin.canonical, "https://rotki.example:4242")
+        XCTAssertEqual(accepted.origin.restApiBase, "https://rotki.example:4242/api/1")
+        XCTAssertEqual(accepted.origin.webSocketEndpoint, "wss://rotki.example:4242/ws")
+        XCTAssertEqual(accepted.origin.description(), "EngineOrigin(redacted)")
+
+        let rejectedOutcome: any EngineOriginParseOutcome = EngineOrigin.companion.parse(
+            candidate: "https://rotki.example:443"
+        )
+        guard let rejected = rejectedOutcome as? EngineOriginParseOutcomeRejected else {
+            XCTFail("Expected the exported rejected engine-origin outcome type")
+            return
+        }
+        XCTAssertTrue(rejected.reason === EngineOriginRejection.defaultPortForbidden)
+    }
+
     func testPairingFlowAdapterRemainsExportedByUmbrellaFramework() {
         let facade = CompanionFacade()
         let flow = facade.pairingFlow()

@@ -7,19 +7,23 @@ This platform-neutral KMP leaf is a deliberately narrow protocol extraction. It 
 - strict JSON scalar serializers;
 - the generated protocol vocabulary;
 - fixed-width protocol IDs, credentials, signatures, public keys, and their fail-closed parsers;
+- the Ktor-free `EngineOrigin` value and parser, preserving the established canonical HTTPS-origin
+  contract and REST/WebSocket endpoint derivation;
 - generic HTTP control envelopes, bounded preflight decoding, discovery negotiation, and authored
   error mapping;
 - bounded WebSocket notification decoding and the typed refresh/snapshot notification model.
 
-Auth DTOs, Engine-origin parsing, and network transport remain in `:shared` for later migration
-tranches. This module has no project, Ktor, database, Compose, Koin, native UI, or platform
-implementation dependency.
+Auth DTOs and network transport remain in `:shared` for later migration tranches. This module has no
+project, Ktor, database, Compose, Koin, native UI, or platform implementation dependency. The
+Engine-origin extraction preserves the existing accepted canonical bytes and validation precedence;
+it does not introduce a new DNS, IP, or IPv6 host grammar.
 
-`DeviceSessionId`, `IdempotencyKey`, `P1363Signature`, `X963PublicKey`, and their parse outcomes keep
-their established native API and are exported through the single `RotkiShared` umbrella. Secret
-credentials, raw-byte helpers, codec mechanics, and generated vocabulary are Kotlin-only seams
-hidden from Objective-C and Swift. The WebSocket decoder and typed notification graph are also
-Kotlin-only and hidden from Objective-C and Swift. This module creates no Apple framework of its own.
+`EngineOrigin`, `DeviceSessionId`, `IdempotencyKey`, `P1363Signature`, `X963PublicKey`, and their
+parse outcomes keep their established native API and are exported through the single `RotkiShared`
+umbrella. Secret credentials, raw-byte helpers, codec mechanics, and generated vocabulary are
+Kotlin-only seams hidden from Objective-C and Swift. The WebSocket decoder and typed notification
+graph are also Kotlin-only and hidden from Objective-C and Swift. This module creates no Apple
+framework of its own.
 
 Codec input text, parsed elements, and encoded bytes may contain credentials or other sensitive
 protocol material. Pass them only to the bounded decoder or redacted transport that owns the next
