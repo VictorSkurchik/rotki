@@ -1,3 +1,7 @@
+import dev.detekt.gradle.Detekt
+import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+
 plugins {
     alias(libs.plugins.android.library)
 }
@@ -39,6 +43,10 @@ android {
             }
         }
     }
+
+    sourceSets {
+        getByName("androidTest").assets.directories.add("../../protocol/v1")
+    }
 }
 
 dependencies {
@@ -53,4 +61,20 @@ dependencies {
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.junit)
+}
+
+tasks.withType<Detekt>().configureEach {
+    val variantName =
+        when (name) {
+            "detektDebugUnitTest" -> "Debug"
+            "detektReleaseUnitTest" -> "Release"
+            else -> return@configureEach
+        }
+    val kotlinCompile = tasks.named<KotlinJvmCompile>("compile${variantName}UnitTestKotlin")
+    val javaCompile = tasks.named<JavaCompile>("compile${variantName}UnitTestJavaWithJavac")
+    dependsOn(javaCompile)
+    classpath.setFrom(
+        kotlinCompile.map { it.libraries },
+        javaCompile.flatMap { it.destinationDirectory },
+    )
 }

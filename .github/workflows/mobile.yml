@@ -124,6 +124,8 @@ jobs:
           lifecycle_holder_api="$RUNNER_TEMP/android-companion-lifecycle-holder-api.txt"
           record_holder_api="$RUNNER_TEMP/android-pairing-record-store-api.txt"
           cleanup_holder_api="$RUNNER_TEMP/android-pairing-cleanup-journal-api.txt"
+          device_proof_holder_api="$RUNNER_TEMP/android-device-proof-signer-api.txt"
+          idempotency_holder_api="$RUNNER_TEMP/android-idempotency-key-generator-api.txt"
           r_txt="$RUNNER_TEMP/android-platform-R.txt"
           test -f "$aar"
 
@@ -187,6 +189,8 @@ jobs:
           expected_public_types="$(
             printf '%s\n' \
               'public final class org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycleKt' \
+              'public final class org.rotki.mobile.android.security.AndroidDeviceProofSignerKt' \
+              'public final class org.rotki.mobile.android.security.AndroidIdempotencyKeyGeneratorKt' \
               'public final class org.rotki.mobile.android.storage.AndroidPairingCleanupJournalKt' \
               'public final class org.rotki.mobile.android.storage.AndroidPairingRecordStoreKt' \
               'public interface org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle' \
@@ -236,6 +240,23 @@ jobs:
              [[ "$(grep -Fc "$cleanup_factory" "$cleanup_holder_api")" -ne 1 ]]; then
             echo '::error::Android platform storage factory API changed'
             cat "$record_holder_api" "$cleanup_holder_api"
+            exit 1
+          fi
+
+          device_proof_factory='public static final org.rotki.mobile.core.ports.DeviceProofSigner createAndroidDeviceProofSigner();'
+          idempotency_factory='public static final org.rotki.mobile.core.ports.IdempotencyKeyGenerator createAndroidIdempotencyKeyGenerator();'
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.security.AndroidDeviceProofSignerKt \
+            > "$device_proof_holder_api"
+          javap -classpath "$classes_jar" -public \
+            org.rotki.mobile.android.security.AndroidIdempotencyKeyGeneratorKt \
+            > "$idempotency_holder_api"
+          if [[ "$(grep -Ec '^  public ' "$device_proof_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$device_proof_factory" "$device_proof_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Ec '^  public ' "$idempotency_holder_api")" -ne 1 ]] || \
+             [[ "$(grep -Fc "$idempotency_factory" "$idempotency_holder_api")" -ne 1 ]]; then
+            echo '::error::Android platform security factory API changed'
+            cat "$device_proof_holder_api" "$idempotency_holder_api"
             exit 1
           fi
 
@@ -368,6 +389,9 @@ jobs:
           forbidden_pattern+='|androidx_navigation|org_rotki_mobile_android_navigation|AndroidNavigation|Nav(Host(Controller)?|Controller|BackStackEntry)|OverviewRoute|PortfolioRoute|HistoryRoute|SourcesRoute|HomeDestination|HomeNavHost|CompanionHome|HomeConnectionBanner(State)?'
           forbidden_pattern+='|org_rotki_mobile_android_platform|AndroidPlatform|AndroidCompanionLifecycle|createAndroidCompanionLifecycle|DefaultAndroidCompanionLifecycle|CompanionLifecycleController'
           forbidden_pattern+='|org_rotki_mobile_android_storage|AndroidPairing(RecordStore|CleanupJournal|Storage)|createAndroidPairing(RecordStore|CleanupJournal)|PairingRecord(Codec|DecodeOutcome)|pairing-record\.bin|pairing-cleanup\.marker|rotki-pairing-cleanup-v1'
+          forbidden_pattern+='|org_rotki_mobile_android_security|createAndroid(DeviceProofSigner|IdempotencyKeyGenerator)|Android(DeviceProofSigner|IdempotencyKeyGenerator|SigningKey(Store|Material)|P256Encoding)|DeviceSigningKeyStore|IdempotencyRandomFill'
+          forbidden_pattern+='|ANDROID_DEVICE_PROOF_SIGNING_ALIAS|ANDROID_KEY_STORE_PROVIDER|SIGNATURE_ALGORITHM|P256_CURVE_NAME|P256_KEY_SIZE_BITS|CERTIFICATE_SUBJECT|CERTIFICATE_NOT_(BEFORE|AFTER)_MILLIS|IDEMPOTENCY_KEY_BYTE_COUNT|GENERATION_FAILURE_MESSAGE'
+          forbidden_pattern+='|rotki_companion_device_proof_signing_v1|AndroidKeyStore|SHA256withECDSA|secp256r1|CN=rotki Companion Device Key'
           forbidden_pattern+='|swift_name\("DeviceSession"\)|swift_name\("DeviceLabel"\)'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
             echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform internals leaked into the Swift framework header'

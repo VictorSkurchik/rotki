@@ -502,11 +502,11 @@ The completed `:core:security-api` boundary owns the secret-free Pairing cleanup
 signer, idempotency-key generator, redacted Pairing-record persistence contract, and secure
 Snapshot-store contract with its revocable application-owned plaintext handle. It depends only on
 the Engine-origin, session-ID, idempotency-key, signature, and public-key value types in
-`:core:protocol`. Android Pairing-record and cleanup-journal implementations now live behind narrow
-factories in `:android:platform`; cryptographic, biometric, snapshot, and idempotency implementations
-remain in `:androidApp`. `:shared` consumes all four Swift-facing core leaves as API dependencies and
-exports their stable public surfaces through the single `RotkiShared` Apple framework;
-`:core:network` is deliberately not exported.
+`:core:protocol`. Android Pairing-record, cleanup-journal, Device-proof, and idempotency
+implementations now live behind narrow port-returning factories in `:android:platform`; biometric
+and Snapshot implementations remain in `:androidApp`. `:shared` consumes all four Swift-facing core
+leaves as API dependencies and exports their stable public surfaces through the single
+`RotkiShared` Apple framework; `:core:network` is deliberately not exported.
 The host and Apple aggregate gates discover the modules rather than requiring additional frameworks
 or hand-maintained test lists. The root `checkModuleGraph` gate rejects
 unregistered modules, forbidden project edges, infrastructure dependencies, and platform plugins at
@@ -533,23 +533,24 @@ creates an Apple framework.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
-`:android:platform` module now owns the lifecycle bridge plus the durable Pairing record and cleanup
-journal. Public factories return only `:core:security-api` ports; the `AtomicFile` implementations,
-strict record codec, and file constants are private. Existing backup-excluded filenames and bytes stay
-unchanged, while separate process-wide locks serialize all factory instances for each canonical
-file. `:androidApp` retains one storage pair and still owns process composition,
-Activity/Application hooks, the screen-off receiver, `FLAG_SECURE`, authoritative state, biometric
-and cryptographic policy, and permissions. It supplies process-safe callbacks to the lifecycle
-bridge and preserves startup reconciliation and cleanup order. The platform leaf has no `:shared`
-edge and creates no Apple framework.
+`:android:platform` module now owns the lifecycle bridge plus the durable Pairing record,
+cleanup-journal, Android Keystore Device-proof, and secure-random idempotency adapters. Public
+factories return only `:core:security-api` ports; `AtomicFile`, record codec, signing-store,
+P-256/DER, random-fill implementations, and constants are private. Existing backup-excluded files,
+key alias/provider/policy, and protocol bytes stay unchanged, while process-wide locks serialize
+factory instances sharing canonical resources. `:androidApp` retains one storage pair, signer, and
+idempotency generator and still owns process composition, Activity/Application hooks, the screen-off
+receiver, `FLAG_SECURE`, authoritative state, biometric/Snapshot policy, and permissions. It
+supplies process-safe callbacks to the lifecycle bridge and preserves startup reconciliation and
+cleanup order. The platform leaf has no `:shared` edge and creates no Apple framework.
 
 The physical `:android:navigation` leaf now owns the authenticated placeholder host and its typed,
 argument-free Overview, Portfolio, History, and Sources destinations instead of a saved integer tab
 index. It has no project dependencies; `:androidApp` maps authoritative shared status to its narrow
 `HomeConnectionBannerState` input. Privacy and the fail-closed root-state decision remain in the app
 outside `NavHost`, so Pairing, lock, recovery, incompatible, and revoked states cannot be bypassed
-through a retained back stack. Remaining Android platform adapters and Android feature modules
-remain incremental follow-up work.
+through a retained back stack. Remaining biometric/Snapshot/permission adapters and Android feature
+modules remain incremental follow-up work.
 
 The existing Auth/Pairing vertical remains the reference slice. The real
 `:feature:pairing:data` module owns strict QR decoding, registration transport DTOs/mapping,

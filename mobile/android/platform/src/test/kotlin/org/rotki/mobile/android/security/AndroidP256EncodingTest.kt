@@ -21,7 +21,7 @@ class AndroidP256EncodingTest {
                 BigInteger.valueOf(127),
                 BigInteger.valueOf(128),
                 BigInteger.ONE.shiftLeft(255),
-                AndroidP256Encoding.p256Order.subtract(BigInteger.ONE),
+                P256_ORDER.subtract(BigInteger.ONE),
             )
 
         components.forEach { r ->
@@ -29,8 +29,8 @@ class AndroidP256EncodingTest {
                 val p1363 = fixed(r) + fixed(s)
                 assertArrayEquals(
                     p1363,
-                    AndroidP256Encoding.derEcdsaToP1363(
-                        AndroidP256Encoding.p1363ToDerEcdsa(p1363),
+                    AndroidSecurityTestBridge.derEcdsaToP1363(
+                        AndroidSecurityTestBridge.p1363ToDerEcdsa(p1363),
                     ),
                 )
             }
@@ -40,7 +40,7 @@ class AndroidP256EncodingTest {
     @Test
     fun `DER parser rejects malformed and malleable encodings`() {
         val valid =
-            AndroidP256Encoding.p1363ToDerEcdsa(
+            AndroidSecurityTestBridge.p1363ToDerEcdsa(
                 fixed(BigInteger.ONE) + fixed(BigInteger.valueOf(2)),
             )
         val malformed =
@@ -58,7 +58,7 @@ class AndroidP256EncodingTest {
 
         malformed.forEach { signature ->
             assertThrows(IllegalArgumentException::class.java) {
-                AndroidP256Encoding.derEcdsaToP1363(signature)
+                AndroidSecurityTestBridge.derEcdsaToP1363(signature)
             }
         }
     }
@@ -69,12 +69,12 @@ class AndroidP256EncodingTest {
             listOf(
                 ByteArray(63),
                 ByteArray(32) + fixed(BigInteger.ONE),
-                fixed(AndroidP256Encoding.p256Order) + fixed(BigInteger.ONE),
+                fixed(P256_ORDER) + fixed(BigInteger.ONE),
             )
 
         invalid.forEach { signature ->
             assertThrows(IllegalArgumentException::class.java) {
-                AndroidP256Encoding.p1363ToDerEcdsa(signature)
+                AndroidSecurityTestBridge.p1363ToDerEcdsa(signature)
             }
         }
     }
@@ -90,21 +90,21 @@ class AndroidP256EncodingTest {
                 sign()
             }
 
-        val p1363 = AndroidP256Encoding.derEcdsaToP1363(der)
+        val p1363 = AndroidSecurityTestBridge.derEcdsaToP1363(der)
 
         assertEquals(64, p1363.size)
         assertTrue(
             Signature.getInstance("SHA256withECDSA").run {
                 initVerify(keyPair.public)
                 update(transcript)
-                verify(AndroidP256Encoding.p1363ToDerEcdsa(p1363))
+                verify(AndroidSecurityTestBridge.p1363ToDerEcdsa(p1363))
             },
         )
     }
 
     @Test
     fun `P256 public key becomes strict uncompressed X963`() {
-        val encoded = AndroidP256Encoding.publicKeyToX963(p256KeyPair().public)
+        val encoded = AndroidSecurityTestBridge.publicKeyToX963(p256KeyPair().public)
 
         assertEquals(65, encoded.size)
         assertEquals(0x04, encoded.first().toInt())
@@ -120,7 +120,7 @@ class AndroidP256EncodingTest {
             }
 
         assertThrows(IllegalArgumentException::class.java) {
-            AndroidP256Encoding.publicKeyToX963(p384.public)
+            AndroidSecurityTestBridge.publicKeyToX963(p384.public)
         }
     }
 
@@ -139,5 +139,13 @@ class AndroidP256EncodingTest {
                 encoded
             }
         return ByteArray(32 - magnitude.size) + magnitude
+    }
+
+    private companion object {
+        val P256_ORDER: BigInteger =
+            BigInteger(
+                "FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551",
+                16,
+            )
     }
 }

@@ -47,22 +47,24 @@ The production build currently contains:
   only the stable public surfaces of `core:common`, `core:model`, `core:protocol`, and
   `core:security-api` through the single framework. Protocol credentials, data/network seams, codec
   mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
-- `android:platform`: the Android lifecycle and durable Pairing-storage leaf. Its public factories
-  expose only the lifecycle boundary plus `core:security-api` record/journal ports. Private atomic
-  adapters preserve the backup-excluded filenames, strict binary format, fail-closed journal, and
-  process-wide serialization across factory instances. It owns no Activity/Application, receiver,
-  Koin, UI, cryptographic key, or permission implementation and is not exported to Swift;
+- `android:platform`: the Android lifecycle, durable Pairing-storage, Device-proof, and idempotency
+  leaf. Its public factories expose only the lifecycle boundary plus `core:security-api` ports.
+  Private atomic, Android Keystore, P-256/DER, and secure-random adapters preserve the established
+  files, key alias/provider/policy, and protocol bytes. It retains no Activity/Application or
+  Context, owns no receiver, Koin, UI, biometric/Snapshot policy, or permission implementation, and
+  is not exported to Swift;
 - `android:navigation`: an Android-only leaf with no project dependencies. It owns the typed,
   argument-free Overview, Portfolio, History, and Sources destinations plus their authenticated
   `NavHost` and interim placeholder shell. The app maps authoritative root status to its narrow
   `HomeConnectionBannerState` input before entering the host;
 - `androidApp`: a native Jetpack Compose Material 3 shell with `dev`, `stage`, and
   `prod` environment flavors, an Android-only Koin process composition root, CameraX/ML Kit
-  scanning, Android Keystore-backed Device Keys, and Android 17 local-network permission recovery.
-  It retains one platform storage pair, owns the fail-closed privacy and root-state guard outside
-  `NavHost`, creates the navigation leaf only after authenticated authority is present, and supplies
-  the process callbacks delegated to the platform lifecycle bridge. Room and the complete Atomic
-  Design-based Rotki design system remain deliberately deferred;
+  scanning, biometric-bound Snapshot security, and Android 17 local-network permission recovery.
+  It retains one platform storage pair plus one Device-proof signer and idempotency generator, owns
+  the fail-closed privacy and root-state guard outside `NavHost`, creates the navigation leaf only
+  after authenticated authority is present, and supplies the process callbacks delegated to the
+  platform lifecycle bridge. Room and the complete Atomic Design-based Rotki design system remain
+  deliberately deferred;
 - `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
   unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
   persistence, and native iOS security remain deliberately disabled until their gates.
@@ -122,7 +124,15 @@ Android platform-security instrumentation runs on two clean Gradle-managed devic
   -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
 
 ./gradlew --no-daemon \
+  :android:platform:pixel2Api28DebugAndroidTest \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+
+./gradlew --no-daemon \
   :androidApp:pixel8Api36DevDebugAndroidTest \
+  -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+
+./gradlew --no-daemon \
+  :android:platform:pixel8Api36DebugAndroidTest \
   -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
 ```
 
@@ -131,8 +141,9 @@ Android 16 / API 36, the current stable Android runtime. Android 17 / API 37 rem
 preview and is not used as the current-device acceptance gate. The API 37 build still
 declares and requests `ACCESS_LOCAL_NETWORK` before contacting a private/LAN Engine; denial
 is a recoverable Pairing state. HTTPS remains mandatory, with both system and user-installed
-CA roots accepted for self-hosted Engines. CI installs each Google APIs system image in a
-separate KVM-enabled matrix job and retains the managed-device reports.
+CA roots accepted for self-hosted Engines. CI installs each Google APIs system image in a separate
+KVM-enabled matrix job, runs the app and platform tasks sequentially to avoid emulator-name
+contention, and retains both managed-device reports.
 
 Clean managed devices intentionally do not claim enrolled-biometric, TEE/StrongBox, OEM
 fallback, or physical secure-deletion evidence. On an enrolled physical Android device, run

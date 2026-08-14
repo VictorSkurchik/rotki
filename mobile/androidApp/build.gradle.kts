@@ -76,10 +76,6 @@ android {
             }
         }
     }
-
-    sourceSets {
-        getByName("androidTest").assets.directories.add("../protocol/v1")
-    }
 }
 
 dependencies {

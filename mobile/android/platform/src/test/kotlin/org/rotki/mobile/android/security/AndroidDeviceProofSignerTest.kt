@@ -11,6 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.rotki.mobile.core.ports.DeviceProofKeyDeleteOutcome
 import org.rotki.mobile.core.ports.DeviceProofPublicKeyOutcome
+import org.rotki.mobile.core.ports.DeviceProofSigner
 import org.rotki.mobile.core.ports.DeviceProofSigningOutcome
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -71,7 +72,7 @@ class AndroidDeviceProofSignerTest {
                 Signature.getInstance("SHA256withECDSA").run {
                     initVerify(keyStore.keyPair.public)
                     update(transcript)
-                    verify(AndroidP256Encoding.p1363ToDerEcdsa(p1363))
+                    verify(AndroidSecurityTestBridge.p1363ToDerEcdsa(p1363))
                 },
             )
         }
@@ -129,17 +130,21 @@ class AndroidDeviceProofSignerTest {
     }
 
     @Test
-    fun `key material diagnostic text is redacted`() {
+    fun `signer and key material diagnostic text is redacted`() {
         val keyPair = p256KeyPair()
 
         assertEquals(
             "AndroidSigningKeyMaterial(redacted)",
-            AndroidSigningKeyMaterial(keyPair.private, keyPair.public).toString(),
+            AndroidSecurityTestBridge.signingKeyMaterialDiagnostic(keyPair),
+        )
+        assertEquals(
+            "AndroidDeviceProofSigner(redacted)",
+            signer(FakeDeviceSigningKeyStore()).toString(),
         )
     }
 
-    private fun signer(keyStore: DeviceSigningKeyStore): AndroidDeviceProofSigner =
-        AndroidDeviceProofSigner(keyStore, Dispatchers.Unconfined)
+    private fun signer(keyStore: AndroidSecurityTestBridge.TestDeviceSigningKeyStore): DeviceProofSigner =
+        AndroidSecurityTestBridge.createDeviceProofSigner(keyStore, Dispatchers.Unconfined)
 
     private fun requirePublicKey(outcome: DeviceProofPublicKeyOutcome) =
         when (outcome) {
@@ -155,7 +160,7 @@ class AndroidDeviceProofSignerTest {
 
     private class FakeDeviceSigningKeyStore(
         private val curve: String = "secp256r1",
-    ) : DeviceSigningKeyStore {
+    ) : AndroidSecurityTestBridge.TestDeviceSigningKeyStore {
         val keyPair: KeyPair =
             KeyPairGenerator.getInstance("EC").run {
                 initialize(ECGenParameterSpec(curve))
@@ -170,20 +175,20 @@ class AndroidDeviceProofSignerTest {
         var lastSignedTranscript: ByteArray? = null
         var hasKey: Boolean = false
 
-        override fun createOrCurrent(): AndroidSigningKeyMaterial {
+        override fun createOrCurrent(): KeyPair {
             createCalls += 1
             failure?.let { throw it }
             if (!hasKey) {
                 hasKey = true
                 generationCount += 1
             }
-            return material()
+            return keyPair
         }
 
-        override fun currentOrNull(): AndroidSigningKeyMaterial? {
+        override fun currentOrNull(): KeyPair? {
             currentCalls += 1
             failure?.let { throw it }
-            return if (hasKey) material() else null
+            return keyPair.takeIf { hasKey }
         }
 
         override fun signIfPresent(transcript: ByteArray): ByteArray? {
@@ -205,8 +210,6 @@ class AndroidDeviceProofSignerTest {
             failure?.let { throw it }
             hasKey = false
         }
-
-        private fun material(): AndroidSigningKeyMaterial = AndroidSigningKeyMaterial(keyPair.private, keyPair.public)
     }
 
     private companion object {

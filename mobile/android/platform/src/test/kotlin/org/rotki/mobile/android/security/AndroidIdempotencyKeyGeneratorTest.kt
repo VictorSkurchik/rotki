@@ -23,14 +23,11 @@ class AndroidIdempotencyKeyGeneratorTest {
         val source = ByteArray(16) { index -> index.toByte() }
         var capturedBuffer: ByteArray? = null
         val generator =
-            AndroidIdempotencyKeyGenerator(
-                randomFill =
-                    IdempotencyRandomFill { target ->
-                        assertEquals(16, target.size)
-                        source.copyInto(target)
-                        capturedBuffer = target
-                    },
-            )
+            AndroidSecurityTestBridge.createIdempotencyKeyGenerator { target ->
+                assertEquals(16, target.size)
+                source.copyInto(target)
+                capturedBuffer = target
+            }
 
         val generated = generator.generate()
 
@@ -47,13 +44,10 @@ class AndroidIdempotencyKeyGeneratorTest {
         val invocation = AtomicInteger()
         val capturedBuffers = mutableListOf<ByteArray>()
         val generator =
-            AndroidIdempotencyKeyGenerator(
-                randomFill =
-                    IdempotencyRandomFill { target ->
-                        capturedBuffers += target
-                        target.fill((invocation.incrementAndGet()).toByte())
-                    },
-            )
+            AndroidSecurityTestBridge.createIdempotencyKeyGenerator { target ->
+                capturedBuffers += target
+                target.fill((invocation.incrementAndGet()).toByte())
+            }
 
         val first = generator.generate()
         val second = generator.generate()
@@ -70,14 +64,11 @@ class AndroidIdempotencyKeyGeneratorTest {
     fun `sanitizes random source failures and clears partially filled bytes`() {
         var capturedBuffer: ByteArray? = null
         val generator =
-            AndroidIdempotencyKeyGenerator(
-                randomFill =
-                    IdempotencyRandomFill { target ->
-                        target.fill(0x5a)
-                        capturedBuffer = target
-                        throw IllegalArgumentException(SEEDED_SECRET)
-                    },
-            )
+            AndroidSecurityTestBridge.createIdempotencyKeyGenerator { target ->
+                target.fill(0x5a)
+                capturedBuffer = target
+                throw IllegalArgumentException(SEEDED_SECRET)
+            }
 
         var capturedFailure: IllegalStateException? = null
         try {
@@ -104,24 +95,21 @@ class AndroidIdempotencyKeyGeneratorTest {
         val overlappingFill = AtomicBoolean(false)
         val secondThread = AtomicReference<Thread>()
         val generator =
-            AndroidIdempotencyKeyGenerator(
-                randomFill =
-                    IdempotencyRandomFill { target ->
-                        if (activeFills.incrementAndGet() != 1) {
-                            overlappingFill.set(true)
-                        }
-                        try {
-                            val call = invocation.incrementAndGet()
-                            if (call == 1) {
-                                firstFillEntered.countDown()
-                                assertTrue(releaseFirstFill.await(5, TimeUnit.SECONDS))
-                            }
-                            target.fill(call.toByte())
-                        } finally {
-                            activeFills.decrementAndGet()
-                        }
-                    },
-            )
+            AndroidSecurityTestBridge.createIdempotencyKeyGenerator { target ->
+                if (activeFills.incrementAndGet() != 1) {
+                    overlappingFill.set(true)
+                }
+                try {
+                    val call = invocation.incrementAndGet()
+                    if (call == 1) {
+                        firstFillEntered.countDown()
+                        assertTrue(releaseFirstFill.await(5, TimeUnit.SECONDS))
+                    }
+                    target.fill(call.toByte())
+                } finally {
+                    activeFills.decrementAndGet()
+                }
+            }
         val executor = Executors.newFixedThreadPool(2)
 
         try {
@@ -150,12 +138,33 @@ class AndroidIdempotencyKeyGeneratorTest {
             assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
         }
     }
+
+    @Test
+    fun `public factory emits fresh canonical redacted keys`() {
+        val generator = createAndroidIdempotencyKeyGenerator()
+        val generated = List(128) { generator.generate() }
+
+        assertEquals(128, generated.toSet().size)
+        generated.forEach { key ->
+            assertEquals(22, key.encoded.length)
+            assertEquals(key, acceptedEncodedKey(key.encoded))
+            assertEquals("IdempotencyKey(redacted)", key.toString())
+        }
+        assertEquals("AndroidIdempotencyKeyGenerator(redacted)", generator.toString())
+        assertTrue(generated.none { key -> generator.toString().contains(key.encoded) })
+    }
 }
 
 private fun acceptedKey(bytes: ByteArray): IdempotencyKey =
     when (val parsed = IdempotencyKey.fromBytes(bytes)) {
         is ProtocolValueParseOutcome.Accepted -> parsed.value
         is ProtocolValueParseOutcome.Rejected -> error("Expected a valid fixture key")
+    }
+
+private fun acceptedEncodedKey(encoded: String): IdempotencyKey =
+    when (val parsed = IdempotencyKey.parse(encoded)) {
+        is ProtocolValueParseOutcome.Accepted -> parsed.value
+        is ProtocolValueParseOutcome.Rejected -> error("Expected a valid generated key")
     }
 
 private fun awaitBlocked(thread: Thread): Boolean {

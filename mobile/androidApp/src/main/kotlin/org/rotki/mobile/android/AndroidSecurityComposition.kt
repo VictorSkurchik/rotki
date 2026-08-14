@@ -21,13 +21,13 @@ import org.rotki.mobile.android.pairing.createStartupFacade
 import org.rotki.mobile.android.security.AndroidBiometricCryptoBroker
 import org.rotki.mobile.android.security.AndroidBiometricCryptoOutcome
 import org.rotki.mobile.android.security.AndroidBiometricPromptCopy
-import org.rotki.mobile.android.security.AndroidDeviceProofSigner
-import org.rotki.mobile.android.security.AndroidIdempotencyKeyGenerator
 import org.rotki.mobile.android.security.AndroidLocalMaterialCleaner
 import org.rotki.mobile.android.security.AndroidSecureSnapshotStore
 import org.rotki.mobile.android.security.AndroidSnapshotKeyStore
 import org.rotki.mobile.android.security.AtomicSnapshotFile
 import org.rotki.mobile.android.security.BiometricCryptoBroker
+import org.rotki.mobile.android.security.createAndroidDeviceProofSigner
+import org.rotki.mobile.android.security.createAndroidIdempotencyKeyGenerator
 import org.rotki.mobile.android.storage.createAndroidPairingCleanupJournal
 import org.rotki.mobile.android.storage.createAndroidPairingRecordStore
 import org.rotki.mobile.auth.PairingConnection
@@ -35,6 +35,8 @@ import org.rotki.mobile.auth.PairingConnectionConfiguration
 import org.rotki.mobile.auth.PairingConnectionOutcome
 import org.rotki.mobile.auth.PairingDevicePlatform
 import org.rotki.mobile.core.ports.ApplicationVisibilityController
+import org.rotki.mobile.core.ports.DeviceProofSigner
+import org.rotki.mobile.core.ports.IdempotencyKeyGenerator
 import org.rotki.mobile.core.ports.PairingCleanupJournal
 import org.rotki.mobile.core.ports.PairingRecordStore
 import javax.crypto.Cipher
@@ -46,7 +48,9 @@ internal class AndroidSecurityComposition(
     val visibility: ApplicationVisibilityController = ApplicationVisibilityController()
     val pairingRecordStore: PairingRecordStore =
         createAndroidPairingRecordStore(applicationContext)
-    val deviceProofSigner: AndroidDeviceProofSigner = AndroidDeviceProofSigner()
+    val deviceProofSigner: DeviceProofSigner = createAndroidDeviceProofSigner()
+    private val idempotencyKeyGenerator: IdempotencyKeyGenerator =
+        createAndroidIdempotencyKeyGenerator()
     val pairingCleanupJournal: PairingCleanupJournal =
         createAndroidPairingCleanupJournal(applicationContext)
     private val startupReconciler: AndroidPairingStartupReconciler =
@@ -69,7 +73,7 @@ internal class AndroidSecurityComposition(
                 deviceProofSigner = deviceProofSigner,
                 pairingRecordStore = pairingRecordStore,
                 pairingCleanupJournal = pairingCleanupJournal,
-                idempotencyKeyGenerator = AndroidIdempotencyKeyGenerator(),
+                idempotencyKeyGenerator = idempotencyKeyGenerator,
                 applicationVisibility = visibility,
                 clock = AndroidEpochClock,
             ),

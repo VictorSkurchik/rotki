@@ -119,25 +119,28 @@ The Android application starts Koin exactly once and retains the security/sessio
 process. Its biometric broker binds the current Activity explicitly and releases it in `onDestroy`
 instead of constructor-capturing an Activity for the process lifetime. The physical
 `:android:platform` module contains the lifecycle bridge over `:core:common` plus the durable Pairing
-record and cleanup-journal adapters. Its only public storage entry points are narrow factories
-returning the ports from `:core:security-api`; concrete `AtomicFile` adapters, file constants, and the
-binary codec are private. The established backup-excluded filenames, record wire bytes, and
-secret-free cleanup marker remain unchanged. Separate process-wide record and journal locks
-serialize every factory instance addressing those canonical files. The module depends directly on
-protocol value types only for its codec and has no edge to `:shared`, so it is not exported to Swift.
+record, cleanup-journal, Device-proof, and idempotency adapters. Its public entry points are narrow
+factories returning ports from `:core:security-api`; concrete `AtomicFile`, Android Keystore,
+P-256/DER, and secure-random implementations and constants are private. The established
+backup-excluded filenames, record bytes, cleanup marker, signing alias/provider/policy, X9.63 public
+key, P1363 signature, and idempotency bytes remain unchanged. Separate process-wide record, journal,
+and signing-key locks serialize every factory instance addressing canonical resources. The module
+depends directly on protocol value types only for private codec work and has no edge to `:shared`, so
+it is not exported to Swift.
 
 The application still owns process composition, Activity/Application hooks, the screen-off receiver,
-`FLAG_SECURE`, authoritative state, biometric and cryptographic policy, and permissions. It retains
-one storage pair for the process lifetime and supplies process-safe lock,
-authentication-cancellation, and plaintext-discard callbacks to the lifecycle bridge.
+`FLAG_SECURE`, authoritative state, biometric and Snapshot-encryption policy, and permissions. It
+retains one storage pair, Device-proof signer, and idempotency generator for the process lifetime and
+supplies process-safe lock, authentication-cancellation, and plaintext-discard callbacks to the
+lifecycle bridge.
 
 The physical `:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four
 typed, argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative
 shared status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,
 lock, recovery, incompatible, and revoked selection remains a fail-closed state guard in
 `:androidApp` outside `NavHost`, so a saved back stack cannot bypass it. Android platform adapters
-beyond the lifecycle and Pairing-storage slices, Android feature modules, the Room KMP owner, and the
-complete design system have not been created yet.
+beyond the lifecycle, Pairing-storage, Device-proof, and idempotency slices, Android feature modules,
+the Room KMP owner, and the complete design system have not been created yet.
 
 ```text
 mobile/
@@ -157,7 +160,7 @@ mobile/
 ├── android/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
 │   ├── navigation/          # typed Navigation Compose contracts and root graphs
-│   ├── platform/            # lifecycle and atomic Pairing storage; other adapters follow
+│   ├── platform/            # lifecycle, Pairing storage, Device proof, and idempotency
 │   └── feature/<feature>/   # ViewModel, Route, Screen, feature-local UI and Koin module
 ├── shared/                  # thin Apple-framework aggregation and Swift-safe facade
 ├── androidApp/              # Android application and top-level composition root
@@ -203,13 +206,13 @@ Rules:
 - `android:navigation` is a project-dependency-free Android leaf. It accepts only UI-safe root input
   selected by the application and never imports shared/KMP state, Koin, data, or platform adapters.
 - `android:platform` exposes the lifecycle bridge plus port-returning factories for backup-excluded
-  Pairing records and the cleanup journal. Its project edges are limited to `:core:common`,
-  `:core:security-api`, and implementation-only protocol value types. Concrete storage and codec
-  implementations remain private; Koin, Activity/Application hooks, receivers, UI/navigation,
-  biometric and key policy, permissions, and authoritative Pairing state remain outside the module.
-  Its only direct production external dependency is `kotlinx-coroutines-core`; the module guard
-  keeps all other AndroidX and kotlinx artifacts forbidden, with exact test-bucket exceptions for
-  AndroidX Test and JUnit.
+  Pairing storage, Android Keystore Device proof, and secure-random idempotency. Its project edges are
+  limited to `:core:common`, `:core:security-api`, and implementation-only protocol value types.
+  Concrete storage, P-256/DER, keystore, and random implementations remain private; Koin,
+  Activity/Application hooks, receivers, UI/navigation, biometric/Snapshot policy, permissions, and
+  authoritative Pairing state remain outside the module. Its only direct production external
+  dependency is `kotlinx-coroutines-core`; the module guard keeps all other AndroidX and kotlinx
+  artifacts forbidden, with exact test-bucket exceptions for AndroidX Test and JUnit.
 - Cross-feature dependencies use the other feature's public domain/API contract. Importing another
   feature's data, DI, ViewModel, or internal UI package is forbidden.
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
@@ -448,9 +451,9 @@ Do not perform a big-bang package move. Use this order:
    opaque attempt and cleanup capabilities can move without reversing the dependency graph.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
    process-scoped platform/Pairing composition remains in `:androidApp`; `:android:platform` now owns
-   the lifecycle bridge and durable Pairing record/journal adapters behind core ports. Device-proof,
-   idempotency, remaining security/permission, and Android feature extraction remain incremental
-   follow-up work.
+   the lifecycle bridge, durable Pairing record/journal adapters, Android Keystore Device proof, and
+   secure-random idempotency behind core ports. Biometric/Snapshot, remaining permission, and Android
+   feature extraction remain incremental follow-up work.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. The four authenticated placeholder destinations and their
    host are now typed, navigation-backed, and physically owned by the project-dependency-free
