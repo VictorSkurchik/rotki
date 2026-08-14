@@ -228,6 +228,7 @@ jobs:
           required_swift_names=(
             DeviceSessionId
             IdempotencyKey
+            IdempotencyKeyGenerator
             P1363Signature
             X963PublicKey
             ProtocolValueParseOutcome
@@ -240,6 +241,33 @@ jobs:
             EngineOriginParseOutcomeAccepted
             EngineOriginParseOutcomeRejected
             EngineOriginRejection
+            DeviceProofKeyDeleteOutcome
+            DeviceProofKeyDeleteOutcomeDeleted
+            DeviceProofKeyDeleteOutcomeUnavailable
+            DeviceProofPublicKeyOutcome
+            DeviceProofPublicKeyOutcomePairingRequired
+            DeviceProofPublicKeyOutcomePublicKey
+            DeviceProofPublicKeyOutcomeUnexpectedFailure
+            DeviceProofSigner
+            DeviceProofSigningOutcome
+            DeviceProofSigningOutcomeDeviceAuthenticationCancelled
+            DeviceProofSigningOutcomeDeviceAuthenticationUnavailable
+            DeviceProofSigningOutcomePairingRequired
+            DeviceProofSigningOutcomeSigned
+            DeviceProofSigningOutcomeUnexpectedFailure
+            PairingRecord
+            PairingRecordDeleteOutcome
+            PairingRecordDeleteOutcomeDeleted
+            PairingRecordDeleteOutcomeUnavailable
+            PairingRecordReadOutcome
+            PairingRecordReadOutcomeCorrupt
+            PairingRecordReadOutcomeMissing
+            PairingRecordReadOutcomePresent
+            PairingRecordReadOutcomeUnavailable
+            PairingRecordStore
+            PairingRecordWriteOutcome
+            PairingRecordWriteOutcomeStored
+            PairingRecordWriteOutcomeUnavailable
           )
           for swift_name in "${required_swift_names[@]}"; do
             marker="__attribute__((swift_name(\"$swift_name\")))"

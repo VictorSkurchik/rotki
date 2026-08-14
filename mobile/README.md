@@ -21,9 +21,10 @@ The production build currently contains:
   control-envelope decoder, discovery negotiation, authored error mapping, and the bounded WebSocket
   notification decoder with its typed refresh/snapshot notification model. It owns no Auth DTOs,
   transport, or Apple framework of its own;
-- `core:security-api`: the first platform-neutral security-contract tranche. It owns the
-  secret-free Pairing cleanup journal plus the secure Snapshot-store contract and its revocable
-  application-owned plaintext handle, with no native implementation or infrastructure dependency;
+- `core:security-api`: the platform-neutral security-contract leaf. It owns the secret-free Pairing
+  cleanup journal, Device-proof and idempotency ports, the redacted Pairing-record persistence
+  contract, and the secure Snapshot-store contract with its revocable application-owned plaintext
+  handle. It depends only on protocol value types and contains no native implementation;
 - `feature:pairing:domain`: platform-neutral Pairing submission contracts, coarse secret-free
   outcomes, and opaque session/attempt ports;
 - `feature:pairing:presentation`: the pure synchronous Pairing UDF state/action/reducer layer,

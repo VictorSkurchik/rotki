@@ -79,18 +79,18 @@ The current `:core:common`, `:core:model`, `:core:protocol`, `:core:security-api
 the first migration state, not the final boundary. Create target modules only when moving or adding
 real production code. `:core:common` owns `Clock`, application visibility/controller contracts, and
 the lifecycle policy; `:core:model` owns `ExactDecimal` plus its characterization assets; and the
-first `:core:security-api` tranche owns the secret-free cleanup journal and revocable Snapshot
-secure-store contract plus its application-owned plaintext handle. The physical `:core:protocol`
-leaf owns the strict Companion JSON codec, duplicate-member/syntax scanner, strict scalar
+completed `:core:security-api` boundary owns the Pairing cleanup journal, Device-proof signer,
+idempotency-key generator, Pairing-record persistence, and revocable Snapshot secure-store contracts.
+Its sole project edge is to the value types in `:core:protocol`. The physical `:core:protocol` leaf
+owns the strict Companion JSON codec, duplicate-member/syntax scanner, strict scalar
 serializers, generated protocol vocabulary, fixed-width protocol value types, and the bounded HTTP
 control-envelope decoder with discovery negotiation and authored error mapping. It also owns the
 bounded WebSocket notification decoder and its typed refresh/snapshot notification model, together
 with the Ktor-free Engine-origin value and parser. It has no Auth DTOs, transport, or Apple framework
 of its own. Stable public value types are exported through `RotkiShared`; credentials, DTO/decoder
 seams, raw-byte helpers, codec mechanics, generated vocabulary, and WebSocket notification types
-remain hidden from Objective-C and Swift. Protocol-dependent security ports remain in `:shared`
-until the next security tranche moves. Pairing domain owns the secret-free
-submission contract plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
+remain hidden from Objective-C and Swift. Pairing domain owns the secret-free submission contract
+plus opaque session/attempt ports, and presentation owns the pure UDF reducer.
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
 depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
 current implementation. Strict QR decoding, Auth DTOs, and transport remain in `:shared`. Raw `Json`
@@ -364,17 +364,18 @@ Rules for the final system and its implementation:
 Do not perform a big-bang package move. Use this order:
 
 1. Add convention plugins and extract stable core common/model/protocol/network/security contracts.
-   The reusable KMP library convention plus `:core:common`, `:core:model`, and the first
-   `:core:security-api` tranche are in place. Common owns `Clock` and application-lifecycle
-   contracts, while its authored protocol-fixture parity test remains in `:shared`. Security API
-   owns the cleanup journal and Snapshot-store boundary; protocol-dependent security ports,
-   protocol decoding, and network execution remain in the umbrella until their coherent slices move.
+   The reusable KMP library convention plus `:core:common`, `:core:model`, `:core:protocol`, and the
+   completed `:core:security-api` boundary are in place. Common owns `Clock` and
+   application-lifecycle contracts, while its authored protocol-fixture parity test remains in
+   `:shared`. Protocol owns strict decoding and wire values; Security API owns the complete local
+   security contract surface. Network execution remains in the umbrella until its coherent slice
+   moves.
 2. Move Auth/Pairing into domain, data, and presentation modules without changing behavior. The
    submission/session/attempt domain contracts and pure presentation reducer are extracted.
    `PairingFlow` and `PairingConnection` now use a facade-scoped port adapter, including the recovered
-   cleanup barrier. Extract the remaining protocol, network, and security leaves from step 1 before
-   moving QR decoding and remote registration into a real Pairing data module; do not add a
-   placeholder module or a dependency on `:shared` from data.
+   cleanup barrier. Extract the network leaf from step 1 before moving QR decoding and remote
+   registration into a real Pairing data module; do not add a placeholder module or a dependency on
+   `:shared` from data.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice.
 4. Add typed Navigation Compose and only the minimal Material 3/`RotkiTheme` foundation needed to
    migrate Pairing and the four-tab shell. Do not build the full component catalog yet.

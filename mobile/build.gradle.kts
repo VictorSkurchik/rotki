@@ -87,7 +87,7 @@ val featureModuleBoundaryRules =
             ),
         ":core:security-api" to
             ModuleBoundaryRule(
-                allowedProjectDependencies = emptySet(),
+                allowedProjectDependencies = setOf(":core:protocol"),
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes + "org.jetbrains.kotlinx",
                 forbiddenPluginIds =
                     forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
