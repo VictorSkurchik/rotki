@@ -488,10 +488,11 @@ the authored lifecycle-fixture parity test remains in `:shared` beside the gener
 The physical `:core:protocol` leaf now owns the strict Companion JSON codec,
 duplicate-member/syntax scanner, strict scalar serializers, generated protocol vocabulary, and
 fixed-width protocol value types, plus the bounded HTTP control-envelope decoder, discovery
-negotiation, and authored error mapping. It owns no Auth or WebSocket DTOs, Engine-origin parsing,
-network transport, or Apple framework of its own. Stable public value types retain their native API
-through `RotkiShared`, while credentials, DTO/decoder seams, raw-byte helpers, codec mechanics, and
-generated vocabulary remain hidden from Swift.
+negotiation, authored error mapping, and the bounded WebSocket notification decoder with its typed
+refresh/snapshot notification model. It owns no Auth DTOs, Engine-origin parsing, network transport,
+or Apple framework of its own. Stable public value types retain their native API through
+`RotkiShared`, while credentials, DTO/decoder seams, WebSocket notification types, raw-byte helpers,
+codec mechanics, and generated vocabulary remain hidden from Swift.
 The first `:core:security-api` tranche owns the secret-free Pairing cleanup journal plus the secure
 Snapshot-store contract and its revocable application-owned plaintext handle; its autonomous
 revocation test moved with it. Device-proof and idempotency value types now live in
@@ -515,10 +516,11 @@ admission cannot be mistaken for stale material and silently removed. Neither fe
 QR material or creates an Apple framework.
 
 Koin, typed Navigation Compose, and Room migration have not started. The existing Auth/Pairing
-vertical remains the reference slice. Strict QR decoding, registration transport, Auth and WebSocket
-protocol DTOs, Engine-origin parsing, Ktor boundaries, and the remaining protocol-dependent security
+vertical remains the reference slice. Strict QR decoding, registration transport, Auth protocol
+DTOs, Engine-origin parsing, Ktor boundaries, and the remaining protocol-dependent security
 contracts are still physically located inside `:shared`; the generic HTTP control envelopes,
-bounded decoder, discovery negotiation, and error mapping have moved to `:core:protocol`. The
+bounded decoder, discovery negotiation, error mapping, and bounded WebSocket notification decoder
+have moved to `:core:protocol`. The
 protocol leaf also owns the strict codec, duplicate-member/syntax scanner, strict scalar serializers,
 generated vocabulary, and fixed-width protocol values. Raw `Json` is private behind its Kotlin-only
 codec hidden from Objective-C and Swift. Ktor wraps sensitive encoded bytes in content with a
@@ -526,8 +528,8 @@ constant, redacted diagnostic representation and no longer installs `ContentNego
 transport does not consume the serializer configuration directly. The leaf creates no framework of
 its own; only its established
 public value API is re-exported, while secret and implementation seams stay hidden. Next separate the
-security-sensitive Engine-origin parser and the WebSocket decoder, then extract the network leaf and
-the remaining security API; only after those edges are available should the QR decoder and
+security-sensitive Engine-origin parser, then extract the network leaf and the remaining security
+API; only after those edges are available should the QR decoder and
 registration implementation move into a real
 `:feature:pairing:data` module. No placeholder data module or temporary `data -> shared` dependency
 is planned. Afterward replace manual Android composition and tab selection with Koin and typed

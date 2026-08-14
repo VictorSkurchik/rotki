@@ -1392,8 +1392,7 @@ A Refresh notification carries the same typed operation state returned by its RE
     "started_at": 1786550401,
     "finished_at": null,
     "target": {
-      "kind": "source",
-      "source_id": "opaque-source-id"
+      "kind": "global"
     },
     "state": "running",
     "progress": {

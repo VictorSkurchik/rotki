@@ -219,6 +219,8 @@ jobs:
           forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|isCanonicalFixedBase64Url|bytesCopy|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PairingId|PairingCredential|ChallengeId|ChallengeNonce|AccessSessionCredential|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
           forbidden_pattern+='|CompanionEnvelopeDecoder|CompanionEnvelopeDecodeOutcome|CompanionEnvelopeShape|CompanionErrorDto|CompanionFailureEnvelopeDto|CompanionFailureLocalEffect|CompanionFailure'
           forbidden_pattern+='|ProtocolDiscoveryEnvelopeDto|ProtocolDiscoveryResultDto|ProtocolNegotiationOutcome|decodeSuccess|decodeFailure|negotiate|toDomain'
+          forbidden_pattern+='|WebSocketNotificationDecoder|WebSocketNotificationDecodeOutcome|WebSocketNotificationDto|CompanionNotification|SnapshotRevisionAvailable|SnapshotRevisionDataDto'
+          forbidden_pattern+='|RefreshOperationNotification|RefreshTarget|RefreshOperationState|RefreshProgress|RefreshOperationError|RefreshOperationChanged|RefreshOperationDataDto|RefreshProgressDto|RefreshOperationErrorDto'
           if grep -En "$forbidden_pattern" "$device_header" "$simulator_header"; then
             echo '::error::Kotlin-only protocol internals leaked into the Swift framework header'
             exit 1

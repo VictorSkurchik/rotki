@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.experimental.ExperimentalObjCRefinement::class)
+
 package org.rotki.mobile.core.protocol.dto
 
 import kotlinx.serialization.SerialName
@@ -18,9 +20,11 @@ import org.rotki.mobile.core.protocol.generated.WebSocketEventType
 import org.rotki.mobile.core.protocol.hasDuplicateJsonMember
 import org.rotki.mobile.core.protocol.hasValidJsonSyntax
 import org.rotki.mobile.core.protocol.isCanonicalFixedBase64Url
+import kotlin.native.HiddenFromObjC
 
-internal object WebSocketNotificationDecoder {
-    internal fun decode(text: String): WebSocketNotificationDecodeOutcome {
+@HiddenFromObjC
+public object WebSocketNotificationDecoder {
+    public fun decode(text: String): WebSocketNotificationDecodeOutcome {
         if (text.encodeToByteArray().size > ProtocolClientInputLimits.MaximumWebSocketEventBytes) {
             return WebSocketNotificationDecodeOutcome.ContractFailure
         }
@@ -89,86 +93,113 @@ internal object WebSocketNotificationDecoder {
     }
 }
 
-internal sealed interface WebSocketNotificationDecodeOutcome {
-    data class Decoded(
-        internal val notification: CompanionNotification,
-    ) : WebSocketNotificationDecodeOutcome
-
-    data object IgnoredUnknownEvent : WebSocketNotificationDecodeOutcome
-
-    data object ContractFailure : WebSocketNotificationDecodeOutcome
-}
-
-internal sealed interface CompanionNotification {
-    data class SnapshotRevisionAvailable(
-        internal val revision: String,
-    ) : CompanionNotification {
-        override fun toString(): String = "SnapshotRevisionAvailable(redacted)"
+@HiddenFromObjC
+public sealed interface WebSocketNotificationDecodeOutcome {
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Decoded internal constructor(
+        public val notification: CompanionNotification,
+    ) : WebSocketNotificationDecodeOutcome {
+        public override fun toString(): String = "Decoded(redacted)"
     }
 
-    data class RefreshOperationChanged(
-        internal val operation: RefreshOperationNotification,
+    @HiddenFromObjC
+    public data object IgnoredUnknownEvent : WebSocketNotificationDecodeOutcome
+
+    @HiddenFromObjC
+    public data object ContractFailure : WebSocketNotificationDecodeOutcome
+}
+
+@HiddenFromObjC
+public sealed interface CompanionNotification {
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class SnapshotRevisionAvailable internal constructor(
+        public val revision: String,
     ) : CompanionNotification {
-        override fun toString(): String = "RefreshOperationChanged(redacted)"
+        public override fun toString(): String = "SnapshotRevisionAvailable(redacted)"
+    }
+
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class RefreshOperationChanged internal constructor(
+        public val operation: RefreshOperationNotification,
+    ) : CompanionNotification {
+        public override fun toString(): String = "RefreshOperationChanged(redacted)"
     }
 }
 
-internal data class RefreshOperationNotification(
-    internal val operationId: String,
-    internal val version: Int,
-    internal val createdAtEpochSeconds: Long,
-    internal val startedAtEpochSeconds: Long?,
-    internal val finishedAtEpochSeconds: Long?,
-    internal val target: RefreshTarget,
-    internal val state: RefreshOperationState,
-    internal val progress: RefreshProgress?,
-    internal val resultSnapshotRevision: String?,
-    internal val error: RefreshOperationError?,
+@HiddenFromObjC
+@ConsistentCopyVisibility
+public data class RefreshOperationNotification internal constructor(
+    public val operationId: String,
+    public val version: Int,
+    public val createdAtEpochSeconds: Long,
+    public val startedAtEpochSeconds: Long?,
+    public val finishedAtEpochSeconds: Long?,
+    public val target: RefreshTarget,
+    public val state: RefreshOperationState,
+    public val progress: RefreshProgress?,
+    public val resultSnapshotRevision: String?,
+    public val error: RefreshOperationError?,
 ) {
-    override fun toString(): String = "RefreshOperationNotification(redacted)"
+    public override fun toString(): String = "RefreshOperationNotification(redacted)"
 }
 
-internal sealed interface RefreshTarget {
-    data object Global : RefreshTarget
+@HiddenFromObjC
+public sealed interface RefreshTarget {
+    @HiddenFromObjC
+    public data object Global : RefreshTarget
 
-    data class Source(
-        internal val sourceId: String,
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Source internal constructor(
+        public val sourceId: String,
     ) : RefreshTarget {
-        override fun toString(): String = "Source(redacted)"
+        public override fun toString(): String = "Source(redacted)"
     }
 }
 
-internal enum class RefreshOperationState {
+@HiddenFromObjC
+public enum class RefreshOperationState {
     QUEUED,
     RUNNING,
     SUCCEEDED,
     FAILED,
 }
 
-internal data class RefreshProgress(
-    internal val completed: Int,
-    internal val total: Int,
+@HiddenFromObjC
+@ConsistentCopyVisibility
+public data class RefreshProgress internal constructor(
+    public val completed: Int,
+    public val total: Int,
 )
 
-internal sealed interface RefreshOperationError {
-    val retryable: Boolean
-    val action: ProtocolErrorAction
+@HiddenFromObjC
+public sealed interface RefreshOperationError {
+    public val retryable: Boolean
+    public val action: ProtocolErrorAction
 
-    data class Operation(
-        internal val code: OperationErrorCode,
-        override val retryable: Boolean,
-        override val action: ProtocolErrorAction,
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Operation internal constructor(
+        public val code: OperationErrorCode,
+        public override val retryable: Boolean,
+        public override val action: ProtocolErrorAction,
     ) : RefreshOperationError
 
-    data class Source(
-        internal val code: SourceErrorCode,
-        override val retryable: Boolean,
-        override val action: ProtocolErrorAction,
+    @HiddenFromObjC
+    @ConsistentCopyVisibility
+    public data class Source internal constructor(
+        public val code: SourceErrorCode,
+        public override val retryable: Boolean,
+        public override val action: ProtocolErrorAction,
     ) : RefreshOperationError
 
-    data object UnexpectedOperation : RefreshOperationError {
-        override val retryable: Boolean = false
-        override val action: ProtocolErrorAction = ProtocolErrorAction.None
+    @HiddenFromObjC
+    public data object UnexpectedOperation : RefreshOperationError {
+        public override val retryable: Boolean = false
+        public override val action: ProtocolErrorAction = ProtocolErrorAction.None
     }
 }
 
@@ -266,7 +297,11 @@ private fun RefreshOperationDataDto.toDomain(): RefreshOperationNotification? {
         when (domainState) {
             RefreshOperationState.QUEUED -> {
                 startedAt == null && finishedAt == null && domainError == null &&
-                    resultSnapshotRevision == null && domainProgress?.completed == 0
+                    resultSnapshotRevision == null &&
+                    (
+                        domainTarget is RefreshTarget.Source ||
+                            domainProgress?.completed == 0
+                    )
             }
 
             RefreshOperationState.RUNNING -> {
