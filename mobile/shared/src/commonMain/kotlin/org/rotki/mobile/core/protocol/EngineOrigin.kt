@@ -1,8 +1,5 @@
 package org.rotki.mobile.core.protocol
 
-import io.ktor.http.URLParserException
-import io.ktor.http.Url
-
 public class EngineOrigin private constructor(
     public val canonical: String,
 ) {
@@ -62,35 +59,12 @@ public class EngineOrigin private constructor(
                 }
             }
 
-            val parsed =
-                try {
-                    Url(candidate)
-                } catch (_: URLParserException) {
-                    return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
-                } catch (_: IllegalArgumentException) {
-                    return EngineOriginParseOutcome.Rejected(EngineOriginRejection.MALFORMED)
-                }
-            if (parsed.protocol.name != "https") {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.HTTPS_REQUIRED)
-            }
-            if (parsed.host.isEmpty()) {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.HOST_REQUIRED)
-            }
-            if (!parsed.user.isNullOrEmpty() || !parsed.password.isNullOrEmpty()) {
+            // Preserve the prior parser's delimiter/default-origin behavior. Tightening the host
+            // grammar is a separate protocol change because these exact canonical bytes are signed.
+            if ('\\' in authorityCandidate) {
                 return EngineOriginParseOutcome.Rejected(EngineOriginRejection.ORIGIN_ONLY)
             }
-            if (parsed.encodedPath.isNotEmpty() && parsed.encodedPath != "/") {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.ORIGIN_ONLY)
-            }
-            if (parsed.encodedQuery.isNotEmpty() || parsed.trailingQuery || parsed.encodedFragment.isNotEmpty()) {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.ORIGIN_ONLY)
-            }
-            if (parsed.specifiedPort == 443) {
-                return EngineOriginParseOutcome.Rejected(EngineOriginRejection.DEFAULT_PORT_FORBIDDEN)
-            }
-
-            val ktorCanonical = parsed.toString().removeSuffix("/")
-            if (ktorCanonical != candidate) {
+            if (authorityCandidate.isEmpty() || authorityCandidate.startsWith(':')) {
                 return EngineOriginParseOutcome.Rejected(EngineOriginRejection.NON_CANONICAL)
             }
             return EngineOriginParseOutcome.Accepted(EngineOrigin(candidate))

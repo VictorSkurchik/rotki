@@ -126,6 +126,7 @@ class EngineOriginTest {
             "https://rotki.example?query" to EngineOriginRejection.ORIGIN_ONLY,
             "https://rotki.example#fragment" to EngineOriginRejection.ORIGIN_ONLY,
             "https://rotki.example\\path" to EngineOriginRejection.ORIGIN_ONLY,
+            "https://\\%" to EngineOriginRejection.ORIGIN_ONLY,
             "https://rotki.example/Path" to EngineOriginRejection.NON_CANONICAL,
             "https://rotki.example%2Epath" to EngineOriginRejection.NON_CANONICAL,
             "https://rotki.example:443/path" to EngineOriginRejection.ORIGIN_ONLY,
