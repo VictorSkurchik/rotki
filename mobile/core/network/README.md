@@ -5,8 +5,11 @@ This KMP infrastructure module owns the reusable Companion transport execution b
 - the hardened Ktor client configuration, bounded WebSocket queues, and request timeouts;
 - OkHttp engines for Android/JVM and the cache-disabled Darwin engine for iOS;
 - bounded HTTP response reading, strict JSON response metadata checks, and typed transport outcomes;
-- replay classification, bounded full-jitter retry policy, proactive session-renewal policy, and the
-  single-flight renewal gate.
+- replay classification and bounded full-jitter transport-retry policy.
+
+Process-memory Access authority, expiry, proactive renewal, and authorization single-flight now
+belong to `:feature:authorization:application`. The former generic renewal policy and gate were
+removed from this infrastructure layer.
 
 Its only project dependency is `:core:protocol`, which supplies protocol limits, wire policy, and
 the strict envelope decoder. Ktor, coroutines, and serialization are infrastructure dependencies of

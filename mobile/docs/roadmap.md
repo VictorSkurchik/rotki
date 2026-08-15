@@ -524,9 +524,11 @@ network transport, or Apple framework of its own. Stable public value types reta
 through `RotkiShared`, while credentials, DTO/decoder seams, WebSocket notification types, raw-byte
 helpers, codec mechanics, and generated vocabulary remain hidden from Swift.
 The physical `:core:network` leaf owns hardened Ktor client construction, bounded HTTP response
-execution, replay and session-renewal policy, the single-flight renewal gate, and OkHttp/Darwin
-engine actuals. Its only project dependency is `:core:protocol`; Pairing data and `:shared` consume
-it as an implementation dependency, and all of its cross-module seams remain hidden from Swift.
+execution, request-replay and transport-retry policy, and OkHttp/Darwin engine actuals.
+Authorization expiry, renewal state, and single-flight ownership now live in
+`:feature:authorization:application`; the obsolete generic renewal gate and policy were removed.
+Network's only project dependency is `:core:protocol`; Pairing data and `:shared` consume it as an
+implementation dependency, and all of its cross-module seams remain hidden from Swift.
 The completed `:core:security-api` boundary owns the secret-free Pairing cleanup journal, Device-proof
 signer, idempotency-key generator, redacted Pairing-record persistence contract, and secure
 Snapshot-store contract with its revocable application-owned plaintext handle. It depends only on
@@ -560,14 +562,20 @@ admission cannot be mistaken for stale material and silently removed. Domain and
 store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
 creates an Apple framework.
 
-The C1 Authorization boundary is now physical without changing the native API.
+The C1-C2 Authorization boundary is now physical without changing the native API.
 `:feature:authorization:domain` owns Ktor-free redacted contracts,
 `:feature:authorization:data` owns the strict challenge/proof DTO, envelope, mapping, transcript,
-route, and internal Ktor boundary, and `:feature:authorization:application` owns a bounded foreground
-single-flight coordinator that requires the existing Pairing record and Device Key and retains the
-Access Session only in process memory. The three modules create no Apple framework, are not exported
-from `RotkiShared`, and are guarded against Ktor/DTO/credential leakage. Renewal,
-facade/root-state mapping, and native composition remain later slices.
+route, and internal Ktor boundary, and `:feature:authorization:application` owns process-memory
+Access authority, exact Engine expiry, and caller-independent acquisition/renewal single-flight.
+Automatic renewal starts at 300 seconds remaining; successful replacement is atomic, recoverable
+failure retains the old bearer only until its unchanged expiry, and fixture-frozen policy permits
+one fresh whole-exchange retry. The visibility observer cancels network while retaining authority
+through transient inactivity and purges authority on background or system lock; explicit clear and
+close fence late completion, and process-scope cancellation start (or normal completion) commits
+purge plus transport shutdown. The three modules create no Apple framework, are not exported from
+`RotkiShared`, and are guarded against Ktor/DTO/credential leakage. Request-authority delegation,
+facade/root-state mapping, authenticated-work/WebSocket handling, and native composition remain
+later slices.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
@@ -597,7 +605,8 @@ The existing Auth/Pairing vertical remains the reference slice. The real
 `:feature:pairing:data` module owns strict QR decoding, registration transport DTOs/mapping,
 Pairing-specific request construction, and its internal Ktor client; it implements the domain
 submission gateway and has no edge to `:shared`. Generic Ktor client construction, bounded response
-execution, replay/renewal policy, and platform engines live in `:core:network`; generic HTTP
+execution, request-replay/transport-retry policy, and platform engines live in `:core:network`;
+Authorization expiry and renewal policy live in `:feature:authorization:application`; generic HTTP
 envelopes and decoders remain in `:core:protocol`, while the complete security contract boundary
 lives in `:core:security-api`. The canonical generated test corpus has one owner in test-only
 `:core:testing`, which the graph forbids from production source sets. Raw `Json` is private behind
@@ -1088,10 +1097,12 @@ A secret-free durable cleanup journal and Android startup reconciliation prevent
 registration from becoming a false Pairing. Android also handles API 37 local-network
 permission and trusts system or user-installed HTTPS roots without allowing cleartext.
 Shared/JVM and Android host checks, lint, and managed-device tests pass on API 28 and API 36.
-Fixture-backed KMP now proves the strict challenge/proof exchange and bounded in-memory Access
-Session acquisition in the extracted Authorization modules. Native facade/platform wiring,
-proactive renewal, restart re-authentication, and the real Docker/Starling host flow remain
-unimplemented; therefore A4.1 and Gate G4 are not complete.
+Fixture-backed KMP now proves the strict challenge/proof exchange plus coordinator-owned exact
+expiry, proactive renewal, waiter-independent flight ownership, explicit invalidation, and lifecycle
+retention/purge policy. Request-authority delegation, native facade/platform wiring and lifecycle
+delivery, real Device Key
+reuse after process restart, and the real Docker/Starling host flow remain unimplemented; therefore
+A4.1 and Gate G4 are not complete.
 The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
 sequence, and pre-live acceptance gates are specified in
 [`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates

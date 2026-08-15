@@ -106,10 +106,10 @@ fixture/MockEngine contracts, module guards, and Swift-leak guards are implement
 application module real rather than a placeholder, C1 also includes the bounded foreground
 coordinator core: it reads the existing durable Pairing record, requires the existing Device Key,
 joins concurrent callers into one challenge/proof exchange, wipes transcript bytes, and
-generation-fences the process-memory Access Session. Proactive renewal, request-authority
-delegation, facade/root-state mapping, and native composition remain C2-C5. Pairing still ends at
-durable Device Session registration, and this fixture-backed evidence does not complete A4.1 or
-Gate G4.
+generation-fences the process-memory Access Session. At the C1 boundary, proactive renewal,
+request-authority delegation, facade/root-state mapping, and native composition were intentionally
+left to C2-C5. Pairing still ends at durable Device Session registration, and this fixture-backed
+evidence does not complete A4.1 or Gate G4.
 
 ### C2 — Implement the shared authorization coordinator
 
@@ -122,8 +122,29 @@ Gate G4.
   Unpair, revocation cleanup, or process-level clear.
 - Own proactive renewal and expiry with injected time. Coalesce simultaneous callers, retain the old
   bearer during a recoverable renewal, and never extend the Engine-provided expiry locally.
-- Replace the unused generic renewal gate in `:core:network` with coordinator-owned single-flight
-  behavior; retry policy stays in `:core:network`.
+- Replace the unused generic renewal gate and threshold policy in `:core:network` with
+  coordinator-owned expiry and single-flight behavior; request replay and transport-retry policy
+  stay in `:core:network`.
+
+Implementation status (2026-08-15): `:feature:authorization:application` now owns process-memory
+Access authority, exact Engine expiry, and automatic renewal at 300 seconds remaining. Acquisition
+and renewal share one generation-fenced, caller-independent single flight owned by the process
+scope. Successful renewal atomically replaces the bearer; recoverable failure retains only a
+still-valid old bearer and never extends its Engine expiry. Proactive transport failure receives one
+fixture-frozen fresh whole-exchange retry after two seconds, while rate limiting uses its canonical
+`Retry-After` only up to the protocol's five-second hidden-work limit; longer waits do not keep a
+hidden retry alive and await C3 facade surfacing. `challenge_unavailable` receives one fresh
+challenge/proof exchange. The visibility observer cancels network work but retains authority while
+inactive, and cancels work plus purges authority on background or system lock. Explicit clear and
+close cancel and fence late completion.
+Process-scope cancellation start (and normal completion) performs the same committed purge and
+transport shutdown. Cancellation of the caller invoking close cannot skip teardown.
+The obsolete network renewal gate and policy are removed; generic replay and transport retry remain
+in `:core:network`.
+
+Request-authority delegation is not implemented. Facade/root-state mapping, authenticated-work and
+WebSocket handling remain C3; native lifecycle delivery and composition remain C4. This KMP policy
+evidence does not complete A4.1 or Gate G4.
 
 ### C3 — Integrate the stable shared facade
 

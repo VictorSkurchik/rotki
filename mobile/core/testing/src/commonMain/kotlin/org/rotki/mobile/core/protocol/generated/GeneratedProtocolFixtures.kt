@@ -2113,6 +2113,9 @@ public const val PROTOCOL_CLIENT_POLICY_CASES_JSON: String = """{
   "renewal_policy": {
     "access_session_lifetime_seconds": 900,
     "renewal_window_seconds": 300,
+    "proactive_transport_retry_delay_seconds": 2,
+    "proactive_automatic_retry_budget": 1,
+    "challenge_unavailable_fresh_exchange_budget": 1,
     "cases": [
       {
         "id": "outside_renewal_window",

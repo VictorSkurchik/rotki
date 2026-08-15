@@ -227,6 +227,7 @@ val featureModuleBoundaryRules =
                         ":core:common",
                         ":core:protocol",
                         ":core:security-api",
+                        ":core:testing",
                         ":feature:authorization:domain",
                     ),
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,

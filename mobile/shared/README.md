@@ -14,10 +14,12 @@ envelopes, discovery negotiation, authored error mapping, and the bounded WebSoc
 decoder with its typed refresh/snapshot model and the Ktor-free Engine-origin parser; and the
 completed `:core:security-api` boundary, which owns the Pairing cleanup journal, Device-proof signer,
 idempotency-key generator, Pairing-record persistence, and revocable secure Snapshot-store contracts.
-`:core:network` now owns the hardened Ktor client, bounded HTTP execution, replay and renewal policy,
-single-flight renewal gate, and OkHttp/Darwin engine actuals. `:shared` consumes that leaf as an
-implementation dependency, while its API dependencies on the four Swift-facing core leaves export
-their stable public surfaces through `RotkiShared`. Core leaves create no framework of their own;
+`:core:network` now owns the hardened Ktor client, bounded HTTP execution, request-replay and
+transport-retry policy, and OkHttp/Darwin engine actuals. Authorization renewal state and
+single-flight ownership live in `:feature:authorization:application`. `:shared` consumes the network
+leaf as an implementation dependency, while its API dependencies on the four Swift-facing core
+leaves export their stable public surfaces through `RotkiShared`. Core leaves create no framework of
+their own;
 credentials, DTO/decoder seams, network seams, byte helpers, codec mechanics, generated vocabulary,
 and WebSocket notification types stay hidden from Swift. The single generated protocol corpus and
 its reusable parser now live in test-only `:core:testing`.
@@ -37,15 +39,17 @@ The facade-backed in-memory Pairing attempt and cleanup implementation remains i
 together with the Device Session rename/revoke DTOs and stable `DeviceLabelValidator` wrapper.
 Challenge/proof and Access Session DTOs, envelopes, mapping, and transcript bytes now live in
 `:feature:authorization:data`; their Ktor-free contracts live in
-`:feature:authorization:domain`, and `:feature:authorization:application` owns the bounded
-process-memory exchange coordinator. `:shared` consumes all three as implementation dependencies
-for later facade composition and exports none of them. Native Android Device Key, idempotency-key,
-and Pairing-record implementations remain in `:androidApp`, and the Authorization client is not yet
-wired into either native host. `:shared` also consumes the security contracts from
-`:core:security-api`, Pairing data as an implementation dependency, and generic retry/lifecycle
-policy from `:core:network`. The data modules have no edge back to `:shared`; every integration seam
-is hidden from Objective-C and Swift. Raw `Json` stays sealed behind the Kotlin-only protocol codec,
-while sensitive request bytes retain a constant redacted diagnostic representation.
+`:feature:authorization:domain`, and `:feature:authorization:application` owns process-memory Access
+authority, caller-independent acquisition/renewal single-flight, exact expiry, atomic replacement,
+bounded fresh-exchange recovery, and the shared visibility policy. `:shared` consumes all three as
+implementation dependencies for later facade composition and exports none of them. Request-authority
+delegation is not implemented. Native Android Device Key, idempotency-key, and Pairing-record
+implementations remain in `:androidApp`, and the Authorization client is not yet wired into either
+native host. `:shared` also consumes the security contracts from `:core:security-api`, Pairing data
+as an implementation dependency, and generic request-replay/transport-retry policy from
+`:core:network`. The data modules have no edge back to `:shared`; every integration seam is hidden
+from Objective-C and Swift. Raw `Json` stays sealed behind the Kotlin-only protocol codec, while
+sensitive request bytes retain a constant redacted diagnostic representation.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned

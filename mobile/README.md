@@ -22,8 +22,9 @@ The production build currently contains:
   notification decoder with its typed refresh/snapshot notification model. It owns no Auth DTOs,
   transport, or Apple framework of its own;
 - `core:network`: the reusable KMP Ktor execution boundary. It owns the hardened Companion client,
-  bounded HTTP response handling, retry/session-renewal policies, and OkHttp/Darwin engine actuals.
-  It depends only on `core:protocol` inside the project and remains hidden from Swift;
+  bounded HTTP response handling, request-replay and transport-retry policy, and OkHttp/Darwin
+  engine actuals. It depends only on `core:protocol` inside the project and remains hidden from
+  Swift;
 - `core:security-api`: the platform-neutral security-contract leaf. It owns the secret-free Pairing
   cleanup journal, Device-proof and idempotency ports, the redacted Pairing-record persistence
   contract, and the secure Snapshot-store contract with its revocable application-owned plaintext
@@ -33,10 +34,11 @@ The production build currently contains:
 - `feature:authorization:domain`: the Ktor-free, redacted challenge/proof and Access Session
   contracts plus the remote-gateway and transcript-encoder ports. It depends only on protocol value
   types and remains hidden from Swift;
-- `feature:authorization:application`: the bounded process-memory Authorization coordinator. Its C1
-  core reads the durable Pairing record, requires the existing Device Key, and joins foreground
-  callers into one challenge/proof exchange; renewal and native/facade composition remain later
-  slices;
+- `feature:authorization:application`: the process-scoped Authorization coordinator. It owns a
+  caller-independent single flight for acquisition and renewal, exact Engine expiry, automatic
+  renewal at 300 seconds remaining, atomic bearer replacement, one fixture-frozen recoverable
+  renewal retry, one fresh-challenge recovery, and the inactive-retain/background-purge lifecycle
+  policy. Request-authority delegation and native/facade composition remain later slices;
 - `feature:authorization:data`: the strict challenge/proof DTO, envelope, mapping, transcript, route,
   and internal Ktor boundary. It reuses bounded Companion response handling, requires `no-store` on
   successful responses, creates no framework, and exposes no wire type to Swift;

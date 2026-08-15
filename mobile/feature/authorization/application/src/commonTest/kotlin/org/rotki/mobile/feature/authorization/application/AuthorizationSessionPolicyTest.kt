@@ -1,45 +1,45 @@
-package org.rotki.mobile.core.network
+package org.rotki.mobile.feature.authorization.application
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class SessionRenewalPolicyTest {
+class AuthorizationSessionPolicyTest {
     @Test
-    fun startsRenewalAtExactlyFiveMinutesRemaining() {
+    fun `starts renewal at exactly five minutes remaining`() {
         assertEquals(
-            SessionRenewalDecision.KEEP_CURRENT_SESSION,
+            AuthorizationSessionDecision.KEEP_CURRENT_SESSION,
             decide(remainingSeconds = 301),
         )
         assertEquals(
-            SessionRenewalDecision.START_SINGLE_FLIGHT_RENEWAL,
+            AuthorizationSessionDecision.START_SINGLE_FLIGHT_RENEWAL,
             decide(remainingSeconds = 300),
         )
         assertEquals(
-            SessionRenewalDecision.START_SINGLE_FLIGHT_RENEWAL,
+            AuthorizationSessionDecision.START_SINGLE_FLIGHT_RENEWAL,
             decide(remainingSeconds = 1),
         )
     }
 
     @Test
-    fun exactExpiryStopsSessionUseEvenDuringRenewal() {
+    fun `exact expiry stops session use even during renewal`() {
         assertEquals(
-            SessionRenewalDecision.SESSION_EXPIRED,
+            AuthorizationSessionDecision.SESSION_EXPIRED,
             decide(remainingSeconds = 0, isRenewalInFlight = true),
         )
         assertEquals(
-            SessionRenewalDecision.SESSION_EXPIRED,
+            AuthorizationSessionDecision.SESSION_EXPIRED,
             decide(remainingSeconds = -1),
         )
     }
 
     @Test
-    fun renewalIsSingleFlightAndForegroundOnly() {
+    fun `renewal is single flight and foreground only`() {
         assertEquals(
-            SessionRenewalDecision.RENEWAL_ALREADY_IN_FLIGHT,
+            AuthorizationSessionDecision.RENEWAL_ALREADY_IN_FLIGHT,
             decide(remainingSeconds = 300, isRenewalInFlight = true),
         )
         assertEquals(
-            SessionRenewalDecision.OUTSIDE_ACTIVE_FOREGROUND,
+            AuthorizationSessionDecision.OUTSIDE_ACTIVE_FOREGROUND,
             decide(remainingSeconds = 300, isActiveForeground = false),
         )
     }
@@ -48,8 +48,8 @@ class SessionRenewalPolicyTest {
         remainingSeconds: Long,
         isActiveForeground: Boolean = true,
         isRenewalInFlight: Boolean = false,
-    ): SessionRenewalDecision =
-        SessionRenewalPolicy.decide(
+    ): AuthorizationSessionDecision =
+        AuthorizationSessionPolicy.decide(
             nowEpochSeconds = NOW,
             sessionExpiresAtEpochSeconds = NOW + remainingSeconds,
             isActiveForeground = isActiveForeground,

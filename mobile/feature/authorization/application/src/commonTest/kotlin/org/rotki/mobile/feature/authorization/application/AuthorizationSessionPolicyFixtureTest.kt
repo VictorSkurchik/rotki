@@ -1,4 +1,4 @@
-package org.rotki.mobile.core.network
+package org.rotki.mobile.feature.authorization.application
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -8,21 +8,32 @@ import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class SessionRenewalPolicyFixtureTest {
+class AuthorizationSessionPolicyFixtureTest {
     @Test
-    fun allAuthoredRenewalPolicyCasesExecuteUnchanged() {
-        val cases =
+    fun `all authored renewal policy cases execute unchanged`() {
+        val policy =
             ProtocolFixtureData.clientPolicy
                 .getValue("renewal_policy")
                 .jsonObject
-                .getValue("cases")
-                .jsonArray
+        assertEquals(
+            PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS,
+            policy.long("proactive_transport_retry_delay_seconds"),
+        )
+        assertEquals(
+            PROACTIVE_RENEWAL_AUTOMATIC_RETRY_BUDGET.toLong(),
+            policy.long("proactive_automatic_retry_budget"),
+        )
+        assertEquals(
+            CHALLENGE_UNAVAILABLE_FRESH_EXCHANGE_BUDGET.toLong(),
+            policy.long("challenge_unavailable_fresh_exchange_budget"),
+        )
+        val cases = policy.getValue("cases").jsonArray
         assertEquals(5, cases.size)
 
         cases.forEach { element ->
             val case = element.jsonObject
             val actual =
-                SessionRenewalPolicy.decide(
+                AuthorizationSessionPolicy.decide(
                     nowEpochSeconds = NOW,
                     sessionExpiresAtEpochSeconds = NOW + case.long("seconds_until_expiry"),
                     isActiveForeground = case.boolean("active_foreground"),
@@ -31,23 +42,23 @@ class SessionRenewalPolicyFixtureTest {
             val expected =
                 when (case.string("decision")) {
                     "keep_current_session" -> {
-                        SessionRenewalDecision.KEEP_CURRENT_SESSION
+                        AuthorizationSessionDecision.KEEP_CURRENT_SESSION
                     }
 
                     "start_single_flight_renewal" -> {
-                        SessionRenewalDecision.START_SINGLE_FLIGHT_RENEWAL
+                        AuthorizationSessionDecision.START_SINGLE_FLIGHT_RENEWAL
                     }
 
                     "renewal_already_in_flight" -> {
-                        SessionRenewalDecision.RENEWAL_ALREADY_IN_FLIGHT
+                        AuthorizationSessionDecision.RENEWAL_ALREADY_IN_FLIGHT
                     }
 
                     "session_expired" -> {
-                        SessionRenewalDecision.SESSION_EXPIRED
+                        AuthorizationSessionDecision.SESSION_EXPIRED
                     }
 
                     "outside_active_foreground" -> {
-                        SessionRenewalDecision.OUTSIDE_ACTIVE_FOREGROUND
+                        AuthorizationSessionDecision.OUTSIDE_ACTIVE_FOREGROUND
                     }
 
                     else -> {

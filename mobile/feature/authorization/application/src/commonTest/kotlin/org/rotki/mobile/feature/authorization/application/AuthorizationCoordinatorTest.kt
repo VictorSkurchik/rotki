@@ -1,14 +1,23 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package org.rotki.mobile.feature.authorization.application
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.ports.Clock
@@ -38,7 +47,6 @@ import org.rotki.mobile.feature.authorization.domain.AuthorizationRemoteOutcome
 import org.rotki.mobile.feature.authorization.domain.DeviceProofTranscriptEncoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -117,18 +125,17 @@ class AuthorizationCoordinatorTest {
     fun `clear generation fences a late proof response`() =
         runTest {
             val proofStarted = CompletableDeferred<Unit>()
+            val releaseLateProof = CompletableDeferred<Unit>()
             var proofAttempts = 0
-            var firstProofCancelled = false
             val gateway =
                 FakeAuthorizationGateway(
                     proofOperation = {
                         proofAttempts += 1
                         if (proofAttempts == 1) {
-                            proofStarted.complete(Unit)
-                            try {
-                                awaitCancellation()
-                            } finally {
-                                firstProofCancelled = true
+                            withContext(NonCancellable) {
+                                proofStarted.complete(Unit)
+                                releaseLateProof.await()
+                                AuthorizationRemoteOutcome.Success(TestValues.session())
                             }
                         } else {
                             AuthorizationRemoteOutcome.Success(TestValues.session())
@@ -139,13 +146,17 @@ class AuthorizationCoordinatorTest {
             val authorization = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
             proofStarted.await()
 
-            coordinator.clearAccessSession()
+            val clearing =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    coordinator.clearAccessSession()
+                }
 
             assertEquals(
                 AuthorizationCoordinatorOutcome.OutsideActiveForeground,
                 authorization.await(),
             )
-            assertTrue(firstProofCancelled)
+            releaseLateProof.complete(Unit)
+            clearing.await()
             assertFalse(coordinator.hasActiveAccessSession())
 
             assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
@@ -189,20 +200,16 @@ class AuthorizationCoordinatorTest {
         }
 
     @Test
-    fun `owner cancellation releases joined callers and allows a fresh flight`() =
+    fun `owner cancellation does not cancel the process flight or joined callers`() =
         runTest {
             val challengeStarted = CompletableDeferred<Unit>()
-            var challengeAttempts = 0
+            val releaseChallenge = CompletableDeferred<Unit>()
             val gateway =
                 FakeAuthorizationGateway(
                     challengeOperation = {
-                        challengeAttempts += 1
-                        if (challengeAttempts == 1) {
-                            challengeStarted.complete(Unit)
-                            awaitCancellation()
-                        } else {
-                            AuthorizationRemoteOutcome.Success(TestValues.challenge())
-                        }
+                        challengeStarted.complete(Unit)
+                        releaseChallenge.await()
+                        AuthorizationRemoteOutcome.Success(TestValues.challenge())
                     },
                 )
             val coordinator = coordinator(gateway = gateway)
@@ -211,10 +218,11 @@ class AuthorizationCoordinatorTest {
             val joined = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
 
             owner.cancelAndJoin()
+            releaseChallenge.complete(Unit)
 
-            assertFailsWith<CancellationException> { joined.await() }
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(joined.await())
             assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
-            assertEquals(2, gateway.challengeCalls)
+            assertEquals(1, gateway.challengeCalls)
             assertEquals(1, gateway.proofCalls)
         }
 
@@ -351,7 +359,943 @@ class AuthorizationCoordinatorTest {
         }
 
     @Test
-    fun `cancellation is rethrown and transcript is wiped`() =
+    fun `proactive renewal starts at 300 seconds but not 301`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(
+                                if (proofAttempt == 1) TestValues.NOW + 301 else TestValues.NOW + 900,
+                            ),
+                        )
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(1, deadlines.pending(TestValues.NOW + 1))
+
+            clock.now = TestValues.NOW + 1
+            deadlines.releaseOne(TestValues.NOW + 1)
+            runCurrent()
+
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+        }
+
+    @Test
+    fun `timer and simultaneous callers share one renewal flight`() =
+        runTest {
+            val renewalStarted = CompletableDeferred<Unit>()
+            val releaseRenewal = CompletableDeferred<Unit>()
+            var challengeAttempt = 0
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    challengeOperation = {
+                        challengeAttempt += 1
+                        if (challengeAttempt == 2) {
+                            renewalStarted.complete(Unit)
+                            releaseRenewal.await()
+                        }
+                        AuthorizationRemoteOutcome.Success(TestValues.challenge())
+                    },
+                    proofOperation = {
+                        proofAttempt += 1
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(
+                                if (proofAttempt == 1) TestValues.NOW + 300 else TestValues.NOW + 900,
+                            ),
+                        )
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            runCurrent()
+            renewalStarted.await()
+            val callers =
+                List(8) {
+                    async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+                }
+            releaseRenewal.complete(Unit)
+
+            callers.forEach { caller ->
+                assertIs<AuthorizationCoordinatorOutcome.Authorized>(caller.await())
+            }
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+        }
+
+    @Test
+    fun `recoverable renewal transport loss retains the old bearer`() =
+        runTest {
+            val proofStarted = CompletableDeferred<Unit>()
+            val releaseProof = CompletableDeferred<Unit>()
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        if (proofAttempt == 1) {
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 300),
+                            )
+                        } else {
+                            proofStarted.complete(Unit)
+                            releaseProof.await()
+                            AuthorizationRemoteOutcome.CompleteResponseTransportFailure
+                        }
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            runCurrent()
+            proofStarted.await()
+            assertTrue(coordinator.hasActiveAccessSession())
+            releaseProof.complete(Unit)
+            runCurrent()
+
+            assertTrue(coordinator.hasActiveAccessSession())
+            assertEquals(1, deadlines.pending(TestValues.NOW + PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS))
+        }
+
+    @Test
+    fun `proactive transport retry is one fresh challenge proof exchange`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        when (proofAttempt) {
+                            1 -> {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 300),
+                                )
+                            }
+
+                            2 -> {
+                                AuthorizationRemoteOutcome.CompleteResponseTransportFailure
+                            }
+
+                            else -> {
+                                AuthorizationRemoteOutcome.Success(TestValues.session(TestValues.NOW + 900))
+                            }
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            runCurrent()
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+            val retryDeadline = TestValues.NOW + PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS
+            assertEquals(1, deadlines.pending(retryDeadline))
+
+            clock.now = retryDeadline
+            deadlines.releaseOne(retryDeadline)
+            runCurrent()
+
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `proactive transport retry budget stops after one fresh exchange`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        if (proofAttempt == 1) {
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 300),
+                            )
+                        } else {
+                            AuthorizationRemoteOutcome.CompleteResponseTransportFailure
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            val firstRetryDeadline = TestValues.NOW + PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS
+            assertEquals(1, deadlines.pending(firstRetryDeadline))
+            clock.now = firstRetryDeadline
+            deadlines.releaseOne(firstRetryDeadline)
+            runCurrent()
+
+            val forbiddenSecondRetryDeadline =
+                firstRetryDeadline + PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+            assertEquals(0, deadlines.pending(forbiddenSecondRetryDeadline))
+            assertEquals(1, deadlines.activeCount())
+            assertTrue(coordinator.hasActiveAccessSession())
+            runCurrent()
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+        }
+
+    @Test
+    fun `inactive cancels a pending proactive retry and active resumes with a fresh exchange`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            val visibility = FakeVisibility(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        when (proofAttempt) {
+                            1 -> {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 300),
+                                )
+                            }
+
+                            2 -> {
+                                AuthorizationRemoteOutcome.CompleteResponseTransportFailure
+                            }
+
+                            else -> {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 900),
+                                )
+                            }
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(
+                    gateway = gateway,
+                    visibility = visibility,
+                    clock = clock,
+                    deadlineWaiter = deadlines,
+                )
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            val retryDeadline = TestValues.NOW + PROACTIVE_RENEWAL_RETRY_DELAY_SECONDS
+            assertEquals(1, deadlines.pending(retryDeadline))
+            assertEquals(2, deadlines.activeCount())
+            visibility.mutableState.value = ApplicationVisibilityState.INACTIVE
+            runCurrent()
+
+            assertEquals(0, deadlines.pending(retryDeadline))
+            assertEquals(1, deadlines.activeCount())
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+            assertFalse(coordinator.hasActiveAccessSession())
+
+            clock.now = retryDeadline
+            runCurrent()
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+
+            visibility.mutableState.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
+            runCurrent()
+
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `rate limited proactive renewal schedules one canonical Retry-After exchange`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        when (proofAttempt) {
+                            1 -> {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 300),
+                                )
+                            }
+
+                            2 -> {
+                                AuthorizationRemoteOutcome.Rejected(
+                                    AuthorizationRemoteFailure.RATE_LIMITED,
+                                    retryAfterSeconds = 5,
+                                )
+                            }
+
+                            else -> {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 900),
+                                )
+                            }
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+            assertEquals(1, deadlines.pending(TestValues.NOW + 5))
+
+            clock.now = TestValues.NOW + 5
+            deadlines.releaseOne(TestValues.NOW + 5)
+            runCurrent()
+
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `rate limit above five seconds does not schedule hidden renewal work`() =
+        runTest {
+            val deadlines = ManualDeadlineWaiter()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        if (proofAttempt == 1) {
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 300),
+                            )
+                        } else {
+                            AuthorizationRemoteOutcome.Rejected(
+                                AuthorizationRemoteFailure.RATE_LIMITED,
+                                retryAfterSeconds = 6,
+                            )
+                        }
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+            assertEquals(0, deadlines.pending(TestValues.NOW + 6))
+            assertEquals(1, deadlines.activeCount())
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `old bearer expires while renewal continues and delayed success may install new authority`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            val renewalProofStarted = CompletableDeferred<Unit>()
+            val releaseRenewalProof = CompletableDeferred<Unit>()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        if (proofAttempt == 1) {
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 300),
+                            )
+                        } else {
+                            renewalProofStarted.complete(Unit)
+                            releaseRenewalProof.await()
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 900),
+                            )
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+            renewalProofStarted.await()
+
+            clock.now = TestValues.NOW + 300
+            deadlines.releaseOne(TestValues.NOW + 300)
+            runCurrent()
+            assertFalse(coordinator.hasActiveAccessSession())
+
+            releaseRenewalProof.complete(Unit)
+            runCurrent()
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `successful renewal atomically replaces old Engine expiry even when the new expiry is earlier`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            val thirdProofStarted = CompletableDeferred<Unit>()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        when (proofAttempt) {
+                            1 -> {
+                                AuthorizationRemoteOutcome.Success(TestValues.session(TestValues.NOW + 900))
+                            }
+
+                            2 -> {
+                                AuthorizationRemoteOutcome.Success(TestValues.session(TestValues.NOW + 850))
+                            }
+
+                            else -> {
+                                thirdProofStarted.complete(Unit)
+                                awaitCancellation()
+                            }
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            clock.now = TestValues.NOW + 600
+            deadlines.releaseOne(TestValues.NOW + 600)
+            runCurrent()
+            thirdProofStarted.await()
+            assertEquals(1, deadlines.pending(TestValues.NOW + 850))
+
+            clock.now = TestValues.NOW + 850
+            deadlines.releaseOne(TestValues.NOW + 850)
+            runCurrent()
+
+            assertFalse(coordinator.hasActiveAccessSession())
+            coordinator.clearAccessSession()
+        }
+
+    @Test
+    fun `expired renewal response never replaces a still usable old bearer`() =
+        runTest {
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(
+                                if (proofAttempt == 1) TestValues.NOW + 300 else TestValues.NOW,
+                            ),
+                        )
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            assertEquals(AuthorizationCoordinatorOutcome.SessionExpired, coordinator.authorize())
+
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `terminal proof outcomes drop only process bearer authority`() =
+        runTest {
+            val terminalFailures =
+                listOf(
+                    AuthorizationRemoteFailure.NOT_AUTHORIZED,
+                    AuthorizationRemoteFailure.PROFILE_MISMATCH,
+                    AuthorizationRemoteFailure.LOCKED_ENGINE,
+                    AuthorizationRemoteFailure.INCOMPATIBLE_PROTOCOL,
+                )
+            terminalFailures.forEach { failure ->
+                var proofAttempt = 0
+                val gateway =
+                    FakeAuthorizationGateway(
+                        proofOperation = {
+                            proofAttempt += 1
+                            if (proofAttempt == 1) {
+                                AuthorizationRemoteOutcome.Success(
+                                    TestValues.session(TestValues.NOW + 300),
+                                )
+                            } else {
+                                AuthorizationRemoteOutcome.Rejected(failure, retryAfterSeconds = null)
+                            }
+                        },
+                    )
+                val store = FakePairingRecordStore()
+                val coordinator = coordinator(gateway = gateway, store = store)
+                assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+                val outcome = assertIs<AuthorizationCoordinatorOutcome.RemoteFailure>(coordinator.authorize())
+
+                assertEquals(failure, outcome.failure)
+                assertFalse(coordinator.hasActiveAccessSession())
+                assertEquals(0, store.deleteCalls)
+            }
+        }
+
+    @Test
+    fun `loss of the durable Pairing relationship drops an old bearer`() =
+        runTest {
+            var storeRead = 0
+            val store =
+                FakePairingRecordStore {
+                    storeRead += 1
+                    if (storeRead == 1) {
+                        PairingRecordReadOutcome.Present(
+                            PairingRecord(TestValues.origin(), TestValues.deviceSessionId()),
+                        )
+                    } else {
+                        PairingRecordReadOutcome.Missing
+                    }
+                }
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(TestValues.NOW + 300),
+                        )
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway, store = store)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            assertEquals(AuthorizationCoordinatorOutcome.PairingRequired, coordinator.authorize())
+
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertEquals(2, storeRead)
+        }
+
+    @Test
+    fun `repeated challenge unavailable starts fresh challenges and retains old bearer`() =
+        runTest {
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        if (proofAttempt == 1) {
+                            AuthorizationRemoteOutcome.Success(
+                                TestValues.session(TestValues.NOW + 300),
+                            )
+                        } else {
+                            AuthorizationRemoteOutcome.Rejected(
+                                AuthorizationRemoteFailure.CHALLENGE_UNAVAILABLE,
+                                retryAfterSeconds = null,
+                            )
+                        }
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            val outcome = assertIs<AuthorizationCoordinatorOutcome.RemoteFailure>(coordinator.authorize())
+
+            assertEquals(AuthorizationRemoteFailure.CHALLENGE_UNAVAILABLE, outcome.failure)
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(3, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `inactive cancels renewal but retains bearer and active resumes with a fresh exchange`() =
+        runTest {
+            val visibility = FakeVisibility(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+            val renewalStarted = CompletableDeferred<Unit>()
+            var cancelledRenewal = false
+            var challengeAttempt = 0
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    challengeOperation = {
+                        challengeAttempt += 1
+                        if (challengeAttempt == 2) {
+                            renewalStarted.complete(Unit)
+                            try {
+                                awaitCancellation()
+                            } finally {
+                                cancelledRenewal = true
+                            }
+                        }
+                        AuthorizationRemoteOutcome.Success(TestValues.challenge())
+                    },
+                    proofOperation = {
+                        proofAttempt += 1
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(
+                                if (proofAttempt == 1) TestValues.NOW + 300 else TestValues.NOW + 900,
+                            ),
+                        )
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway, visibility = visibility)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+            renewalStarted.await()
+
+            visibility.mutableState.value = ApplicationVisibilityState.INACTIVE
+            runCurrent()
+
+            assertTrue(cancelledRenewal)
+            assertFalse(coordinator.hasActiveAccessSession())
+            visibility.mutableState.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
+            runCurrent()
+
+            assertEquals(3, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `background observer purges bearer without an inspection call`() =
+        runTest {
+            val visibility = FakeVisibility(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+            val gateway = FakeAuthorizationGateway()
+            val coordinator = coordinator(gateway = gateway, visibility = visibility)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            visibility.mutableState.value = ApplicationVisibilityState.BACKGROUND_OR_LOCKED
+            runCurrent()
+            visibility.mutableState.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
+            runCurrent()
+
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+        }
+
+    @Test
+    fun `background observer cancels signing and wipes its transcript`() =
+        runTest {
+            val visibility = FakeVisibility(ApplicationVisibilityState.ACTIVE_FOREGROUND)
+            val transcript = byteArrayOf(11, 12, 13)
+            val signingStarted = CompletableDeferred<Unit>()
+            val signer = FakeDeviceProofSigner()
+            signer.signOperation = {
+                signingStarted.complete(Unit)
+                awaitCancellation()
+            }
+            val coordinator =
+                coordinator(
+                    signer = signer,
+                    visibility = visibility,
+                    encoder = DeviceProofTranscriptEncoder { _, _, _ -> transcript },
+                )
+            val authorization = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+            signingStarted.await()
+
+            visibility.mutableState.value = ApplicationVisibilityState.BACKGROUND_OR_LOCKED
+            runCurrent()
+
+            assertEquals(
+                AuthorizationCoordinatorOutcome.OutsideActiveForeground,
+                authorization.await(),
+            )
+            assertTrue(transcript.all { byte -> byte == 0.toByte() })
+            assertFalse(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `clock rollback cannot resurrect an expired session`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            val coordinator = coordinator(clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            clock.now = TestValues.ACCESS_EXPIRY
+            deadlines.releaseOne(TestValues.ACCESS_EXPIRY)
+            runCurrent()
+            assertFalse(coordinator.hasActiveAccessSession())
+
+            clock.now = TestValues.NOW
+            assertFalse(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `early deadline wakes recheck the clock before renewal and expiry`() =
+        runTest {
+            val clock = MutableClock()
+            val deadlines = ManualDeadlineWaiter()
+            val gateway = FakeAuthorizationGateway()
+            val coordinator =
+                coordinator(gateway = gateway, clock = clock, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            val renewalDeadline = TestValues.ACCESS_EXPIRY - 300
+            val expiryDeadline = TestValues.ACCESS_EXPIRY
+            assertEquals(1, deadlines.pending(renewalDeadline))
+            assertEquals(1, deadlines.pending(expiryDeadline))
+
+            clock.now = TestValues.NOW + 100
+            deadlines.releaseOne(renewalDeadline)
+            deadlines.releaseOne(expiryDeadline)
+            runCurrent()
+
+            assertEquals(1, deadlines.pending(renewalDeadline))
+            assertEquals(1, deadlines.pending(expiryDeadline))
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(1, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+
+            clock.now = TestValues.NOW
+            deadlines.releaseOne(renewalDeadline)
+            deadlines.releaseOne(expiryDeadline)
+            runCurrent()
+
+            assertEquals(1, deadlines.pending(renewalDeadline))
+            assertEquals(1, deadlines.pending(expiryDeadline))
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(1, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+            coordinator.close()
+        }
+
+    @Test
+    fun `default deadlines start renewal after a forward clock jump into the renewal window`() =
+        runTest {
+            val clock = MutableClock()
+            var proofAttempt = 0
+            val gateway =
+                FakeAuthorizationGateway(
+                    proofOperation = {
+                        proofAttempt += 1
+                        AuthorizationRemoteOutcome.Success(
+                            TestValues.session(
+                                if (proofAttempt == 1) {
+                                    TestValues.ACCESS_EXPIRY
+                                } else {
+                                    clock.now + 900
+                                },
+                            ),
+                        )
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway, clock = clock)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+
+            clock.now = TestValues.ACCESS_EXPIRY - 250
+            advanceTimeBy(1_000)
+            runCurrent()
+
+            assertEquals(2, gateway.challengeCalls)
+            assertEquals(2, gateway.proofCalls)
+            assertTrue(coordinator.hasActiveAccessSession())
+        }
+
+    @Test
+    fun `close cancels timers drops authority and closes gateway once`() =
+        runTest {
+            val deadlines = ManualDeadlineWaiter()
+            val gateway = FakeAuthorizationGateway()
+            val coordinator = coordinator(gateway = gateway, deadlineWaiter = deadlines)
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+            runCurrent()
+            assertEquals(2, deadlines.activeCount())
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(1, gateway.proofCalls)
+
+            coordinator.close()
+            coordinator.close()
+
+            assertEquals(0, deadlines.activeCount())
+            runCurrent()
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(1, gateway.proofCalls)
+            assertTrue(gateway.closed)
+            assertEquals(1, gateway.closeCalls)
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, coordinator.authorize())
+        }
+
+    @Test
+    fun `cancelled close still commits flight cancellation and transport shutdown`() =
+        runTest {
+            val challengeStarted = CompletableDeferred<Unit>()
+            val cancellationFinalizerStarted = CompletableDeferred<Unit>()
+            val releaseCancellationFinalizer = CompletableDeferred<Unit>()
+            val gateway =
+                FakeAuthorizationGateway(
+                    challengeOperation = {
+                        challengeStarted.complete(Unit)
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            withContext(NonCancellable) {
+                                cancellationFinalizerStarted.complete(Unit)
+                                releaseCancellationFinalizer.await()
+                            }
+                        }
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway)
+            val authorization = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+            challengeStarted.await()
+            val closing = async(start = CoroutineStart.UNDISPATCHED) { coordinator.close() }
+            cancellationFinalizerStarted.await()
+
+            closing.cancel()
+            releaseCancellationFinalizer.complete(Unit)
+            closing.join()
+            runCurrent()
+
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, authorization.await())
+            assertEquals(1, gateway.closeCalls)
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, coordinator.authorize())
+        }
+
+    @Test
+    fun `process scope cancellation start purges authority before child cleanup completes`() =
+        runTest {
+            val processJob = SupervisorJob()
+            val processScope = CoroutineScope(backgroundScope.coroutineContext + processJob)
+            val cleanupStarted = CompletableDeferred<Unit>()
+            val releaseCleanup = CompletableDeferred<Unit>()
+            val lingeringChild =
+                processScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        withContext(NonCancellable) {
+                            cleanupStarted.complete(Unit)
+                            releaseCleanup.await()
+                        }
+                    }
+                }
+            val gateway = FakeAuthorizationGateway()
+            val coordinator =
+                coordinator(
+                    gateway = gateway,
+                    processScope = processScope,
+                )
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            processJob.cancel()
+            cleanupStarted.await()
+            runCurrent()
+
+            assertFalse(processJob.isCompleted)
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, coordinator.authorize())
+            assertEquals(1, gateway.closeCalls)
+
+            releaseCleanup.complete(Unit)
+            lingeringChild.join()
+            runCurrent()
+
+            assertTrue(processJob.isCompleted)
+            assertEquals(1, gateway.closeCalls)
+        }
+
+    @Test
+    fun `normal process scope completion purges authority and closes transport once`() =
+        runTest {
+            val processJob = SupervisorJob()
+            val gateway = FakeAuthorizationGateway()
+            val coordinator =
+                coordinator(
+                    gateway = gateway,
+                    processScope = CoroutineScope(backgroundScope.coroutineContext + processJob),
+                )
+            assertIs<AuthorizationCoordinatorOutcome.Authorized>(coordinator.authorize())
+
+            assertTrue(processJob.complete())
+            runCurrent()
+
+            assertTrue(processJob.isCompleted)
+            assertFalse(coordinator.hasActiveAccessSession())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, coordinator.authorize())
+            assertEquals(1, gateway.closeCalls)
+        }
+
+    @Test
+    fun `process scope cancellation releases an in-flight waiter and cannot leave a sticky flight`() =
+        runTest {
+            val processJob = SupervisorJob()
+            val challengeStarted = CompletableDeferred<Unit>()
+            var challengeCancelled = false
+            val gateway =
+                FakeAuthorizationGateway(
+                    challengeOperation = {
+                        challengeStarted.complete(Unit)
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            challengeCancelled = true
+                        }
+                    },
+                )
+            val coordinator =
+                coordinator(
+                    gateway = gateway,
+                    processScope = CoroutineScope(backgroundScope.coroutineContext + processJob),
+                )
+            val authorization = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+            challengeStarted.await()
+
+            processJob.cancel()
+            runCurrent()
+
+            assertTrue(challengeCancelled)
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, authorization.await())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, coordinator.authorize())
+            assertEquals(1, gateway.challengeCalls)
+            assertEquals(0, gateway.proofCalls)
+            assertEquals(1, gateway.closeCalls)
+        }
+
+    @Test
+    fun `close cancels a process flight and releases every waiter with closed outcome`() =
+        runTest {
+            val challengeStarted = CompletableDeferred<Unit>()
+            var challengeCancelled = false
+            val gateway =
+                FakeAuthorizationGateway(
+                    challengeOperation = {
+                        challengeStarted.complete(Unit)
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            challengeCancelled = true
+                        }
+                    },
+                )
+            val coordinator = coordinator(gateway = gateway)
+            val first = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+            challengeStarted.await()
+            val joined = async(start = CoroutineStart.UNDISPATCHED) { coordinator.authorize() }
+
+            coordinator.close()
+
+            assertTrue(challengeCancelled)
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, first.await())
+            assertEquals(AuthorizationCoordinatorOutcome.Closed, joined.await())
+            assertEquals(1, gateway.closeCalls)
+        }
+
+    @Test
+    fun `waiter cancellation leaves process flight alive until explicit clear wipes transcript`() =
         runTest {
             val transcript = byteArrayOf(4, 5, 6)
             val signingStarted = CompletableDeferred<Unit>()
@@ -371,6 +1315,8 @@ class AuthorizationCoordinatorTest {
             authorization.cancelAndJoin()
 
             assertTrue(authorization.isCancelled)
+            assertFalse(transcript.all { byte -> byte == 0.toByte() })
+            coordinator.clearAccessSession()
             assertTrue(transcript.all { byte -> byte == 0.toByte() })
         }
 
@@ -389,22 +1335,108 @@ class AuthorizationCoordinatorTest {
             assertFalse(TestValues.ACCESS_CREDENTIAL in outcome.toString())
         }
 
-    private fun coordinator(
+    private fun TestScope.coordinator(
         gateway: FakeAuthorizationGateway = FakeAuthorizationGateway(),
         signer: FakeDeviceProofSigner = FakeDeviceProofSigner(),
         encoder: DeviceProofTranscriptEncoder = DeviceProofTranscriptEncoder { _, _, _ -> byteArrayOf(1) },
         visibility: FakeVisibility = FakeVisibility(ApplicationVisibilityState.ACTIVE_FOREGROUND),
         store: PairingRecordStore = FakePairingRecordStore(),
+        clock: Clock = Clock { TestValues.NOW },
+        deadlineWaiter: AuthorizationDeadlineWaiter? = null,
+        processScope: CoroutineScope = backgroundScope,
+    ): AuthorizationCoordinator {
+        val arguments =
+            AuthorizationCoordinatorArguments(
+                gateway = gateway,
+                signer = signer,
+                encoder = encoder,
+                visibility = visibility,
+                store = store,
+                clock = clock,
+            )
+        return if (deadlineWaiter == null) {
+            arguments.create(processScope)
+        } else {
+            arguments.create(processScope, deadlineWaiter)
+        }
+    }
+}
+
+private data class AuthorizationCoordinatorArguments(
+    val gateway: AuthorizationRemoteGateway,
+    val signer: DeviceProofSigner,
+    val encoder: DeviceProofTranscriptEncoder,
+    val visibility: ApplicationVisibility,
+    val store: PairingRecordStore,
+    val clock: Clock,
+) {
+    fun create(
+        processScope: CoroutineScope,
+        deadlineWaiter: AuthorizationDeadlineWaiter? = null,
     ): AuthorizationCoordinator =
-        AuthorizationCoordinator(
-            remoteGateway = gateway,
-            transcriptEncoder = encoder,
-            pairingRecordStore = store,
-            deviceProofSigner = signer,
-            applicationVisibility = visibility,
-            clock = Clock { TestValues.NOW },
-            selectedProtocolVersion = 1,
-        )
+        if (deadlineWaiter == null) {
+            AuthorizationCoordinator(
+                remoteGateway = gateway,
+                transcriptEncoder = encoder,
+                pairingRecordStore = store,
+                deviceProofSigner = signer,
+                applicationVisibility = visibility,
+                clock = clock,
+                selectedProtocolVersion = 1,
+                processScope = processScope,
+            )
+        } else {
+            AuthorizationCoordinator(
+                remoteGateway = gateway,
+                transcriptEncoder = encoder,
+                pairingRecordStore = store,
+                deviceProofSigner = signer,
+                applicationVisibility = visibility,
+                clock = clock,
+                selectedProtocolVersion = 1,
+                processScope = processScope,
+                deadlineWaiter = deadlineWaiter,
+            )
+        }
+}
+
+private class MutableClock(
+    var now: Long = TestValues.NOW,
+) : Clock {
+    override fun nowEpochSeconds(): Long = now
+}
+
+private class ManualDeadlineWaiter : AuthorizationDeadlineWaiter {
+    private val requests: MutableList<DeadlineRequest> = mutableListOf()
+
+    override suspend fun waitUntil(deadlineEpochSeconds: Long) {
+        val request = DeadlineRequest(deadlineEpochSeconds)
+        requests += request
+        try {
+            request.release.await()
+        } finally {
+            request.active = false
+        }
+    }
+
+    fun pending(deadlineEpochSeconds: Long): Int =
+        requests.count { request -> request.active && request.deadlineEpochSeconds == deadlineEpochSeconds }
+
+    fun activeCount(): Int = requests.count { request -> request.active }
+
+    fun releaseOne(deadlineEpochSeconds: Long) {
+        val request =
+            requests.firstOrNull { candidate ->
+                candidate.active && candidate.deadlineEpochSeconds == deadlineEpochSeconds
+            } ?: error("No pending deadline $deadlineEpochSeconds")
+        request.release.complete(Unit)
+    }
+
+    private class DeadlineRequest(
+        val deadlineEpochSeconds: Long,
+        val release: CompletableDeferred<Unit> = CompletableDeferred(),
+        var active: Boolean = true,
+    )
 }
 
 private class FakeAuthorizationGateway(
@@ -417,6 +1449,7 @@ private class FakeAuthorizationGateway(
 ) : AuthorizationRemoteGateway {
     var challengeCalls: Int = 0
     var proofCalls: Int = 0
+    var closeCalls: Int = 0
     var closed: Boolean = false
 
     override suspend fun requestChallenge(
@@ -448,6 +1481,7 @@ private class FakeAuthorizationGateway(
     }
 
     override fun close() {
+        closeCalls += 1
         closed = true
     }
 }
@@ -488,11 +1522,16 @@ private class FakePairingRecordStore(
         )
     },
 ) : PairingRecordStore {
+    var deleteCalls: Int = 0
+
     override suspend fun read(): PairingRecordReadOutcome = readOperation()
 
     override suspend fun write(record: PairingRecord): PairingRecordWriteOutcome = PairingRecordWriteOutcome.Unavailable
 
-    override suspend fun delete(): PairingRecordDeleteOutcome = PairingRecordDeleteOutcome.Unavailable
+    override suspend fun delete(): PairingRecordDeleteOutcome {
+        deleteCalls += 1
+        return PairingRecordDeleteOutcome.Unavailable
+    }
 }
 
 private class FakeVisibility(
