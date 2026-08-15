@@ -58,6 +58,9 @@ the live Engine and Starling gates as separate end-to-end evidence.
 ## Target modules and dependency direction
 
 ```text
+:feature:authorization:domain
+    -> :core:protocol
+
 :feature:authorization:application
     -> :feature:authorization:domain
     -> :core:common
@@ -66,12 +69,13 @@ the live Engine and Starling gates as separate end-to-end evidence.
 
 :feature:authorization:data
     -> :feature:authorization:domain
-    -> :core:common
-    -> :core:network -> :core:protocol
+    -> :core:network
+    -> :core:protocol
 
 :shared facade / native composition roots
     -> :feature:authorization:application
     -> :feature:authorization:data
+    -> :feature:authorization:domain
 ```
 
 - Domain exposes only coarse, redacted outcomes and small consumer-owned ports.
@@ -96,6 +100,16 @@ the live Engine and Starling gates as separate end-to-end evidence.
   response decoding, `Cache-Control: no-store`, protocol header, and redacted rendering.
 - Add a Ktor-free domain gateway for challenge creation and proof submission. Its production
   implementation uses the hardened platform `HttpClient` and exposes no `HttpClient`/engine type.
+
+Implementation status (2026-08-15): the three modules, ownership move, strict wire boundary,
+fixture/MockEngine contracts, module guards, and Swift-leak guards are implemented. To keep the
+application module real rather than a placeholder, C1 also includes the bounded foreground
+coordinator core: it reads the existing durable Pairing record, requires the existing Device Key,
+joins concurrent callers into one challenge/proof exchange, wipes transcript bytes, and
+generation-fences the process-memory Access Session. Proactive renewal, request-authority
+delegation, facade/root-state mapping, and native composition remain C2-C5. Pairing still ends at
+durable Device Session registration, and this fixture-backed evidence does not complete A4.1 or
+Gate G4.
 
 ### C2 — Implement the shared authorization coordinator
 

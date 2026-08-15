@@ -507,7 +507,7 @@ extracting modules. Make `mobileCheck` depend on it, keep Android Lint as a sepa
 `./gradlew --no-daemon --continue qualityCheck` before compile/tests in CI. Extract modules only with
 real production code and keep every platform buildable throughout the migration.
 
-Implementation status (2026-08-14): the central ktlint/detekt convention, `qualityCheck`,
+Implementation status (2026-08-15): the central ktlint/detekt convention, `qualityCheck`,
 `qualityFormat`, `mobileCheck` dependency, and hosted CI gate are implemented. A reusable KMP library
 convention now owns the common JVM, Android host, and Apple target policy. `:core:model` is the first
 extracted leaf and owns the complete `ExactDecimal` slice: implementation, private backend, tests,
@@ -560,6 +560,15 @@ admission cannot be mistaken for stale material and silently removed. Domain and
 store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
 creates an Apple framework.
 
+The C1 Authorization boundary is now physical without changing the native API.
+`:feature:authorization:domain` owns Ktor-free redacted contracts,
+`:feature:authorization:data` owns the strict challenge/proof DTO, envelope, mapping, transcript,
+route, and internal Ktor boundary, and `:feature:authorization:application` owns a bounded foreground
+single-flight coordinator that requires the existing Pairing record and Device Key and retains the
+Access Session only in process memory. The three modules create no Apple framework, are not exported
+from `RotkiShared`, and are guarded against Ktor/DTO/credential leakage. Renewal,
+facade/root-state mapping, and native composition remain later slices.
+
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
 `:android:platform` module now owns the lifecycle bridge plus the durable Pairing record,
@@ -593,9 +602,11 @@ envelopes and decoders remain in `:core:protocol`, while the complete security c
 lives in `:core:security-api`. The canonical generated test corpus has one owner in test-only
 `:core:testing`, which the graph forbids from production source sets. Raw `Json` is private behind
 the Kotlin-only protocol codec hidden from Objective-C and Swift. The stable shared Pairing wrappers
-retain facade-owned connection lifecycle, durability, and cleanup orchestration plus the
-not-yet-implemented challenge/proof and Access Session DTOs. Pairing data creates no framework; its
-redacted Kotlin integration seams expose no Ktor type and stay hidden from native export.
+retain only facade-owned connection lifecycle, durability, and cleanup orchestration; Device Session
+rename/revoke DTOs also remain in `:shared`. Challenge/proof and Access Session wire ownership has
+moved to the Authorization modules without creating a feature framework or changing the native API.
+Pairing data creates no framework; its redacted Kotlin integration seams expose no Ktor type and
+stay hidden from native export.
 
 Room is introduced only with the first bounded relational use case; the encrypted Portfolio Snapshot
 remains an atomic document and is never stored as plaintext database rows. The complete Atomic Design
@@ -1060,7 +1071,7 @@ ViewModel adapter. Exercise Capability discovery, Device Key registration, proof
 in-memory Access Session acquisition against the real Engine. Process restart must mint a
 new Access Session from the Device Key without Pairing again.
 
-Implementation status (2026-08-14): the mobile Client now reaches durable Device Session
+Implementation status (2026-08-15): the mobile Client now reaches durable Device Session
 registration. Android has a CameraX/ML Kit QR scanner, state-driven Compose Pairing and recovery
 screens, a thin ViewModel, immediate privacy cover, one Koin-backed process composition, and typed
 Navigation Compose destinations for the Overview/Portfolio/History/Sources placeholder shell. The
@@ -1077,8 +1088,10 @@ A secret-free durable cleanup journal and Android startup reconciliation prevent
 registration from becoming a false Pairing. Android also handles API 37 local-network
 permission and trusts system or user-installed HTTPS roots without allowing cleartext.
 Shared/JVM and Android host checks, lint, and managed-device tests pass on API 28 and API 36.
-Challenge, proof, Access Session acquisition, restart re-authentication, and the real
-Docker/Starling host flow remain unimplemented; therefore A4.1 and Gate G4 are not complete.
+Fixture-backed KMP now proves the strict challenge/proof exchange and bounded in-memory Access
+Session acquisition in the extracted Authorization modules. Native facade/platform wiring,
+proactive renewal, restart re-authentication, and the real Docker/Starling host flow remain
+unimplemented; therefore A4.1 and Gate G4 are not complete.
 The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
 sequence, and pre-live acceptance gates are specified in
 [`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates

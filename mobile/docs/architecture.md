@@ -76,7 +76,8 @@ rules without carrying private configuration.
 
 The current `:core:common`, `:core:model`, `:core:protocol`, `:core:network`,
 `:core:security-api`, test-only `:core:testing`, `:feature:pairing:domain`,
-`:feature:pairing:data`, `:feature:pairing:presentation`, `:android:navigation`,
+`:feature:pairing:data`, `:feature:pairing:presentation`, `:feature:authorization:domain`,
+`:feature:authorization:application`, `:feature:authorization:data`, `:android:navigation`,
 `:android:platform`, `:android:feature:pairing`, `:shared`, and `:androidApp` modules are the first
 migration state, not the final boundary. Create target modules only when moving or adding real
 production code. `:core:common` owns
@@ -108,9 +109,14 @@ and Swift.
 The stable Swift-facing `PairingFlow` and `PairingConnection` consume those ports rather than
 depending directly on `CompanionFacade`; a non-exported adapter scoped to one facade supplies their
 current session/attempt implementation. Pairing connection lifecycle, durability, and cleanup stay
-in that shared wrapper because their opaque capabilities are facade-owned; deferred challenge,
-proof, Access Session, rename, and revoke DTOs also remain there. The public
-`DeviceLabelValidator` remains a stable shared wrapper over data-owned validation. Raw `Json` is
+in that shared wrapper because their opaque capabilities are facade-owned. Challenge/proof DTOs,
+envelopes, mapping, transcript construction, route constants, and the internal hardened Ktor client
+now live in `:feature:authorization:data`; coarse Ktor-free contracts live in
+`:feature:authorization:domain`; and `:feature:authorization:application` owns the bounded
+foreground single-flight exchange and process-memory Access Session. Rename/revoke DTOs remain in
+`:shared` for a separate Device Session-management slice. All three Authorization modules are
+implementation-only and non-exported. The public `DeviceLabelValidator` remains a stable shared
+wrapper over data-owned validation. Raw `Json` is
 sealed behind the Kotlin-only codec in `:core:protocol`, hidden from Objective-C and Swift. The Ktor
 transport wraps its sensitive encoded bytes in `OutgoingContent` with a constant, redacted
 diagnostic representation and does not install `ContentNegotiation`.
@@ -164,9 +170,9 @@ mobile/
 │   │   ├── domain/          # secret-free contracts and opaque capabilities
 │   │   ├── data/            # QR and registration boundary; internal Ktor implementation
 │   │   └── presentation/    # pure UDF state/action/reducer
-│   └── authorization/       # planned client-only challenge/proof/Access Session vertical
+│   └── authorization/       # client-only challenge/proof/Access Session vertical
 │       ├── domain/          # Ktor-free redacted contracts and outcomes
-│       ├── application/     # process authority, single-flight acquisition, renewal, lifecycle
+│       ├── application/     # bounded process authority; renewal/lifecycle remain later
 │       └── data/            # strict Auth DTOs/transcript and internal Ktor implementation
 ├── android/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
@@ -206,10 +212,16 @@ flowchart LR
     AndroidApp --> AuthorizationApplication["authorization application"]
     Shared --> AuthorizationApplication
     AuthorizationApplication --> AuthorizationDomain["authorization domain"]
+    AuthorizationDomain --> Protocol
+    AuthorizationApplication --> Common
+    AuthorizationApplication --> Protocol
+    AuthorizationApplication --> SecurityApi
     AuthorizationData["authorization data"] --> AuthorizationDomain
     AuthorizationData --> Network
+    AuthorizationData --> Protocol
     AndroidApp --> AuthorizationData
     Shared --> AuthorizationData
+    Shared --> AuthorizationDomain
 ```
 
 Rules:
@@ -476,7 +488,9 @@ Do not perform a big-bang package move. Use this order:
    registration data implementation are extracted. `PairingFlow` and `PairingConnection` use a
    facade-scoped port adapter, including the recovered cleanup barrier; data has no dependency on
    `:shared`. Keep the facade-owned connection transaction in the stable shared wrapper until its
-   opaque attempt and cleanup capabilities can move without reversing the dependency graph.
+   opaque attempt and cleanup capabilities can move without reversing the dependency graph. The C1
+   Authorization domain/application/data boundaries are also in place; their renewal, facade/native
+   composition, and lifecycle integration remain incremental follow-up work.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
    process-scoped platform/Pairing composition remains in `:androidApp`; `:android:platform` now owns
    the lifecycle bridge, durable Pairing record/journal adapters, Android Keystore Device proof, and

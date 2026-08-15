@@ -98,6 +98,9 @@ jobs:
             :core:protocol:dependencies \
             :core:security-api:dependencies \
             :core:testing:dependencies \
+            :feature:authorization:application:dependencies \
+            :feature:authorization:data:dependencies \
+            :feature:authorization:domain:dependencies \
             :feature:pairing:data:dependencies \
             :feature:pairing:domain:dependencies \
             :feature:pairing:presentation:dependencies \
@@ -535,6 +538,8 @@ jobs:
           forbidden_pattern+='|HttpClientEngine|HttpClient|HttpStatement|HttpResponse|ByteReadChannel|OutgoingContent|io_ktor|Ktor|ktor'
           forbidden_pattern+='|PairingQr(Parser|ParseOutcome|Rejection|Dto)?|createPairingSubmissionGateway|PairingProtocolClient|createPairingProtocolClient|PairingRegistrationRequest|createPairingRegistrationRequest|PairingDiscoveryOutcome|PairingRegistrationRemote(Gateway|Outcome)|createPlatformPairingRegistrationRemoteGateway|PairingRegisteredSession|PairingProtocolRoutes?|CompanionJsonContent'
           forbidden_pattern+='|RegisterDeviceSessionRequestDto|DeviceSession(Result|Envelope)?Dto|DeviceLabelParseOutcome|AuthContractOutcome|encodeCompanionJson|matchesRegistration|isValidDeviceLabel|parse(DeviceLabel|PairingDeviceLabel)'
+          forbidden_pattern+='|Authorization(Challenge|Coordinator|CoordinatorOutcome|RemoteFailure|RemoteGateway|RemoteOutcome|ProtocolClient|ProtocolRoutes?|ProtocolRoute|JsonContent)|DeviceProofTranscriptEncoder|create(DeviceProofTranscriptEncoder|PlatformAuthorizationRemoteGateway)|encodeDeviceProofTranscript'
+          forbidden_pattern+='|Challenge(Request|Result|Envelope)Dto|AccessSession(Request|Result|Envelope)Dto'
           forbidden_pattern+='|org_koin|io_insert_koin|Koin(Component|Application|Module|Scope|ViewModel)?|startKoin|koinViewModel|RotkiCompanionApplication|AndroidSecurityComposition|androidAppModule|viewModelOf|singleOf'
           forbidden_pattern+='|androidx_navigation|org_rotki_mobile_android_navigation|AndroidNavigation|Nav(Host(Controller)?|Controller|BackStackEntry)|OverviewRoute|PortfolioRoute|HistoryRoute|SourcesRoute|HomeDestination|HomeNavHost|CompanionHome|HomeConnectionBanner(State)?'
           forbidden_pattern+='|org_rotki_mobile_android_platform|AndroidPlatform|AndroidCompanionLifecycle|createAndroidCompanionLifecycle|DefaultAndroidCompanionLifecycle|CompanionLifecycleController'
@@ -551,7 +556,7 @@ jobs:
             "$simulator_header" \
             "$device_modulemap" \
             "$simulator_modulemap"; then
-            echo '::error::Kotlin-only protocol/network/Pairing or Android DI/navigation/platform/feature internals leaked into the Swift framework'
+            echo '::error::Kotlin-only protocol/network/Pairing/Authorization or Android internals leaked into the Swift framework'
             exit 1
           fi
           required_swift_names=(

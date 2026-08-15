@@ -33,16 +33,19 @@ ownership, and cleanup operations. Process-recovery cleanup claims a facade clea
 touching local key or record material, preventing a concurrent replacement attempt from being
 silently deleted. None of the feature modules is exported as an additional Apple API.
 
-The facade-backed in-memory attempt and cleanup implementation remains in this umbrella, along with
-unimplemented challenge/proof, Access Session, rename, and revoke Auth DTOs. Native Android Device
-Key, idempotency-key, and Pairing-record implementations remain in `:androidApp`; `:shared` consumes
-those contracts from `:core:security-api`, Pairing data as an implementation dependency, and generic
-retry/lifecycle policy from `:core:network`. The data module has no edge back to `:shared`; its
-redacted QR and label authority carriers plus the substitutable registration gateway and outcomes
-cross this Kotlin boundary, and every such seam is hidden from Objective-C and Swift.
-`DeviceLabelValidator` remains here as the stable
-native wrapper over data-owned validation. Raw `Json` stays sealed behind the Kotlin-only protocol
-codec, while sensitive request bytes retain a constant redacted diagnostic representation.
+The facade-backed in-memory Pairing attempt and cleanup implementation remains in this umbrella,
+together with the Device Session rename/revoke DTOs and stable `DeviceLabelValidator` wrapper.
+Challenge/proof and Access Session DTOs, envelopes, mapping, and transcript bytes now live in
+`:feature:authorization:data`; their Ktor-free contracts live in
+`:feature:authorization:domain`, and `:feature:authorization:application` owns the bounded
+process-memory exchange coordinator. `:shared` consumes all three as implementation dependencies
+for later facade composition and exports none of them. Native Android Device Key, idempotency-key,
+and Pairing-record implementations remain in `:androidApp`, and the Authorization client is not yet
+wired into either native host. `:shared` also consumes the security contracts from
+`:core:security-api`, Pairing data as an implementation dependency, and generic retry/lifecycle
+policy from `:core:network`. The data modules have no edge back to `:shared`; every integration seam
+is hidden from Objective-C and Swift. Raw `Json` stays sealed behind the Kotlin-only protocol codec,
+while sensitive request bytes retain a constant redacted diagnostic representation.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned

@@ -220,6 +220,38 @@ val featureModuleBoundaryRules =
                 forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
                 forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
             ),
+        ":feature:authorization:application" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies =
+                    setOf(
+                        ":core:common",
+                        ":core:protocol",
+                        ":core:security-api",
+                        ":feature:authorization:domain",
+                    ),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes,
+                forbiddenPluginIds =
+                    forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
+            ),
+        ":feature:authorization:data" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies =
+                    setOf(
+                        ":core:network",
+                        ":core:protocol",
+                        ":core:testing",
+                        ":feature:authorization:domain",
+                    ),
+                forbiddenGroupPrefixes = nativeUiDependencyGroupPrefixes,
+                forbiddenPluginIds = forbiddenNonUiKmpPluginIds,
+            ),
+        ":feature:authorization:domain" to
+            ModuleBoundaryRule(
+                allowedProjectDependencies = setOf(":core:protocol"),
+                forbiddenGroupPrefixes = featureInfrastructureGroupPrefixes + "org.jetbrains.kotlinx",
+                forbiddenPluginIds =
+                    forbiddenNonUiKmpPluginIds + "org.jetbrains.kotlin.plugin.serialization",
+            ),
         ":feature:pairing:data" to
             ModuleBoundaryRule(
                 allowedProjectDependencies =
@@ -255,6 +287,9 @@ val featureModuleBoundaryRules =
                         ":core:protocol",
                         ":core:security-api",
                         ":core:testing",
+                        ":feature:authorization:application",
+                        ":feature:authorization:data",
+                        ":feature:authorization:domain",
                         ":feature:pairing:data",
                         ":feature:pairing:domain",
                         ":feature:pairing:presentation",
