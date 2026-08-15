@@ -247,6 +247,17 @@ reproof, tests, and physical-iPhone evidence therefore remain open; C5 and G5 ar
 - Begin Snapshot/data-plane work only after the Authorization authority capability is stable and its
   lifecycle tests are green.
 
+Implementation status (2026-08-15): the production KMP Pairing and Authorization clients use the
+platform HTTPS engines and strict serializers, but the repository does not yet provide the D3.4
+live Gradle task, golden Engine/Starling HTTPS harness, trusted test CA orchestration, or Android
+instrumentation driver. The challenge and Access Session paths are classified by the Engine
+request boundary but remain deliberately unadvertised and have no production route handlers in
+this tranche. C6 therefore remains externally blocked: `MockEngine` evidence cannot be relabelled
+as live evidence, no backend or Starling code is added by this client plan, and A4.1/G4 stay open.
+Once the external host exists, the remaining client work is a production-Ktor driver for discovery,
+registration, proof, Access acquisition, and restart reproof plus the real Android tracer. The
+Snapshot/Refresh/WebSocket portion of the full G4 tracer remains a later data-plane slice.
+
 ## Definition of done for the client-only vertical
 
 - All new code is physically outside `:shared` except the thin facade adapter.

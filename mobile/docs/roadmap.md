@@ -13,8 +13,8 @@ changed. It does not authorize widening Companion Scope.
 | 1 | Engine identity and authorization control plane | **in progress** |
 | 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
-| 4 | Real Android tracer bullet | **in progress — Device registration slice** |
-| 5 | Equivalent iOS/SKIE tracer bullet | **host shell only — tracer not started** |
+| 4 | Real Android tracer bullet | **native authorization composition — live tracer blocked** |
+| 5 | Equivalent iOS/SKIE tracer bullet | **native security composition — tracer not started** |
 | 6 | Four complete native destinations | **not started** |
 | 7 | Full design system, hardening, and handoff | **not started** |
 
@@ -1140,6 +1140,15 @@ Key, Pairing record, strict gateway, and composite cleaner. The consolidated JVM
 device/release/ABI evidence is deferred to the final cross-phase run. Real authenticated requests,
 session-work/WebSocket ownership, iOS composition, and the Docker/Starling host flow remain
 unimplemented. Therefore A4.1 and Gate G4 are not complete.
+
+C6 inventory confirms that no dedicated production-Ktor live Gradle task, golden Engine/Starling
+HTTPS harness, trusted test-CA orchestration, or real-host Android instrumentation driver exists in
+the repository yet. The Engine classifies challenge and Access Session authority, but those paths
+remain deliberately unadvertised and have no production handlers in this tranche. Client fixture
+and `MockEngine` evidence therefore remains pre-live evidence only. No backend, Starling, or Full
+Client code is added by this client-only sequence; A4.1 and Gate G4 remain externally blocked until
+the real host routes and harness are available, followed by the later Snapshot/Refresh/WebSocket
+tracer work.
 The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
 sequence, and pre-live acceptance gates are specified in
 [`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates
