@@ -301,6 +301,19 @@ is still authorized and bound to the currently open Profile. Close matching `/ws
 connections immediately on revocation. Pairing secrets and challenges use cryptographic
 randomness, single atomic consumption, fake-clock tests, and no log representation.
 
+Implementation status (2026-08-15): unadvertised groundwork only. A bounded,
+process-scoped Pairing store now issues two-minute Pairing authority and keeps five-minute
+exact Device Session registration replay, with domain-separated process-keyed bindings for
+Profile, origin, and credential plus protocol, idempotency, and semantic-request binding.
+Pairing consumption, durable Control Store registration, replay tombstoning, and
+active-secret removal are serialized in process. Expired authority is rejected exactly at
+its deadline; physical cleanup of its cached response currently occurs on the next store
+operation or explicit clear. No `/api/1/companion` route is registered and no
+`device_sessions:1` Capability is advertised. Trusted-origin derivation, Companion
+authorization and log redaction, Device Session control routes, challenge/proof, Access
+Sessions, WebSocket invalidation, bounded expiry sweeping, and the atomic Capability flip
+remain E1.3 work.
+
 Required security tests:
 
 - expired, replayed, concurrent-consumption, and Profile-switch Pairing attempts;
