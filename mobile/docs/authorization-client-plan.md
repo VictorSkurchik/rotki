@@ -214,10 +214,12 @@ signer, visibility controller, injected clock, and existing journaled composite 
 discovery/select/proof operation is enqueued only after Pairing has returned `REGISTERED`; paired
 restart authorization is triggered only after the existing Snapshot biometric boundary reports a
 real unlock. Background/system lock enters the same adapter purge path, and native explicit retry
-now performs discovery and proof rather than only mutating root state. The consolidated C4 test,
-managed-device, quality, assembly, secret-scan, and ABI run is intentionally deferred to the final
-cross-phase verification pass. Authenticated request execution and real WebSocket/session-work
-ownership remain later data-plane work, so A4.1 and Gate G4 remain open.
+now performs discovery and proof rather than only mutating root state. The final cross-phase run is
+green for fixture generation, JVM and Android-host tests, API 28/API 36 managed-device suites,
+quality and module-graph checks, all Android release variants and AAR boundaries, Apple KMP links
+and tests, Xcode host tests, secret/redaction review, and the byte-identical Swift ABI baseline.
+Authenticated request execution and real WebSocket/session-work ownership remain later data-plane
+work, so A4.1 and Gate G4 remain open.
 
 ### C5 — Complete iOS after the Android gate
 
@@ -235,8 +237,9 @@ generation, paired-process restoration, and `scenePhase`-driven inactive/backgro
 handling. The pre-C5 `RotkiShared` header remains unchanged. That requirement also exposes the
 remaining blocker: the shared Authorization controller is correctly hidden from Objective-C, so
 Swift cannot invoke it without either a new secret-free interop selector (which would change the
-header) or a later internal auto-install design. Camera Pairing UI, Authorization proof/restart
-reproof, tests, and physical-iPhone evidence therefore remain open; C5 and G5 are not complete.
+header) or a later internal auto-install design. Apple KMP tests, device links, dual-framework ABI
+checks, and all 15 Xcode Simulator host tests pass. Camera Pairing UI, Authorization proof/restart
+reproof, the real tracer, and physical-iPhone evidence remain open; C5 and G5 are not complete.
 
 ### C6 — Run live client evidence without expanding this scope
 

@@ -1136,10 +1136,12 @@ Snapshot reconciliation performs the root-state transition. The authenticated se
 controller is a KMP control contract; real WebSocket/native wiring is not part of C3.
 
 As of 2026-08-15, Android native C4 construction and lifecycle delivery use the real retained Device
-Key, Pairing record, strict gateway, and composite cleaner. The consolidated JVM/Android/managed
-device/release/ABI evidence is deferred to the final cross-phase run. Real authenticated requests,
-session-work/WebSocket ownership, iOS composition, and the Docker/Starling host flow remain
-unimplemented. Therefore A4.1 and Gate G4 are not complete.
+Key, Pairing record, strict gateway, and composite cleaner. The final cross-phase run passes fixture
+generation, JVM/Android-host tests, API 28/API 36 managed-device suites, quality and module-graph
+checks, all Android release variants and AAR boundaries, Apple KMP tests and links, Xcode host tests,
+security/redaction review, and the byte-identical Swift ABI baseline. Real authenticated requests,
+session-work/WebSocket ownership, Swift Authorization-controller wiring, and the Docker/Starling
+host flow remain unimplemented. Therefore A4.1 and Gate G4 are not complete.
 
 C6 inventory confirms that no dedicated production-Ktor live Gradle task, golden Engine/Starling
 HTTPS harness, trusted test-CA orchestration, or real-host Android instrumentation driver exists in
@@ -1208,9 +1210,10 @@ Implementation status (2026-08-15): production `iosApp` now contains the non-exp
 Enclave P-256 Device Key adapter, `ThisDeviceOnly` Keychain Pairing record/cleanup persistence,
 secure idempotency generation, paired startup restoration, and Swift-owned scene/device-auth lock
 handling. AES-GCM Snapshot storage, camera Pairing UI, the Authorization-controller interop seam,
-tracer behavior, consolidated tests, and physical-iPhone evidence remain open. The interop seam
-cannot be made Swift-callable while also keeping the pre-C5 framework header byte-identical; no
-credential, DTO, Ktor, or coordinator implementation type has been exported to work around it.
+and tracer behavior remain open. Apple KMP tests and links, the dual-framework ABI checks, and all
+15 Xcode Simulator host tests pass; physical-iPhone evidence remains open. The interop seam cannot
+be made Swift-callable while also keeping the pre-C5 framework header byte-identical; no credential,
+DTO, Ktor, or coordinator implementation type has been exported to work around it.
 
 Gate G5: the real online-to-offline tracer passes in simulator UI tests, Swift task
 cancellation reaches Kotlin, and one physical iPhone completes Pairing, offline biometric

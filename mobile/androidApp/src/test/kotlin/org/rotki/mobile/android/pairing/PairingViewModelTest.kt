@@ -333,10 +333,20 @@ class PairingViewModelTest {
         pairing.startScanning()
         pairing.submitQr(validQr())
         facade.transportBudgetExhausted()
-        val viewModel = viewModel(facade = facade)
+        var retryCalls = 0
+        val viewModel =
+            viewModel(
+                facade = facade,
+                authorizationRetryConnector =
+                    PendingAuthorizationRetryConnector {
+                        retryCalls += 1
+                        facade.transportRestored()
+                    },
+            )
 
         viewModel.retryConnection()
 
+        assertEquals(1, retryCalls)
         assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
     }
 
@@ -374,6 +384,8 @@ class PairingViewModelTest {
                 PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
             },
         initialConnectionState: PairingConnectionUiState = PairingConnectionUiState.IDLE,
+        authorizationRetryConnector: PendingAuthorizationRetryConnector =
+            PendingAuthorizationRetryConnector { },
     ): PairingViewModel =
         PairingViewModel(
             facade = facade,
@@ -381,6 +393,7 @@ class PairingViewModelTest {
             connector = connector,
             cleanupConnector = cleanupConnector,
             initialConnectionState = initialConnectionState,
+            authorizationRetryConnector = authorizationRetryConnector,
         )
 }
 

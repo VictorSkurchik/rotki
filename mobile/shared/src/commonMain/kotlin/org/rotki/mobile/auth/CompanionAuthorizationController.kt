@@ -161,13 +161,19 @@ private fun PairingDiscoveryOutcome.toAuthorizationDiscoveryOutcome(): Companion
             CompanionAuthorizationDiscoveryOutcome.Compatible(selectedProtocolVersion)
         }
 
-        PairingDiscoveryOutcome.Incompatible -> CompanionAuthorizationDiscoveryOutcome.Incompatible
+        PairingDiscoveryOutcome.Incompatible -> {
+            CompanionAuthorizationDiscoveryOutcome.Incompatible
+        }
 
         is PairingDiscoveryOutcome.Rejected,
         is PairingDiscoveryOutcome.ContractFailure,
-        -> CompanionAuthorizationDiscoveryOutcome.ContractFailure
+        -> {
+            CompanionAuthorizationDiscoveryOutcome.ContractFailure
+        }
 
         PairingDiscoveryOutcome.PreResponseTransportFailure,
         PairingDiscoveryOutcome.CompleteResponseTransportFailure,
-        -> CompanionAuthorizationDiscoveryOutcome.NetworkUnavailable
+        -> {
+            CompanionAuthorizationDiscoveryOutcome.NetworkUnavailable
+        }
     }
