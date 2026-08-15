@@ -8,6 +8,7 @@ import org.rotki.mobile.android.AndroidSecurityComposition
 import org.rotki.mobile.android.pairing.AndroidEpochClock
 import org.rotki.mobile.android.pairing.PairingConnectionUiState
 import org.rotki.mobile.android.pairing.PairingViewModel
+import org.rotki.mobile.android.pairing.PendingAuthorizationRetryConnector
 import org.rotki.mobile.android.pairing.PendingPairingCleanupConnector
 import org.rotki.mobile.android.pairing.PendingPairingConnector
 import org.rotki.mobile.core.ports.Clock
@@ -19,12 +20,17 @@ internal val androidAppModule =
         single<Clock> { AndroidEpochClock }
         single<PendingPairingConnector> {
             PendingPairingConnector(
-                get<AndroidSecurityComposition>().pairingConnection::connectPendingPairing,
+                get<AndroidSecurityComposition>()::connectPendingPairing,
             )
         }
         single<PendingPairingCleanupConnector> {
             PendingPairingCleanupConnector(
                 get<AndroidSecurityComposition>()::retryIncompletePairingCleanup,
+            )
+        }
+        single<PendingAuthorizationRetryConnector> {
+            PendingAuthorizationRetryConnector(
+                get<AndroidSecurityComposition>().authorizationController::onExplicitForegroundRetry,
             )
         }
         single<PairingConnectionUiState> {

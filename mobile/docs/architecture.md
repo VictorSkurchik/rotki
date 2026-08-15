@@ -138,8 +138,11 @@ challenge/proof exchange. Its authenticated session-work controller is a transpo
 contract. Among automatic Authorization outcomes, only `not_authorized` or missing local Pairing
 invokes its one composite local-authority cleanup port. Authority readiness deliberately leaves the
 root in `Connecting` until Snapshot reconciliation performs the later root-state transition. Native
-coordinator construction, lifecycle delivery, a concrete composite cleaner, and real
-session-work/WebSocket delivery remain C4 work as of 2026-08-15. Rename/revoke DTOs remain in
+Android C4 constructs one retained coordinator/adapter with its real gateway, Device Key, Pairing
+store, visibility, clock, and journaled composite cleaner. Post-Pairing, biometric restart,
+background/system-lock, and explicit-retry callbacks enter this Kotlin-only controller. The
+consolidated native gate, iOS composition, authenticated requests, and real session-work/WebSocket
+delivery remain open as of 2026-08-15. Rename/revoke DTOs remain in
 `:shared` for a separate Device Session-management slice. All three Authorization modules are
 implementation-only and non-exported. The public `DeviceLabelValidator` remains a stable shared
 wrapper over data-owned validation. Raw `Json` is
@@ -517,8 +520,9 @@ Do not perform a big-bang package move. Use this order:
    opaque attempt and cleanup capabilities can move without reversing the dependency graph. The
    C1-C3 Authorization domain/application/data boundaries, coordinator-owned renewal and expiry,
    opaque request authority with a fixed trusted executor, secret-free owner events, and the
-   internal facade adapter are in place. Native coordinator construction, lifecycle-event delivery,
-   the concrete composite cleaner, and real session-work/WebSocket wiring remain incremental C4
+   internal facade adapter are in place. Android now supplies the retained native coordinator,
+   lifecycle entry points, and concrete composite cleaner. Consolidated native verification, iOS
+   composition, authenticated requests, and real session-work/WebSocket wiring remain incremental
    work.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
    process-scoped platform/Pairing composition remains in `:androidApp`; `:android:platform` now owns

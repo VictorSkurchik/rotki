@@ -41,12 +41,18 @@ internal fun interface PendingPairingCleanupConnector {
     suspend fun retry(): PairingConnectionOutcome
 }
 
+internal fun interface PendingAuthorizationRetryConnector {
+    fun retry()
+}
+
 internal class PairingViewModel(
     private val facade: CompanionFacade,
     clock: Clock,
     private val connector: PendingPairingConnector,
     private val cleanupConnector: PendingPairingCleanupConnector,
     initialConnectionState: PairingConnectionUiState = PairingConnectionUiState.IDLE,
+    private val authorizationRetryConnector: PendingAuthorizationRetryConnector =
+        PendingAuthorizationRetryConnector { },
 ) : ViewModel() {
     private val flow: PairingFlow = facade.pairingFlow(clock)
     private val mutableConnectionState: MutableStateFlow<PairingConnectionUiState> =
@@ -145,16 +151,7 @@ internal class PairingViewModel(
     }
 
     fun retryConnection() {
-        when (facade.status.value.rootState) {
-            CompanionRootState.Unreachable -> facade.transportRestored()
-
-            CompanionRootState.EngineLocked,
-            CompanionRootState.Incompatible,
-            CompanionRootState.ProfileMismatch,
-            -> facade.retryResolvedEngineState()
-
-            else -> Unit
-        }
+        authorizationRetryConnector.retry()
     }
 
     fun retryIncompleteCleanup() {

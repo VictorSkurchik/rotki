@@ -87,6 +87,10 @@ internal sealed interface CompanionAuthorizationDiscoveryOutcome {
     data object NetworkUnavailable : CompanionAuthorizationDiscoveryOutcome
 
     data object ContractFailure : CompanionAuthorizationDiscoveryOutcome
+
+    data class LocalFailure(
+        val outcome: AuthorizationCoordinatorOutcome,
+    ) : CompanionAuthorizationDiscoveryOutcome
 }
 
 /**
@@ -237,6 +241,14 @@ internal class CompanionAuthorizationAdapter(
             }
         }
         return outcome
+    }
+
+    internal suspend fun onActiveForegroundAuthorization(): CompanionAuthorizationStatus {
+        ensureNotExternalCallbackReentry()
+        if (coordinator.hasActiveAccessSession()) {
+            return coarseStatus(authorizeOrJoin())
+        }
+        return recover(CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION)
     }
 
     internal suspend fun onBackgroundOrSystemLock(): CompanionTransitionOutcome =
@@ -513,13 +525,17 @@ internal class CompanionAuthorizationAdapter(
         val prepared =
             lifecycleMutex.withLock {
                 if (!isCurrentActiveRecovery(flight)) return@withLock false
-                val transition = applyRecoveryTransition(flight.trigger)
-                if (transition !is CompanionTransitionOutcome.Applied) {
-                    updateStatus(CompanionAuthorizationResult.TRANSITION_REJECTED)
-                    return@withLock false
-                }
-                isCurrentActiveRecovery(flight) &&
+                if (flight.trigger == CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION) {
                     facade.status.value.rootState == CompanionRootState.Connecting
+                } else {
+                    val transition = applyRecoveryTransition(flight.trigger)
+                    if (transition !is CompanionTransitionOutcome.Applied) {
+                        updateStatus(CompanionAuthorizationResult.TRANSITION_REJECTED)
+                        return@withLock false
+                    }
+                    isCurrentActiveRecovery(flight) &&
+                        facade.status.value.rootState == CompanionRootState.Connecting
+                }
             }
         if (!prepared) {
             if (status.value.result == CompanionAuthorizationResult.TRANSITION_REJECTED) {
@@ -560,7 +576,7 @@ internal class CompanionAuthorizationAdapter(
             return CompanionAuthorizationStatus(CompanionAuthorizationResult.OUTSIDE_ACTIVE_FOREGROUND)
         }
         val outcome =
-            if (flight.trigger == CompanionAuthorizationRecoveryTrigger.EXPLICIT_FOREGROUND_RETRY) {
+            if (flight.trigger.requiresDiscovery) {
                 discoverAndAuthorize(flight)
             } else {
                 coordinator.authorize()
@@ -573,6 +589,10 @@ internal class CompanionAuthorizationAdapter(
 
     private fun applyRecoveryTransition(trigger: CompanionAuthorizationRecoveryTrigger): CompanionTransitionOutcome =
         when (trigger) {
+            CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION -> {
+                error("Foreground Authorization does not require a facade transition")
+            }
+
             CompanionAuthorizationRecoveryTrigger.ACCESS_SESSION_UNAVAILABLE -> {
                 facade.accessSessionUnavailable()
             }
@@ -675,6 +695,11 @@ internal class CompanionAuthorizationAdapter(
                 val outcome = AuthorizationCoordinatorOutcome.ContractFailure
                 handleDiscoveredOutcomeIfCurrent(flight, outcome)
                 outcome
+            }
+
+            is CompanionAuthorizationDiscoveryOutcome.LocalFailure -> {
+                handleDiscoveredOutcomeIfCurrent(flight, discovered.outcome)
+                discovered.outcome
             }
         }
 
@@ -1422,12 +1447,34 @@ private data class CompanionAuthorizationOutcomeActions(
 
 private enum class CompanionAuthorizationRecoveryTrigger(
     val clearsAccessAuthority: Boolean,
+    val requiresDiscovery: Boolean,
     val priority: Int,
 ) {
-    EXPLICIT_FOREGROUND_RETRY(clearsAccessAuthority = false, priority = 0),
-    SESSION_EXPIRED(clearsAccessAuthority = false, priority = 1),
-    ACCESS_SESSION_UNAVAILABLE(clearsAccessAuthority = true, priority = 2),
-    WEBSOCKET_1008(clearsAccessAuthority = true, priority = 2),
+    FOREGROUND_AUTHORIZATION(
+        clearsAccessAuthority = false,
+        requiresDiscovery = true,
+        priority = 0,
+    ),
+    EXPLICIT_FOREGROUND_RETRY(
+        clearsAccessAuthority = false,
+        requiresDiscovery = true,
+        priority = 0,
+    ),
+    SESSION_EXPIRED(
+        clearsAccessAuthority = false,
+        requiresDiscovery = false,
+        priority = 1,
+    ),
+    ACCESS_SESSION_UNAVAILABLE(
+        clearsAccessAuthority = true,
+        requiresDiscovery = false,
+        priority = 2,
+    ),
+    WEBSOCKET_1008(
+        clearsAccessAuthority = true,
+        requiresDiscovery = false,
+        priority = 2,
+    ),
 }
 
 private class CompanionAuthorizationRecoveryFlight(

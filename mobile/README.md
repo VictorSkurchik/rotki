@@ -78,8 +78,11 @@ The production build currently contains:
   public surfaces of `core:common`, `core:model`, `core:protocol`, and `core:security-api` through the
   one framework. Protocol credentials, Authorization implementation/DTO types, data/network seams,
   codec mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift.
-  Native coordinator construction, lifecycle delivery, the concrete composite cleaner, and real
-  session-work/WebSocket wiring remain C4 work as of 2026-08-15;
+  Android C4 now constructs the retained coordinator with the real platform gateway, Device Key,
+  Pairing store, visibility, clock, and journaled composite cleaner. Pairing completion, biometric
+  restart unlock, background/system lock, and explicit retry feed that Kotlin-only controller.
+  Consolidated native verification, iOS composition, authenticated requests, and real
+  session-work/WebSocket wiring remain open as of 2026-08-15;
 - `android:platform`: the Android lifecycle, durable Pairing-storage, Device-proof, and idempotency
   leaf. Its public factories expose only the lifecycle boundary plus `core:security-api` ports.
   Private atomic, Android Keystore, P-256/DER, and secure-random adapters preserve the established

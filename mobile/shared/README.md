@@ -67,9 +67,12 @@ revision-scoped detach-and-drain contract described above.
 Automatic Authorization handling invokes one composite local-authority cleanup port only for
 `not_authorized` or missing local Pairing. Successful authorization reports authority readiness but
 leaves the root `Connecting` until Snapshot reconciliation performs the later root-state transition.
-Native coordinator construction, lifecycle delivery, the concrete composite cleaner, and real
-session-work/WebSocket wiring remain C4 work; the Authorization client is not yet wired into either
-native host.
+The Android host now consumes a Kotlin-only, Objective-C-hidden construction controller that owns
+one retained coordinator and adapter. It supplies the real platform gateway, Device Key, Pairing
+store, lifecycle visibility, and journaled composite cleaner; post-Pairing, biometric restart,
+background/system-lock, and explicit-retry callbacks enter that controller. iOS composition,
+authenticated requests, real session-work/WebSocket ownership, and the consolidated native gate
+remain open.
 
 `:shared` also consumes the security contracts from `:core:security-api`, Pairing data as an
 implementation dependency, and generic request-replay/transport-retry policy from `:core:network`.

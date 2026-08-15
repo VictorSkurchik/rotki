@@ -208,6 +208,17 @@ not complete A4.1 or Gate G4.
 - Run JVM/Android host tests, API 28/API 36 managed-device signer/composition tests, lint, ktlint,
   detekt, module-graph checks, release assembly, and secret scans.
 
+Implementation status (2026-08-15): Android now constructs one retained Authorization coordinator
+and facade adapter from the real platform gateway, Pairing record store, non-exportable Device Key
+signer, visibility controller, injected clock, and existing journaled composite cleaner. A fresh
+discovery/select/proof operation is enqueued only after Pairing has returned `REGISTERED`; paired
+restart authorization is triggered only after the existing Snapshot biometric boundary reports a
+real unlock. Background/system lock enters the same adapter purge path, and native explicit retry
+now performs discovery and proof rather than only mutating root state. The consolidated C4 test,
+managed-device, quality, assembly, secret-scan, and ABI run is intentionally deferred to the final
+cross-phase verification pass. Authenticated request execution and real WebSocket/session-work
+ownership remain later data-plane work, so A4.1 and Gate G4 remain open.
+
 ### C5 — Complete iOS after the Android gate
 
 - Implement the native non-exportable P-256 Device Key signer and manual iOS composition adapter;

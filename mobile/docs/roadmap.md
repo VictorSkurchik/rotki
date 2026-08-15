@@ -588,11 +588,13 @@ the adapter or process control. The Pairing cleanup barrier is released only aft
 revision-scoped session close, and the authority/request-finalizer drain complete. The non-exported
 shared adapter maps owner events into the existing root state. Explicit retry performs fresh
 discovery, protocol reselection, an explicit authority clear, and a fresh challenge/proof exchange.
-Its authenticated session-work controller is
-only a transport-free control contract, and successful authorization stays `Connecting` until
-Snapshot reconciliation. Only automatic `not_authorized` or missing local Pairing reaches the one
-composite cleanup port. Native coordinator construction, lifecycle delivery, the concrete cleaner,
-and real session-work/WebSocket wiring remain C4 work as of 2026-08-15.
+Its authenticated session-work controller is only a transport-free control contract, and successful
+authorization stays `Connecting` until Snapshot reconciliation. Only automatic `not_authorized` or
+missing local Pairing reaches the one composite cleanup port. Android C4 now constructs the retained
+coordinator with the real gateway, Device Key, Pairing store, visibility, clock, and journaled
+composite cleaner and delivers post-Pairing, biometric restart, background/system-lock, and explicit
+retry callbacks. Consolidated native verification, iOS composition, authenticated requests, and
+real session-work/WebSocket wiring remain open as of 2026-08-15.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
@@ -1133,10 +1135,11 @@ composite cleanup port, and successful authorization deliberately remains `Conne
 Snapshot reconciliation performs the root-state transition. The authenticated session-work
 controller is a KMP control contract; real WebSocket/native wiring is not part of C3.
 
-As of 2026-08-15, native C4 construction, real lifecycle delivery, the concrete composite cleaner,
-real session-work/WebSocket wiring, Device Key reuse after process restart through that composition,
-and the real Docker/Starling host flow remain unimplemented. Therefore A4.1 and Gate G4 are not
-complete.
+As of 2026-08-15, Android native C4 construction and lifecycle delivery use the real retained Device
+Key, Pairing record, strict gateway, and composite cleaner. The consolidated JVM/Android/managed
+device/release/ABI evidence is deferred to the final cross-phase run. Real authenticated requests,
+session-work/WebSocket ownership, iOS composition, and the Docker/Starling host flow remain
+unimplemented. Therefore A4.1 and Gate G4 are not complete.
 The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
 sequence, and pre-live acceptance gates are specified in
 [`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates

@@ -45,7 +45,10 @@ the existing facade, invokes one composite cleanup port only for automatic `not_
 missing local Pairing, and leaves the root `Connecting` after authority acquisition until Snapshot
 reconciliation. Its authenticated session-work controller is a transport-free KMP control contract.
 
-Native coordinator construction, real lifecycle delivery, the concrete composite cleaner, and real
-session-work/WebSocket wiring remain C4 work. A4.1 and Gate G4 remain open. The module has no Ktor,
+Android now constructs this coordinator through an Objective-C-hidden shared controller and supplies
+the real gateway, Device Key, Pairing store, lifecycle visibility, clock, and journaled composite
+cleaner. Post-Pairing, biometric restart, background/system-lock, and explicit-retry callbacks are
+wired. Consolidated native verification, iOS composition, authenticated requests, and real
+session-work/WebSocket ownership remain open. A4.1 and Gate G4 remain open. The module has no Ktor,
 serialization, Android, Koin, or Apple framework dependency, and every integration type is hidden
 from Objective-C and Swift.

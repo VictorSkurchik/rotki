@@ -6,7 +6,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.rotki.mobile.CompanionFacade
 import org.rotki.mobile.android.lifecycle.AndroidCompanionLifecycle
@@ -30,21 +34,29 @@ import org.rotki.mobile.android.security.createAndroidDeviceProofSigner
 import org.rotki.mobile.android.security.createAndroidIdempotencyKeyGenerator
 import org.rotki.mobile.android.storage.createAndroidPairingCleanupJournal
 import org.rotki.mobile.android.storage.createAndroidPairingRecordStore
+import org.rotki.mobile.auth.CompanionAuthorizationController
+import org.rotki.mobile.auth.CompanionAuthorizationLocalAuthorityDestroyer
 import org.rotki.mobile.auth.PairingConnection
 import org.rotki.mobile.auth.PairingConnectionConfiguration
 import org.rotki.mobile.auth.PairingConnectionOutcome
 import org.rotki.mobile.auth.PairingDevicePlatform
+import org.rotki.mobile.auth.createCompanionAuthorizationController
+import org.rotki.mobile.auth.createPlatformPairingRegistrationRemoteGateway
 import org.rotki.mobile.core.ports.ApplicationVisibilityController
 import org.rotki.mobile.core.ports.DeviceProofSigner
 import org.rotki.mobile.core.ports.IdempotencyKeyGenerator
 import org.rotki.mobile.core.ports.PairingCleanupJournal
 import org.rotki.mobile.core.ports.PairingRecordStore
+import org.rotki.mobile.core.ports.SecureSnapshotReadOutcome
+import org.rotki.mobile.core.state.CompanionRootState
+import org.rotki.mobile.feature.authorization.data.createPlatformAuthorizationRemoteGateway
 import javax.crypto.Cipher
 
 /** One retained security graph for the lifetime of the Android application process. */
 internal class AndroidSecurityComposition(
     private val applicationContext: Context,
 ) {
+    private val processScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val visibility: ApplicationVisibilityController = ApplicationVisibilityController()
     val pairingRecordStore: PairingRecordStore =
         createAndroidPairingRecordStore(applicationContext)
@@ -118,14 +130,48 @@ internal class AndroidSecurityComposition(
             materialCleaner = materialCleaner,
             file = snapshotFile,
         )
-    val lifecycleController: AndroidCompanionLifecycle =
+    val authorizationController: CompanionAuthorizationController =
+        createCompanionAuthorizationController(
+            facade = facade,
+            remoteGateway = createPlatformAuthorizationRemoteGateway(),
+            discoveryGateway = createPlatformPairingRegistrationRemoteGateway(),
+            pairingRecordStore = pairingRecordStore,
+            deviceProofSigner = deviceProofSigner,
+            applicationVisibility = visibility,
+            clock = AndroidEpochClock,
+            processScope = processScope,
+            localAuthorityDestroyer =
+                CompanionAuthorizationLocalAuthorityDestroyer(materialCleaner::destroyAll),
+        )
+    private val platformLifecycleController: AndroidCompanionLifecycle =
         createAndroidCompanionLifecycle(
             visibility = visibility,
-            lockCompanion = { facade.lock() },
+            lockCompanion = authorizationController::onBackgroundOrSystemLock,
             cancelPendingAuthentication = biometricBroker::cancelPending,
             discardSnapshotPlaintext = snapshotStore::discardPlaintext,
             discardAdditionalPlaintext = { },
         )
+    val lifecycleController: AndroidCompanionLifecycle =
+        object : AndroidCompanionLifecycle {
+            override fun onResume() {
+                platformLifecycleController.onResume()
+                if (facade.status.value.rootState == CompanionRootState.DeviceLocked) {
+                    processScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        readSnapshotAfterDeviceAuthentication()
+                    }
+                } else {
+                    authorizationController.onActiveForeground()
+                }
+            }
+
+            override fun onPause() {
+                platformLifecycleController.onPause()
+            }
+
+            override fun onBackgroundOrSystemLock() {
+                platformLifecycleController.onBackgroundOrSystemLock()
+            }
+        }
 
     private val screenOffReceiver: BroadcastReceiver =
         object : BroadcastReceiver() {
@@ -164,6 +210,21 @@ internal class AndroidSecurityComposition(
             facade = facade,
             retryCleanup = pairingConnection::retryIncompleteCleanup,
         )
+
+    suspend fun connectPendingPairing(): PairingConnectionOutcome =
+        pairingConnection.connectPendingPairing().also { outcome ->
+            if (outcome == PairingConnectionOutcome.REGISTERED) {
+                authorizationController.onPairingRegistered()
+            }
+        }
+
+    suspend fun readSnapshotAfterDeviceAuthentication(): SecureSnapshotReadOutcome =
+        snapshotStore.readAfterDeviceAuthentication().also { outcome ->
+            if (outcome is SecureSnapshotReadOutcome.Unlocked) {
+                facade.deviceAuthenticationSucceeded()
+                authorizationController.onActiveForeground()
+            }
+        }
 }
 
 private fun PairingConnectionOutcome.toStartupUiState(): PairingConnectionUiState =
