@@ -41,6 +41,8 @@ pub const DEFAULT_HTTP_PORT: u16 = 80;
 
 /// Env var that overrides the external port without rewriting the CMD.
 const HTTP_PORT_ENV: &str = "ROTKI_HTTP_PORT";
+const COMPANION_ORIGIN_ENV: &str = "ROTKI_COMPANION_ORIGIN";
+const SESSION_COOKIE_SECURE_ENV: &str = "ROTKI_SESSION_COOKIE_SECURE";
 
 /// The five tunables after resolution, ready to drop into `ServiceLayout`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -178,6 +180,36 @@ pub fn resolve_port(cli: Option<u16>, layered: bool) -> Result<u16, String> {
         info!(value = port, source = %source, "resolved http port");
     }
     Ok(port)
+}
+
+/// Read the optional Docker-only Companion Engine origin.
+///
+/// The value remains unparsed here because canonical HTTPS validation belongs
+/// to `starling-proxy`, which consumes it. Errors deliberately identify only
+/// the variable: neither malformed Unicode nor later parser diagnostics may
+/// echo operator-provided authority material into startup logs.
+pub fn read_companion_origin_env() -> Result<Option<String>, String> {
+    match std::env::var(COMPANION_ORIGIN_ENV) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            Err("ROTKI_COMPANION_ORIGIN is not valid UTF-8".to_owned())
+        }
+    }
+}
+
+/// Whether core will mark browser session cookies `Secure` in the supported
+/// HTTPS Companion topology. This mirrors core's accepted spellings without
+/// logging the raw value; an absent, malformed, or non-Unicode value is simply
+/// unsafe for Companion and makes startup fail when its origin is configured.
+pub fn companion_cookie_secure_mode_is_enabled() -> bool {
+    let Ok(raw) = std::env::var(SESSION_COOKIE_SECURE_ENV) else {
+        return false;
+    };
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on" | "forwarded"
+    )
 }
 
 /// Fold the layers per field (**file > env > default**) and log each resolved
@@ -324,7 +356,37 @@ fn parse_bool(name: &str, raw: &str) -> Result<Option<bool>, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
+    use std::sync::Mutex;
+
     use super::*;
+
+    static COMPANION_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvironmentGuard {
+        name: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvironmentGuard {
+        fn replace(name: &'static str, value: Option<OsString>) -> Self {
+            let previous = std::env::var_os(name);
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+            Self { name, previous }
+        }
+    }
+
+    impl Drop for EnvironmentGuard {
+        fn drop(&mut self) {
+            match self.previous.take() {
+                Some(value) => std::env::set_var(self.name, value),
+                None => std::env::remove_var(self.name),
+            }
+        }
+    }
 
     #[test]
     fn file_beats_env_beats_default() {
@@ -452,5 +514,54 @@ mod tests {
         assert_eq!(parse_bool("X", "0").unwrap(), Some(false));
         assert_eq!(parse_bool("X", "").unwrap(), None);
         assert!(parse_bool("X", "maybe").is_err());
+    }
+
+    #[test]
+    fn companion_origin_environment_is_absent_by_default_and_preserved_verbatim() {
+        let _lock = COMPANION_ENV_LOCK.lock().unwrap();
+        let _guard = EnvironmentGuard::replace(COMPANION_ORIGIN_ENV, None);
+        assert_eq!(read_companion_origin_env().unwrap(), None);
+
+        let secret = "https://seeded-engine-origin.example:8443";
+        std::env::set_var(COMPANION_ORIGIN_ENV, secret);
+        assert_eq!(
+            read_companion_origin_env().unwrap().as_deref(),
+            Some(secret)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_companion_origin_error_never_echoes_operator_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _lock = COMPANION_ENV_LOCK.lock().unwrap();
+        let secret = OsString::from_vec(b"https://seeded-origin.example/\xff".to_vec());
+        let _guard = EnvironmentGuard::replace(COMPANION_ORIGIN_ENV, Some(secret));
+        let error = read_companion_origin_env().unwrap_err();
+        assert_eq!(error, "ROTKI_COMPANION_ORIGIN is not valid UTF-8");
+        assert!(!error.contains("seeded-origin"));
+    }
+
+    #[test]
+    fn companion_secure_cookie_mode_accepts_only_the_documented_truthy_values() {
+        let _lock = COMPANION_ENV_LOCK.lock().unwrap();
+        let _guard = EnvironmentGuard::replace(SESSION_COOKIE_SECURE_ENV, None);
+        assert!(!companion_cookie_secure_mode_is_enabled());
+
+        for value in ["1", "true", "TRUE", " yes ", "On", "forwarded"] {
+            std::env::set_var(SESSION_COOKIE_SECURE_ENV, value);
+            assert!(
+                companion_cookie_secure_mode_is_enabled(),
+                "documented secure-cookie value was rejected: {value}",
+            );
+        }
+        for value in ["", "0", "false", "off", "https", "forwarded,https"] {
+            std::env::set_var(SESSION_COOKIE_SECURE_ENV, value);
+            assert!(
+                !companion_cookie_secure_mode_is_enabled(),
+                "unexpected secure-cookie value was accepted: {value}",
+            );
+        }
     }
 }

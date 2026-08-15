@@ -90,7 +90,7 @@ class CanonicalEngineOrigin:
                 parsed_address = IPv6Address(literal)
             except ValueError:
                 raise InvalidControlStoreInput from None
-            if parsed_address.compressed != literal:
+            if parsed_address.compressed != literal or parsed_address.ipv4_mapped is not None:
                 raise InvalidControlStoreInput
             suffix = authority[closing_bracket + 1:]
             if suffix != '' and not suffix.startswith(':'):

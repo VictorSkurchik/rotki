@@ -14,6 +14,8 @@ from webargs.flaskparser import parser
 from werkzeug.exceptions import NotFound
 
 from rotkehlchen.api.asgi import create_asgi_app
+from rotkehlchen.api.companion.authorization import classify_companion_route
+from rotkehlchen.api.companion.request_boundary import is_companion_request_path
 from rotkehlchen.api.rest import RestAPI, api_response, wrap_in_fail_result
 from rotkehlchen.api.session_token import (
     MCP_BACKEND_PROOF_HEADER,
@@ -427,6 +429,30 @@ logger = logging.getLogger(__name__)
 log = RotkehlchenLogsAdapter(logger)
 
 
+def _companion_error_response(
+        *,
+        status_code: HTTPStatus,
+        code: str,
+        message: str,
+) -> Response:
+    """Build a fixed, typed, non-cacheable Companion failure envelope."""
+    response = api_response(
+        {
+            'result': None,
+            'message': message,
+            'error': {
+                'code': code,
+                'retryable': False,
+                'action': 'none',
+            },
+        },
+        status_code=status_code,
+        log_result=False,
+    )
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 def _read_internal_mcp_token(session_key: bytes) -> SessionClaims | None:
     """Read an MCP bearer only when its calling process proves possession of the key."""
     scheme, separator, token = request.headers.get('Authorization', '').partition(' ')
@@ -460,6 +486,13 @@ def setup_urls(
 
 
 def endpoint_not_found(e: NotFound) -> Response:
+    if is_companion_request_path(request.path):
+        return _companion_error_response(
+            status_code=HTTPStatus.NOT_FOUND,
+            code='resource_not_found',
+            message='Resource not found',
+        )
+
     msg = 'invalid endpoint'
     # The isinstance check is because I am not sure if `e` is always going to
     # be a "NotFound" error here
@@ -480,6 +513,13 @@ def handle_request_parsing_error(
 ) -> None:
     """ This handles request parsing errors generated for example by schema
     field validation failing."""
+    if is_companion_request_path(request.path):
+        abort(_companion_error_response(
+            status_code=HTTPStatus.BAD_REQUEST,
+            code='invalid_request',
+            message='Invalid request',
+        ))
+
     msg = str(err)
     if isinstance(err.messages, dict):
         # first key is just the location. Ignore
@@ -549,6 +589,17 @@ class APIServer:
     @staticmethod
     def unhandled_exception(exception: Exception) -> Response:
         """ Flask.errorhandler when an exception wasn't correctly handled """
+        if is_companion_request_path(request.path):
+            # Companion request material and exception text are both outside the
+            # log contract. Keep one fixed operational marker and return the
+            # typed protocol envelope without reflecting either value.
+            log.critical('Unhandled exception when processing Companion endpoint')
+            return _companion_error_response(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                code='unexpected_engine_error',
+                message='Unexpected Engine error',
+            )
+
         is_rotki_exception = exception.__class__.__module__.startswith('rotkehlchen.')
         if __debug__:
             logger.exception(exception)  # noqa: LOG004  -- this is an error handler
@@ -563,9 +614,26 @@ class APIServer:
     def before_request_callback(self) -> Response | None:
         """Function that runs before each request.
 
-        Returning a Response short-circuits the request (the session-cookie gate
-        rejecting with 401); returning None lets it proceed as normal.
+        Returning a Response short-circuits the request (the disabled Companion
+        dispatcher with 404, or the session-cookie gate with 401); returning
+        None lets it proceed as normal.
         """
+        if is_companion_request_path(request.path):
+            # The policy table exists before public resources so adding a Flask
+            # rule cannot accidentally inherit browser-cookie/MCP fallback. This
+            # groundwork tranche intentionally registers no dispatcher or
+            # handler: every method, including the sixteen classified pairs,
+            # remains an indistinguishable typed 404 with no credential lookup.
+            rule = request.url_rule.rule if request.url_rule is not None else None
+            _realm = classify_companion_route(rule, request.method)
+            g.rotki_companion_request = True
+            log.debug('start rotki Companion api (redacted)')
+            return _companion_error_response(
+                status_code=HTTPStatus.NOT_FOUND,
+                code='resource_not_found',
+                message='Resource not found',
+            )
+
         # Session-cookie gate (Docker). Inert without a key; otherwise deny-by-default
         # against `_cookie_less_rules`, rejecting with a plain 401 so the frontend
         # routes to login. The cookie's `sid` must be the user's active session, so a
@@ -672,6 +740,15 @@ class APIServer:
 
         # Always pop the internal header so it never leaks to the client.
         log_result = response.headers.pop('rotki-log-result', 'True') == 'True'
+        if (
+                getattr(g, 'rotki_companion_request', False) or
+                is_companion_request_path(request.path)
+        ):
+            response.headers['Cache-Control'] = 'no-store'
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug('end rotki Companion api (redacted)')
+            return response
+
         # Only touch response.json (a full json.loads of the entire response body)
         # when the debug log that consumes it is actually enabled. In packaged
         # builds the backend runs at CRITICAL, so otherwise we'd parse and discard

@@ -41,6 +41,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::extract::ConnectInfo;
 use axum::http::{header, HeaderMap, Request};
 
+const COMPANION_API_PREFIX: &[u8] = b"/api/1/companion";
+const REDACTED_COMPANION_REQUEST_LINE: &str = "COMPANION /api/1/companion/<redacted> HTTP/1.1";
+const REDACTED_COMPANION_HEADER: &str = "<redacted>";
+
 /// A parsed CIDR block, used to extend the default trusted-hop set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cidr {
@@ -264,6 +268,58 @@ fn escape_quoted(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Conservatively recognize the sensitive namespace in the original raw URI.
+/// Each prefix byte may be literal or one `%HH` escape, so encoded separators
+/// such as `/api%2f1%2fcompanion` are redacted even though Starling deliberately
+/// leaves the forwarding URI untouched. A suffix need not be route-valid: logs
+/// fail closed for prefix tricks and future Companion routes too.
+fn is_sensitive_companion_path(path: &str) -> bool {
+    let raw = path.as_bytes();
+    let mut raw_index = 0;
+    for expected in COMPANION_API_PREFIX {
+        let Some(actual) = raw.get(raw_index) else {
+            return false;
+        };
+        if actual == expected {
+            raw_index += 1;
+            continue;
+        }
+        if *actual != b'%' {
+            return false;
+        }
+        if raw_index + 2 >= raw.len() {
+            return true;
+        }
+        let Some(decoded) = decode_hex_pair(raw[raw_index + 1], raw[raw_index + 2]) else {
+            return true;
+        };
+        if decoded != *expected {
+            return false;
+        }
+        raw_index += 3;
+    }
+    match raw.get(raw_index) {
+        None | Some(b'/') => true,
+        Some(b'%') if raw_index + 2 >= raw.len() => true,
+        Some(b'%') => decode_hex_pair(raw[raw_index + 1], raw[raw_index + 2])
+            .is_none_or(|decoded| decoded == b'/'),
+        Some(_) => false,
+    }
+}
+
+fn decode_hex_pair(high: u8, low: u8) -> Option<u8> {
+    Some(hex_nibble(high)? << 4 | hex_nibble(low)?)
+}
+
+fn hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// Everything read off the request before it is handed downstream, since the
 /// handlers rewrite the URI (`/colibri/health` → `/health`) and we log the
 /// original request line the client actually sent.
@@ -313,11 +369,25 @@ impl AccessLog {
             .path_and_query()
             .map(|pq| pq.as_str())
             .unwrap_or("/");
+        let companion_sensitive = is_sensitive_companion_path(req.uri().path());
+        let (line, referer, user_agent) = if companion_sensitive {
+            (
+                REDACTED_COMPANION_REQUEST_LINE.to_owned(),
+                REDACTED_COMPANION_HEADER.to_owned(),
+                REDACTED_COMPANION_HEADER.to_owned(),
+            )
+        } else {
+            (
+                format!("{} {} {:?}", req.method(), path, req.version()),
+                escape_quoted(quoted(headers, header::REFERER)),
+                escape_quoted(quoted(headers, header::USER_AGENT)),
+            )
+        };
         Some(RequestLine {
             client,
-            line: format!("{} {} {:?}", req.method(), path, req.version()),
-            referer: escape_quoted(quoted(headers, header::REFERER)),
-            user_agent: escape_quoted(quoted(headers, header::USER_AGENT)),
+            line,
+            referer,
+            user_agent,
         })
     }
 }
@@ -539,16 +609,145 @@ mod tests {
     }
 
     /// A request as the middleware sees it: peer in extensions, headers set.
-    fn request(peer_addr: &str, hdrs: &[(&str, &str)]) -> Request<()> {
-        let mut req = Request::builder()
-            .method("GET")
-            .uri("/api/1/ping")
-            .body(())
-            .unwrap();
+    fn request_at(method: &str, uri: &str, peer_addr: &str, hdrs: &[(&str, &str)]) -> Request<()> {
+        let mut req = Request::builder().method(method).uri(uri).body(()).unwrap();
         req.extensions_mut()
             .insert(ConnectInfo(peer_addr.parse::<SocketAddr>().unwrap()));
         *req.headers_mut() = headers(hdrs);
         req
+    }
+
+    fn request(peer_addr: &str, hdrs: &[(&str, &str)]) -> Request<()> {
+        request_at("GET", "/api/1/ping", peer_addr, hdrs)
+    }
+
+    #[test]
+    fn companion_log_namespace_matches_literal_and_single_encoded_prefix_bytes() {
+        for path in [
+            "/api/1/companion",
+            "/api/1/companion/",
+            "/api/1/companion/challenges",
+            "/api/1%2fcompanion/challenges",
+            "/api/1%2Fcompanion/challenges",
+            "/api%2f1%2fcompanion",
+            "/%61pi/1/%63ompanion/access-sessions",
+            "/api/1/companion%2fchallenges",
+            "/api/1/companion%ZZ-invalid-suffix",
+            "/api/1/companion/%ZZ-invalid-suffix",
+            "/api/%ZZ/companion",
+        ] {
+            assert!(
+                is_sensitive_companion_path(path),
+                "sensitive alias was not recognized: {path}",
+            );
+        }
+
+        for path in [
+            "",
+            "/",
+            "/api/1/ping",
+            "/api/10/companion",
+            "/api/1/companionish",
+            "/%2561pi/1/companion",
+            "/API/1/companion",
+        ] {
+            assert!(
+                !is_sensitive_companion_path(path),
+                "ordinary path was overmatched: {path}",
+            );
+        }
+    }
+
+    #[test]
+    fn companion_access_log_redacts_method_path_query_referer_and_user_agent() {
+        let policy = AccessLog {
+            enabled: true,
+            ..Default::default()
+        };
+        let secrets = [
+            "SECRETMETHOD",
+            "seeded-path-device-session-id",
+            "seeded-query-pairing-credential",
+            "seeded-referer-engine-origin",
+            "seeded-user-agent-profile-marker",
+        ];
+        let entry = policy
+            .capture(&request_at(
+                secrets[0],
+                &format!("/api/1/companion/{0}?token={1}", secrets[1], secrets[2]),
+                "203.0.113.7:5555",
+                &[
+                    (
+                        "referer",
+                        "https://seeded-referer-engine-origin.example/private",
+                    ),
+                    ("user-agent", "seeded-user-agent-profile-marker"),
+                ],
+            ))
+            .expect("enabled Companion traffic must retain a redacted log event");
+
+        assert_eq!(entry.line, REDACTED_COMPANION_REQUEST_LINE);
+        assert_eq!(entry.referer, REDACTED_COMPANION_HEADER);
+        assert_eq!(entry.user_agent, REDACTED_COMPANION_HEADER);
+        let rendered = entry.finish(404, 123);
+        for secret in secrets {
+            assert!(
+                !rendered.contains(secret),
+                "Companion access log leaked {secret}"
+            );
+        }
+        assert!(rendered.contains(REDACTED_COMPANION_REQUEST_LINE));
+    }
+
+    #[test]
+    fn encoded_companion_alias_is_redacted_but_ordinary_combined_log_is_unchanged() {
+        let policy = AccessLog {
+            enabled: true,
+            ..Default::default()
+        };
+        let encoded = policy
+            .capture(&request_at(
+                "POST",
+                "/api/1%2Fcompanion/challenges?credential=seeded-secret",
+                "203.0.113.7:5555",
+                &[
+                    ("referer", "seeded-secret"),
+                    ("user-agent", "seeded-secret"),
+                ],
+            ))
+            .unwrap()
+            .finish(404, 0);
+        assert!(!encoded.contains("seeded-secret"));
+        assert!(encoded.contains(REDACTED_COMPANION_REQUEST_LINE));
+
+        let ordinary = policy
+            .capture(&request_at(
+                "GET",
+                "/api/1/ping?keep=visible",
+                "203.0.113.7:5555",
+                &[
+                    ("referer", "ordinary-ref"),
+                    ("user-agent", "ordinary-agent"),
+                ],
+            ))
+            .unwrap()
+            .finish(200, 54);
+        assert!(ordinary.contains("GET /api/1/ping?keep=visible HTTP/1.1"));
+        assert!(ordinary.contains("ordinary-ref"));
+        assert!(ordinary.contains("ordinary-agent"));
+
+        let near_prefix = policy
+            .capture(&request_at(
+                "GET",
+                "/api/1/companionish?keep=visible",
+                "203.0.113.7:5555",
+                &[("referer", "near-ref"), ("user-agent", "near-agent")],
+            ))
+            .unwrap()
+            .finish(404, 54);
+        assert!(near_prefix.contains("GET /api/1/companionish?keep=visible HTTP/1.1"));
+        assert!(near_prefix.contains("near-ref"));
+        assert!(near_prefix.contains("near-agent"));
     }
 
     #[test]

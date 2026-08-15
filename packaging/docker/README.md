@@ -79,8 +79,10 @@ Two things make that drop stick, neither of which depends on you passing a flag:
 ## Configuration
 
 Precedence is **`/config/rotki_config.json` > environment > built-in default**.
-Every resolved value is logged at startup with the layer it came from, so
-`docker logs` shows exactly what took effect.
+Every ordinary resolved value is logged at startup with the layer it came from,
+so `docker logs` shows exactly what took effect. Security authority such as the
+optional Companion origin is reported at most as enabled; its value is never
+written to logs or parser errors.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -91,7 +93,8 @@ Every resolved value is logged at startup with the layer it came from, so
 | `MAX_SIZE_IN_MB_ALL_LOGS` | backend default | Total log size budget |
 | `SQLITE_INSTRUCTIONS` | backend default | SQLite instructions-per-context |
 | `ROTKI_SESSION_KEY` | unset | Enables session-cookie auth (see below) |
-| `ROTKI_SESSION_COOKIE_SECURE` | unset | `Secure` on the session cookie: `1` always, `forwarded` from `X-Forwarded-Proto` |
+| `ROTKI_SESSION_COOKIE_SECURE` | unset | `Secure` on the session cookie: `1|true|yes|on` always, `forwarded` from `X-Forwarded-Proto` |
+| `ROTKI_COMPANION_ORIGIN` | unset | Docker-only, env-only canonical HTTPS origin for the disabled-by-default Companion ingress boundary |
 
 To mount a config file:
 
@@ -199,6 +202,12 @@ If your proxy reaches rotki from a **public** address, declare it:
 Repeatable, and accepts a bare address for a single host. Without it that
 proxy's own address is logged, never the header it sends.
 
+The default-private trust described above is only the legacy access-log and
+cookie-forwarding policy. It is deliberately **not** authority for Companion.
+When `ROTKI_COMPANION_ORIGIN` is set, the immediate TLS terminator must be named
+by at least one explicit `--trusted-proxy` value even when it uses loopback,
+RFC1918, or unique-local addressing.
+
 ## Administration
 
 A control socket is available at `/run/starling/ctl.sock`, restricted to uid 0:
@@ -234,7 +243,7 @@ The cookie is **not** marked `Secure` by default, because the image serves plain
 http and the flag would stop the browser sending it at all. Behind a TLS
 terminator, turn it on with `ROTKI_SESSION_COOKIE_SECURE`:
 
-- `1` (or `true`) always marks it. Use this when TLS is terminated in front and
+- `1`, `true`, `yes`, or `on` always marks it. Use this when TLS is terminated in front and
   the proxy does not send `X-Forwarded-Proto`.
 - `forwarded` derives it per request from `X-Forwarded-Proto`.
 - unset, `0`, or absent leaves it off. An **unrecognised** value logs a warning
@@ -265,6 +274,40 @@ Setting the flag is not a substitute for HSTS. `Secure` stops the cookie being
 sent over plaintext, but a browser that has never seen an HSTS header will still
 *make* the plaintext request. Send `Strict-Transport-Security` from the same
 proxy that terminates TLS.
+
+### Trusted Companion ingress groundwork
+
+`ROTKI_COMPANION_ORIGIN` opts Docker Starling into the private request-metadata
+boundary required by the future Companion API. It does **not** register any
+`/api/1/companion` resource and does not advertise the `device_sessions`
+Capability yet. Until the complete authorization vertical is wired, Companion
+requests that reach core receive a typed, non-cacheable `404 resource_not_found`.
+Starling may still answer transport failures such as its body limit or an unavailable
+core before any protocol dispatcher can run.
+
+The configured value is the fixed externally reachable Engine origin, for
+example `https://rotki.example.com` or `https://rotki.example.com:8443`. It must
+be lower-case canonical ASCII HTTPS with no userinfo, path, query, fragment,
+trailing slash, or explicit default `:443` port. Starling never derives or
+compares it with inbound `Host`, `Forwarded`, or `X-Forwarded-Host`.
+
+Enabling the boundary is fail-fast and requires all of the following:
+
+- a non-empty stable `ROTKI_SESSION_KEY`;
+- `ROTKI_SESSION_COOKIE_SECURE=1|true|yes|on` or
+  `ROTKI_SESSION_COOKIE_SECURE=forwarded`;
+- at least one explicitly configured `--trusted-proxy` CIDR naming the TLS
+  terminator, including for a private-network or loopback terminator.
+
+For the exact `/api/1/companion` namespace, Starling injects its private
+origin/source pair only when the socket peer matches that explicit CIDR and the
+original `X-Forwarded-Proto` is one single `https` token. The source walks
+`X-Forwarded-For` right-to-left using only the explicit CIDRs; a malformed or
+duplicate chain falls back to the terminator address. Starling strips both
+private header names from every proxied target before this decision, so an
+external caller cannot supply either value. Companion access-log fields use a
+fixed redacted request line, Referer, and User-Agent (including percent-encoded
+namespace aliases), while the upstream request URI remains unchanged.
 
 With authentication enabled, starling also starts the MCP service and exposes its
 streamable HTTP transport at `/mcp`. Obtain a bearer token from an authenticated

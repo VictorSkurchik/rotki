@@ -34,7 +34,7 @@ use starling_core::{
     build_services, Controller, Launcher, Method, OnCrash, OsSpawner, Outcome, RestartPolicy,
     ServiceLayout, ServiceSpec, Startup, StdioMode, Supervisor, Transport,
 };
-use starling_proxy::ProxyConfig;
+use starling_proxy::{CanonicalCompanionOrigin, CompanionIngress, ProxyConfig};
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tracing::{error, info, warn};
@@ -283,6 +283,11 @@ struct Cli {
     /// deployment (an authenticating proxy on the container network). This is only
     /// needed when that proxy sits on a *public* address, otherwise its forwarded
     /// headers are ignored and its own address is logged instead.
+    ///
+    /// Companion ingress is intentionally stricter: when
+    /// `ROTKI_COMPANION_ORIGIN` is configured, at least one value must be supplied
+    /// here even for a private or loopback TLS terminator. Only these explicit
+    /// CIDRs can authorize Companion origin/source metadata.
     #[arg(long = "trusted-proxy", value_name = "CIDR")]
     trusted_proxies: Vec<String>,
 
@@ -332,6 +337,32 @@ fn proxy_bind_addr(
 /// than one that has to improvise a policy.
 fn cookie_auth_enabled(docker: bool, session_key: &str) -> bool {
     docker && !session_key.is_empty()
+}
+
+/// Resolve the optional Docker Companion ingress as one pure fail-closed gate.
+/// Every error is fixed text: the operator-provided origin must never become a
+/// diagnostic through this layer or through `Debug` on the returned value.
+fn companion_ingress_config(
+    docker: bool,
+    raw_origin: Option<&str>,
+    cookie_auth: bool,
+    secure_cookie_mode: bool,
+    explicit_trusted_proxies: Vec<starling_proxy::access_log::Cidr>,
+) -> Result<Option<CompanionIngress>, String> {
+    let Some(raw_origin) = raw_origin.filter(|_| docker) else {
+        return Ok(None);
+    };
+    if !cookie_auth {
+        return Err("Companion ingress requires session-cookie authentication".to_owned());
+    }
+    if !secure_cookie_mode {
+        return Err("Companion ingress requires secure session cookies".to_owned());
+    }
+    if explicit_trusted_proxies.is_empty() {
+        return Err("Companion ingress requires an explicit trusted proxy".to_owned());
+    }
+    let origin = CanonicalCompanionOrigin::parse(raw_origin)?;
+    CompanionIngress::new(origin, explicit_trusted_proxies).map(Some)
 }
 
 /// The control methods `/_control` advertises, derived from the §S9 matrix rather
@@ -665,6 +696,33 @@ async fn main() -> std::process::ExitCode {
         info!("session cookie auth enabled");
         layout.mcp_autostart = true;
     }
+    let raw_companion_origin = if docker {
+        match config::read_companion_origin_env() {
+            Ok(origin) => origin,
+            Err(err) => {
+                error!(%err, "invalid Companion ingress configuration");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+    let companion_ingress = match companion_ingress_config(
+        docker,
+        raw_companion_origin.as_deref(),
+        cookie_auth,
+        config::companion_cookie_secure_mode_is_enabled(),
+        trusted_proxies.clone(),
+    ) {
+        Ok(ingress) => ingress,
+        Err(err) => {
+            error!(%err, "invalid Companion ingress configuration");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if companion_ingress.is_some() {
+        info!("trusted Companion ingress enabled");
+    }
     let build = move |layout: &ServiceLayout| -> Vec<ServiceSpec> {
         let mut specs = build_services(layout);
         for spec in &mut specs {
@@ -921,6 +979,7 @@ async fn main() -> std::process::ExitCode {
                 // entries a day and bury the real traffic.
                 probe_user_agent: Some(starling_core::PROBE_USER_AGENT.to_string()),
             },
+            companion_ingress,
             // Both modes: docker's HEALTHCHECK probes it, and the e2e harness
             // gates the suite on it (embedded starling boots idle, so a route
             // that only answers after `start` is what tells the runner the whole
@@ -1157,6 +1216,10 @@ async fn shutdown_signal() {
 mod tests {
     use super::*;
 
+    fn explicit_companion_proxy() -> Vec<starling_proxy::access_log::Cidr> {
+        vec![starling_proxy::access_log::Cidr::parse("198.51.100.0/24").unwrap()]
+    }
+
     #[test]
     fn control_is_enabled_only_in_docker_with_a_session_key() {
         assert!(cookie_auth_enabled(true, "a-key"));
@@ -1165,6 +1228,107 @@ mod tests {
         // The desktop never issues a cookie, so a key alone must not open it.
         assert!(!cookie_auth_enabled(false, "a-key"));
         assert!(!cookie_auth_enabled(false, ""));
+    }
+
+    #[test]
+    fn companion_ingress_startup_gate_matrix_is_fail_closed() {
+        const ORIGIN: &str = "https://seeded-engine-origin.example";
+
+        for docker in [false, true] {
+            for origin_configured in [false, true] {
+                for cookie_auth in [false, true] {
+                    for secure_cookie_mode in [false, true] {
+                        for explicit_proxy in [false, true] {
+                            let result = companion_ingress_config(
+                                docker,
+                                origin_configured.then_some(ORIGIN),
+                                cookie_auth,
+                                secure_cookie_mode,
+                                if explicit_proxy {
+                                    explicit_companion_proxy()
+                                } else {
+                                    vec![]
+                                },
+                            );
+                            let context = format!(
+                                "docker={docker}, origin={origin_configured}, \
+                                 cookie={cookie_auth}, secure={secure_cookie_mode}, \
+                                 proxy={explicit_proxy}",
+                            );
+                            if !docker || !origin_configured {
+                                assert!(result.unwrap().is_none(), "{context}");
+                            } else if cookie_auth && secure_cookie_mode && explicit_proxy {
+                                assert!(result.unwrap().is_some(), "{context}");
+                            } else {
+                                assert!(result.is_err(), "{context}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn companion_ingress_startup_errors_are_fixed_and_redacted() {
+        const ORIGIN: &str = "https://seeded-engine-origin.example";
+        assert!(companion_ingress_config(
+            false,
+            Some("not-an-origin-and-must-not-be-read-off-docker"),
+            false,
+            false,
+            vec![],
+        )
+        .unwrap()
+        .is_none(),);
+        let failures = [
+            (
+                false,
+                true,
+                true,
+                "Companion ingress requires session-cookie authentication",
+            ),
+            (
+                true,
+                false,
+                true,
+                "Companion ingress requires secure session cookies",
+            ),
+            (
+                true,
+                true,
+                false,
+                "Companion ingress requires an explicit trusted proxy",
+            ),
+        ];
+        for (cookie_auth, secure_cookie_mode, explicit_proxy, expected) in failures {
+            let error = companion_ingress_config(
+                true,
+                Some(ORIGIN),
+                cookie_auth,
+                secure_cookie_mode,
+                if explicit_proxy {
+                    explicit_companion_proxy()
+                } else {
+                    vec![]
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error, expected);
+            assert!(!error.contains(ORIGIN));
+        }
+
+        let malformed = "https://seeded-secret.example:443";
+        let error = companion_ingress_config(
+            true,
+            Some(malformed),
+            true,
+            true,
+            explicit_companion_proxy(),
+        )
+        .unwrap_err();
+        assert_eq!(error, "invalid canonical Companion origin");
+        assert!(!error.contains(malformed));
     }
 
     #[test]

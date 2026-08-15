@@ -309,10 +309,24 @@ Pairing consumption, durable Control Store registration, replay tombstoning, and
 active-secret removal are serialized in process. Expired authority is rejected exactly at
 its deadline; physical cleanup of its cached response currently occurs on the next store
 operation or explicit clear. No `/api/1/companion` route is registered and no
-`device_sessions:1` Capability is advertised. Trusted-origin derivation, Companion
-authorization and log redaction, Device Session control routes, challenge/proof, Access
-Sessions, WebSocket invalidation, bounded expiry sweeping, and the atomic Capability flip
-remain E1.3 work.
+`device_sessions:1` Capability is advertised.
+
+The trusted ingress and deny-by-default dispatcher primitives are also present but remain
+unadvertised. Docker Starling accepts an optional env-only fixed canonical HTTPS origin only
+when cookie auth, secure-cookie mode, and at least one explicit TLS-terminator CIDR are
+configured. It strips external lookalike metadata on every proxied target and injects one
+complete origin/source pair only for the exact Companion namespace, an explicitly trusted
+socket peer, and a single trusted HTTPS forwarding token. Companion source resolution never
+uses the legacy default-private trust set, and Starling access logs conservatively redact the
+namespace without rewriting the forwarded URI. Core has a strict redacted request-context
+adapter plus the frozen sixteen-pair method/rule-to-realm classifier; while no dispatcher or
+resource is registered, Companion requests reaching core short-circuit before legacy
+cookie/MCP fallback to a typed, non-cacheable `404 resource_not_found`, with fixed
+request/error logging. Starling-level transport/body-limit failures remain transport errors.
+
+Device Session control routes, challenge/proof and Access stores, actual realm verifiers,
+resource handlers, WebSocket invalidation, bounded expiry sweeping, and the atomic route plus
+Capability flip remain E1.3 work.
 
 Required security tests:
 
@@ -363,8 +377,10 @@ should require tests and documentation changes, not a second service. Update
 
 - stable `ROTKI_SESSION_KEY`;
 - system-trusted HTTPS terminated before Starling;
-- `ROTKI_SESSION_COOKIE_SECURE=1` or correctly sanitized `forwarded` mode;
-- explicit `--trusted-proxy` when the terminator is not already trusted;
+- `ROTKI_SESSION_COOKIE_SECURE=1|true|yes|on` or correctly sanitized `forwarded` mode;
+- fixed canonical `ROTKI_COMPANION_ORIGIN` supplied only through Docker environment;
+- explicit `--trusted-proxy` for every Companion TLS terminator, including private or
+  loopback peers (the broader default-private access-log trust is never Companion authority);
 - private LAN/VPN reachability and no public direct exposure.
 
 Gate G1: a real Docker/Starling Engine behind HTTPS completes Pairing and Device Key proof;

@@ -21,7 +21,7 @@
 //! static SPA is gzip/brotli-compressed and served with cache + security headers.
 
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -65,6 +65,12 @@ const COLIBRI_PREFIX: &str = "/colibri";
 /// Internal proof added by the loopback MCP process. External clients must never
 /// be able to relay one through Starling to core.
 const MCP_BACKEND_PROOF_HEADER: &str = "x-rotki-mcp-proof";
+/// Private Starling-to-core request metadata. External callers may send these
+/// names, so every proxy target strips them before the one trusted ingress path
+/// optionally writes a complete pair.
+const COMPANION_ORIGIN_HEADER: &str = "x-rotki-companion-origin";
+const COMPANION_SOURCE_HEADER: &str = "x-rotki-companion-source";
+const COMPANION_API_PREFIX: &str = "/api/1/companion";
 
 /// How long a client may take to send a complete request head before the
 /// connection is dropped. This is the slowloris guard nginx provided by default
@@ -140,6 +146,160 @@ impl std::fmt::Debug for HealthProbe {
     }
 }
 
+/// A structurally canonical system-trusted HTTPS Engine origin.
+///
+/// Parsing proves only canonical wire shape. The operator establishes trust by
+/// configuring the value and the explicit TLS-terminator CIDRs together; the
+/// proxy never derives it from `Host`, `Forwarded`, or `X-Forwarded-Host`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct CanonicalCompanionOrigin(String);
+
+impl CanonicalCompanionOrigin {
+    /// Parse the canonical origin without ever including the supplied value in
+    /// an error. Canonicality matches the Python Companion value object: HTTPS,
+    /// ASCII lower-case authority only, no default port, path, query, fragment,
+    /// userinfo, non-canonical IP spelling, or non-canonical decimal port.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        if value.len() > 2048
+            || !value.is_ascii()
+            || value != value.to_ascii_lowercase()
+            || !value.starts_with("https://")
+        {
+            return Err(invalid_companion_origin());
+        }
+
+        let authority = &value["https://".len()..];
+        if authority.is_empty()
+            || authority.bytes().any(|byte| {
+                matches!(byte, b'/' | b'?' | b'#' | b'@' | b'\\') || !(0x21..=0x7e).contains(&byte)
+            })
+        {
+            return Err(invalid_companion_origin());
+        }
+
+        let port = if let Some(after_open) = authority.strip_prefix('[') {
+            let Some((literal, suffix)) = after_open.split_once(']') else {
+                return Err(invalid_companion_origin());
+            };
+            if literal.is_empty() || literal.contains('%') {
+                return Err(invalid_companion_origin());
+            }
+            let Ok(address) = literal.parse::<Ipv6Addr>() else {
+                return Err(invalid_companion_origin());
+            };
+            if address.to_string() != literal || address.to_ipv4_mapped().is_some() {
+                return Err(invalid_companion_origin());
+            }
+            match suffix.strip_prefix(':') {
+                Some(port) => Some(port),
+                None if suffix.is_empty() => None,
+                None => return Err(invalid_companion_origin()),
+            }
+        } else {
+            if authority.matches(':').count() > 1 {
+                return Err(invalid_companion_origin());
+            }
+            let (host, port) = match authority.split_once(':') {
+                Some((host, port)) => (host, Some(port)),
+                None => (authority, None),
+            };
+            if !is_canonical_companion_hostname(host) {
+                return Err(invalid_companion_origin());
+            }
+            port
+        };
+
+        if let Some(port) = port {
+            let Ok(parsed) = port.parse::<u16>() else {
+                return Err(invalid_companion_origin());
+            };
+            if parsed == 0 || parsed == 443 || parsed.to_string() != port {
+                return Err(invalid_companion_origin());
+            }
+        }
+
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl std::fmt::Debug for CanonicalCompanionOrigin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CanonicalCompanionOrigin(<redacted>)")
+    }
+}
+
+fn invalid_companion_origin() -> String {
+    "invalid canonical Companion origin".to_owned()
+}
+
+fn is_canonical_companion_hostname(host: &str) -> bool {
+    if host.is_empty() {
+        return false;
+    }
+    if host
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || byte == b'.')
+    {
+        return host
+            .parse::<Ipv4Addr>()
+            .is_ok_and(|address| address.to_string() == host);
+    }
+    if host.len() > 253 || host.ends_with('.') {
+        return false;
+    }
+    host.split('.').all(|label| {
+        (1..=63).contains(&label.len())
+            && label
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && label
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    })
+}
+
+/// Immutable trusted ingress configuration for the private Companion metadata
+/// pair. Its CIDRs are exclusively the operator's explicit `--trusted-proxy`
+/// values; the broader legacy access-log trust set is deliberately unavailable.
+#[derive(Clone)]
+pub struct CompanionIngress {
+    origin: CanonicalCompanionOrigin,
+    explicit_trusted_proxies: Vec<access_log::Cidr>,
+}
+
+impl CompanionIngress {
+    /// Bind an operator-provided origin to at least one explicit TLS hop.
+    pub fn new(
+        origin: CanonicalCompanionOrigin,
+        explicit_trusted_proxies: Vec<access_log::Cidr>,
+    ) -> Result<Self, String> {
+        if explicit_trusted_proxies.is_empty() {
+            return Err("Companion ingress requires an explicit trusted proxy".to_owned());
+        }
+        Ok(Self {
+            origin,
+            explicit_trusted_proxies,
+        })
+    }
+}
+
+impl std::fmt::Debug for CompanionIngress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompanionIngress")
+            .field("origin", &"<redacted>")
+            .field(
+                "explicit_trusted_proxy_count",
+                &self.explicit_trusted_proxies.len(),
+            )
+            .finish()
+    }
+}
+
 /// Where to bind and what to proxy to.
 #[derive(Clone, Debug)]
 pub struct ProxyConfig {
@@ -169,6 +329,9 @@ pub struct ProxyConfig {
     /// is passed in rather than imported so this crate keeps its independence
     /// from `starling-core`, which owns the probe.
     pub access_log: access_log::AccessLog,
+    /// Optional Docker-only trusted metadata bridge for the Companion subtree.
+    /// `None` strips external lookalike headers and injects nothing.
+    pub companion_ingress: Option<CompanionIngress>,
     /// Source for the public `/health` endpoint. `None` leaves the route
     /// unregistered entirely, so a config that cannot answer honestly serves a
     /// 404 rather than a hardcoded "fine".
@@ -196,6 +359,7 @@ pub(crate) struct ProxyState {
     /// Whose `X-Forwarded-*` we believe. Shared with the access log so an
     /// operator has one `--trusted-proxy` knob rather than two.
     trusted_proxies: Arc<Vec<access_log::Cidr>>,
+    companion_ingress: Option<CompanionIngress>,
 }
 
 /// Bind the proxy listener on `host`. Done before serving so a bind failure
@@ -330,6 +494,7 @@ fn router(config: &ProxyConfig) -> Router {
         health: config.health.clone(),
         control: config.control.clone(),
         trusted_proxies: Arc::new(config.access_log.trusted_proxies.clone()),
+        companion_ingress: config.companion_ingress.clone(),
     };
 
     // nginx `location /prefix/` is a prefix match that also matches the bare
@@ -563,15 +728,22 @@ async fn health(State(state): State<ProxyState>) -> Response {
 
 /// `/api/1/*` → core, path preserved.
 async fn proxy_core(State(state): State<ProxyState>, mut req: Request) -> Response {
+    // Consume `Connection` nominations before reading XFP/XFF or generating
+    // private metadata. Otherwise a client can nominate those names as
+    // hop-by-hop and make the later forwarding strip delete trusted values.
+    strip_hop_by_hop(req.headers_mut());
     req.headers_mut().remove(MCP_BACKEND_PROOF_HEADER);
     let target = format!("http://{}{}", state.core_addr, path_and_query(&req));
     let peer = peer_addr(&req);
+    apply_companion_ingress(&mut req, peer, state.companion_ingress.as_ref());
     let req = req_with_target(req, target, peer, &state.trusted_proxies);
     forward(&state, req).await
 }
 
 /// `/colibri/*` → colibri, with the `/colibri` prefix stripped.
-async fn proxy_colibri(State(state): State<ProxyState>, req: Request) -> Response {
+async fn proxy_colibri(State(state): State<ProxyState>, mut req: Request) -> Response {
+    strip_hop_by_hop(req.headers_mut());
+    strip_companion_forwarding_headers(req.headers_mut());
     let stripped = strip_colibri_prefix(&path_and_query(&req));
     let target = format!("http://{}{}", state.colibri_addr, stripped);
     let peer = peer_addr(&req);
@@ -586,9 +758,15 @@ async fn proxy_mcp(State(state): State<ProxyState>, mut req: Request) -> Respons
     if !state.mcp_enabled {
         return StatusCode::NOT_FOUND.into_response();
     }
+    // DNS-rebinding policy must inspect the original end-to-end Host/Origin
+    // pair before consuming `Connection` nominations. Otherwise
+    // `Connection: origin` could erase a mismatched Origin and turn it into the
+    // guard's intentionally accepted absent-Origin case.
     if !origin_matches_host(req.headers()) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    strip_hop_by_hop(req.headers_mut());
+    strip_companion_forwarding_headers(req.headers_mut());
     if let Ok(host) = HeaderValue::from_str(&state.mcp_addr) {
         req.headers_mut().insert(header::HOST, host);
     }
@@ -632,7 +810,9 @@ pub(crate) fn origin_matches_host(headers: &HeaderMap) -> bool {
 }
 
 /// `/ws/*` → core, preserving the path and bridging the WebSocket upgrade.
-async fn proxy_ws(State(state): State<ProxyState>, req: Request) -> Response {
+async fn proxy_ws(State(state): State<ProxyState>, mut req: Request) -> Response {
+    strip_hop_by_hop_preserving_upgrade(req.headers_mut());
+    strip_companion_forwarding_headers(req.headers_mut());
     let target = format!("http://{}{}", state.core_addr, path_and_query(&req));
     let peer = peer_addr(&req);
     let req = req_with_target(req, target, peer, &state.trusted_proxies);
@@ -646,6 +826,122 @@ fn peer_addr(req: &Request) -> Option<SocketAddr> {
     req.extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ConnectInfo(addr)| *addr)
+}
+
+/// Strip attacker-controlled lookalikes and, only for one exact trusted path,
+/// inject the complete private origin/source pair. This runs before the legacy
+/// forwarding sanitizer changes `X-Forwarded-Proto`, because Companion must
+/// validate the TLS terminator's original single-value claim rather than the
+/// value Starling writes for cookie compatibility.
+fn apply_companion_ingress(
+    req: &mut Request,
+    peer: Option<SocketAddr>,
+    ingress: Option<&CompanionIngress>,
+) {
+    let path_is_companion = is_companion_namespace(req.uri().path());
+    let original_proto_is_https = original_forwarded_proto_is_single_https(req.headers());
+    let source = ingress.and_then(|ingress| {
+        let peer_ip = peer?.ip();
+        if !path_is_companion
+            || is_ipv4_mapped(peer_ip)
+            || !is_explicitly_trusted(peer_ip, &ingress.explicit_trusted_proxies)
+            || !original_proto_is_https
+        {
+            return None;
+        }
+        Some(companion_client_ip(
+            peer_ip,
+            req.headers(),
+            &ingress.explicit_trusted_proxies,
+        ))
+    });
+
+    strip_companion_forwarding_headers(req.headers_mut());
+    let (Some(ingress), Some(source)) = (ingress, source) else {
+        return;
+    };
+    let Ok(origin_header) = HeaderValue::from_str(&ingress.origin.0) else {
+        return;
+    };
+    let Ok(source_header) = HeaderValue::from_str(&source.to_string()) else {
+        return;
+    };
+    req.headers_mut()
+        .insert(COMPANION_ORIGIN_HEADER, origin_header);
+    req.headers_mut()
+        .insert(COMPANION_SOURCE_HEADER, source_header);
+}
+
+fn strip_companion_forwarding_headers(headers: &mut HeaderMap) {
+    headers.remove(COMPANION_ORIGIN_HEADER);
+    headers.remove(COMPANION_SOURCE_HEADER);
+}
+
+fn is_companion_namespace(path: &str) -> bool {
+    path == COMPANION_API_PREFIX
+        || path
+            .strip_prefix(COMPANION_API_PREFIX)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+/// Require exactly one syntactically valid forwarding value containing only
+/// the `https` token. Chains, duplicates, malformed bytes, and arbitrary values
+/// all fail closed.
+fn original_forwarded_proto_is_single_https(headers: &HeaderMap) -> bool {
+    let mut values = headers.get_all("x-forwarded-proto").iter();
+    let Some(value) = values.next() else {
+        return false;
+    };
+    if values.next().is_some() {
+        return false;
+    }
+    value
+        .to_str()
+        .ok()
+        .map(str::trim)
+        .is_some_and(|value| !value.contains(',') && value.eq_ignore_ascii_case("https"))
+}
+
+fn is_explicitly_trusted(ip: IpAddr, trusted: &[access_log::Cidr]) -> bool {
+    trusted.iter().any(|cidr| cidr.contains(ip))
+}
+
+fn is_ipv4_mapped(ip: IpAddr) -> bool {
+    matches!(ip, IpAddr::V6(address) if address.to_ipv4_mapped().is_some())
+}
+
+/// Resolve the rate-limit source using only the explicit Companion trust set.
+/// A malformed or duplicate chain falls back to the immediate terminator; it
+/// never skips past ambiguity and never consults the broad default-private set.
+fn companion_client_ip(
+    peer_ip: IpAddr,
+    headers: &HeaderMap,
+    trusted: &[access_log::Cidr],
+) -> IpAddr {
+    let mut values = headers.get_all("x-forwarded-for").iter();
+    let Some(value) = values.next() else {
+        return peer_ip;
+    };
+    if values.next().is_some() {
+        return peer_ip;
+    }
+    let Ok(value) = value.to_str() else {
+        return peer_ip;
+    };
+    if value.split(',').any(|candidate| {
+        candidate
+            .trim()
+            .parse::<IpAddr>()
+            .map_or(true, is_ipv4_mapped)
+    }) {
+        return peer_ip;
+    }
+    value
+        .rsplit(',')
+        // The validation pass above proved every candidate parses.
+        .filter_map(|candidate| candidate.trim().parse::<IpAddr>().ok())
+        .find(|candidate| !is_explicitly_trusted(*candidate, trusted))
+        .unwrap_or(peer_ip)
 }
 
 /// The original request's path+query (defaults to `/` if absent).
@@ -676,7 +972,11 @@ fn req_with_target(
 ) -> Request {
     match Uri::try_from(&target) {
         Ok(uri) => *req.uri_mut() = uri,
-        Err(err) => warn!(%target, %err, "invalid upstream uri; forwarding original"),
+        // The target contains the raw client path/query. Even though composing
+        // it from an already parsed URI should make this unreachable, keep the
+        // defensive diagnostic fixed so future Companion material cannot enter
+        // logs through an error path.
+        Err(_) => warn!("invalid upstream uri; forwarding original"),
     }
     add_forwarding_headers(&mut req, peer, trusted);
     req
@@ -799,8 +1099,10 @@ const HOP_BY_HOP: &[HeaderName] = &[
 /// every request, and relaying `Transfer-Encoding` alongside hyper's own framing
 /// invites request smuggling.
 ///
-/// **Not** applied on the WebSocket path ([`forward_upgrade`]): its `Connection:
-/// Upgrade`, `Upgrade` and `Sec-WebSocket-*` headers must survive the hop.
+/// The WebSocket path applies this through
+/// [`strip_hop_by_hop_preserving_upgrade`], which restores only its normalized
+/// `Connection: upgrade`/`Upgrade` pair; `Sec-WebSocket-*` is end-to-end and is
+/// not part of this fixed set.
 fn strip_hop_by_hop(headers: &mut HeaderMap) {
     // Names listed in `Connection` are themselves hop-by-hop for this message.
     let connection_named: Vec<HeaderName> = headers
@@ -819,8 +1121,31 @@ fn strip_hop_by_hop(headers: &mut HeaderMap) {
     headers.remove("keep-alive");
 }
 
+/// Consume arbitrary `Connection` nominations before generating forwarding
+/// metadata on the WebSocket path, while retaining only the protocol-switch
+/// pair required by a real upgrade. This prevents a nomination such as
+/// `Connection: upgrade, x-forwarded-proto` from deleting or reclassifying the
+/// sanitized header later without breaking the WebSocket handshake.
+fn strip_hop_by_hop_preserving_upgrade(headers: &mut HeaderMap) {
+    let requested_upgrade = headers
+        .get_all(header::CONNECTION)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .any(|token| token.trim().eq_ignore_ascii_case("upgrade"));
+    let upgrade = headers.get(header::UPGRADE).cloned();
+    strip_hop_by_hop(headers);
+    let Some(upgrade) = requested_upgrade.then_some(upgrade).flatten() else {
+        return;
+    };
+    headers.insert(header::CONNECTION, HeaderValue::from_static("upgrade"));
+    headers.insert(header::UPGRADE, upgrade);
+}
+
 /// Plain (non-upgrade) forward: stream the request to the upstream and the
-/// response back, body and all, stripping hop-by-hop headers on both legs.
+/// response back, body and all, stripping hop-by-hop headers on both legs. The
+/// request strip is intentionally repeated after the handler's early strip as
+/// defense in depth for any future handler that adds a hop-by-hop field.
 async fn forward(state: &ProxyState, mut req: Request) -> Response {
     strip_hop_by_hop(req.headers_mut());
     match state.client.request(req).await {
@@ -918,6 +1243,302 @@ mod tests {
 
     use super::*;
     use crate::control::AUTH_BURST;
+
+    const TEST_COMPANION_ORIGIN: &str = "https://rotki.example";
+
+    fn companion_ingress(trusted: &[&str]) -> CompanionIngress {
+        CompanionIngress::new(
+            CanonicalCompanionOrigin::parse(TEST_COMPANION_ORIGIN).unwrap(),
+            trusted
+                .iter()
+                .map(|spec| access_log::Cidr::parse(spec).unwrap())
+                .collect(),
+        )
+        .unwrap()
+    }
+
+    fn request_with_headers(path: &str, headers: &[(&str, &str)]) -> Request {
+        let mut req = Request::builder().uri(path).body(Body::empty()).unwrap();
+        for (name, value) in headers {
+            req.headers_mut().append(
+                HeaderName::from_bytes(name.as_bytes()).unwrap(),
+                HeaderValue::from_str(value).unwrap(),
+            );
+        }
+        req
+    }
+
+    fn apply_test_ingress(
+        path: &str,
+        headers: &[(&str, &str)],
+        peer: Option<&str>,
+        ingress: Option<&CompanionIngress>,
+    ) -> Request {
+        let mut req = request_with_headers(path, headers);
+        apply_companion_ingress(
+            &mut req,
+            peer.map(|value| value.parse::<SocketAddr>().unwrap()),
+            ingress,
+        );
+        req
+    }
+
+    fn header_value<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
+        req.headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+    }
+
+    #[test]
+    fn canonical_companion_origin_accepts_only_canonical_https_authorities() {
+        for value in [
+            "https://rotki.example",
+            "https://192.168.1.10:8443",
+            "https://[2001:db8::1]:8443",
+        ] {
+            let origin = CanonicalCompanionOrigin::parse(value).unwrap();
+            let diagnostic = format!("{origin:?}");
+            assert_eq!(diagnostic, "CanonicalCompanionOrigin(<redacted>)");
+            assert!(!diagnostic.contains(value));
+        }
+    }
+
+    #[test]
+    fn canonical_companion_origin_rejects_ambiguous_values_without_echoing_them() {
+        let values = [
+            "",
+            "http://rotki.example",
+            "HTTPS://rotki.example",
+            "https://rötki.example",
+            "https://bad_host.example",
+            "https://rotki.example.",
+            "https://user@rotki.example",
+            "https://rotki.example/path",
+            "https://rotki.example?query",
+            "https://rotki.example#fragment",
+            "https://127.000.000.001",
+            "https://[not-an-ip]",
+            "https://[2001:0db8::1]",
+            "https://[2001:db8::1]opaque",
+            "https://[fe80::1%25eth0]",
+            "https://rotki.example:443",
+            "https://rotki.example:0443",
+            "https://rotki.example:0",
+            "https://rotki.example:65536",
+            " https://rotki.example",
+            "https://rotki.example ",
+        ];
+        for value in values {
+            let error = CanonicalCompanionOrigin::parse(value).unwrap_err();
+            assert_eq!(error, "invalid canonical Companion origin");
+            if !value.is_empty() {
+                assert!(!error.contains(value));
+            }
+        }
+
+        let overlong = format!("https://{}.example", "a".repeat(2048));
+        let error = CanonicalCompanionOrigin::parse(&overlong).unwrap_err();
+        assert_eq!(error, "invalid canonical Companion origin");
+        assert!(!error.contains(&overlong));
+    }
+
+    #[test]
+    fn companion_ingress_requires_explicit_trust_and_redacts_its_origin() {
+        let origin = CanonicalCompanionOrigin::parse(TEST_COMPANION_ORIGIN).unwrap();
+        let error = CompanionIngress::new(origin.clone(), vec![]).unwrap_err();
+        assert_eq!(
+            error,
+            "Companion ingress requires an explicit trusted proxy"
+        );
+        assert!(!error.contains(TEST_COMPANION_ORIGIN));
+
+        let ingress =
+            CompanionIngress::new(origin, vec![access_log::Cidr::parse("10.0.0.0/8").unwrap()])
+                .unwrap();
+        let diagnostic = format!("{ingress:?}");
+        assert!(diagnostic.contains("explicit_trusted_proxy_count: 1"));
+        assert!(!diagnostic.contains(TEST_COMPANION_ORIGIN));
+        assert!(!diagnostic.contains("10.0.0.0/8"));
+    }
+
+    #[test]
+    fn fixed_companion_origin_ignores_all_request_authority_inputs() {
+        let ingress = companion_ingress(&["10.0.0.0/8"]);
+        for (host, forwarded_host) in [
+            ("attacker.example", "other.example"),
+            ("rotki.example:65535", "[2001:db8::99]"),
+        ] {
+            let req = apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[
+                    ("host", host),
+                    (
+                        "forwarded",
+                        "for=192.0.2.1;host=attacker.example;proto=http",
+                    ),
+                    ("x-forwarded-host", forwarded_host),
+                    ("x-forwarded-proto", "https"),
+                    ("x-forwarded-for", "198.51.100.7"),
+                    (COMPANION_ORIGIN_HEADER, "https://forged.example"),
+                    (COMPANION_SOURCE_HEADER, "192.0.2.99"),
+                ],
+                Some("10.0.0.2:443"),
+                Some(&ingress),
+            );
+            assert_eq!(
+                header_value(&req, COMPANION_ORIGIN_HEADER),
+                Some(TEST_COMPANION_ORIGIN),
+            );
+            assert_eq!(
+                header_value(&req, COMPANION_SOURCE_HEADER),
+                Some("198.51.100.7"),
+            );
+        }
+    }
+
+    #[test]
+    fn companion_private_pair_is_absent_unless_every_ingress_condition_holds() {
+        let ingress = companion_ingress(&["198.51.100.0/24"]);
+        let forged = [
+            ("x-forwarded-proto", "https"),
+            ("x-forwarded-for", "203.0.113.8"),
+            ("x-real-ip", "203.0.113.9"),
+            (COMPANION_ORIGIN_HEADER, "https://forged.example"),
+            (COMPANION_SOURCE_HEADER, "203.0.113.10"),
+        ];
+
+        let cases = [
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &forged,
+                Some("198.51.100.7:443"),
+                None,
+            ),
+            apply_test_ingress(
+                "/api/1/ping",
+                &forged,
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress(
+                "/api/1/companionish",
+                &forged,
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress(
+                "/api/1%2fcompanion/challenges",
+                &forged,
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            // Private is trusted by the legacy access-log/XFP policy, but not by
+            // Companion unless the operator explicitly listed it.
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &forged,
+                Some("192.168.1.50:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress("/api/1/companion/challenges", &forged, None, Some(&ingress)),
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[("x-forwarded-for", "203.0.113.8")],
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[("x-forwarded-proto", "http")],
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[("x-forwarded-proto", "https, http")],
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+            apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[
+                    ("x-forwarded-proto", "https"),
+                    ("x-forwarded-proto", "https"),
+                ],
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            ),
+        ];
+        for req in cases {
+            assert_eq!(header_value(&req, COMPANION_ORIGIN_HEADER), None);
+            assert_eq!(header_value(&req, COMPANION_SOURCE_HEADER), None);
+        }
+    }
+
+    #[test]
+    fn companion_ingress_accepts_one_trimmed_case_insensitive_https_token() {
+        let ingress = companion_ingress(&["198.51.100.0/24"]);
+        for forwarded_proto in ["https", " HTTPS ", "HtTpS"] {
+            let req = apply_test_ingress(
+                "/api/1/companion/challenges",
+                &[("x-forwarded-proto", forwarded_proto)],
+                Some("198.51.100.7:443"),
+                Some(&ingress),
+            );
+            assert_eq!(
+                header_value(&req, COMPANION_ORIGIN_HEADER),
+                Some(TEST_COMPANION_ORIGIN),
+            );
+            assert_eq!(
+                header_value(&req, COMPANION_SOURCE_HEADER),
+                Some("198.51.100.7"),
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_or_duplicate_forwarded_source_falls_back_to_explicit_proxy_peer() {
+        let ingress = companion_ingress(&["10.0.0.0/8"]);
+        for forwarded in [
+            vec![],
+            vec![("x-forwarded-for", "198.51.100.7, malformed")],
+            vec![("x-forwarded-for", "::ffff:198.51.100.7")],
+            vec![("x-forwarded-for", "203.0.113.009")],
+            vec![
+                ("x-forwarded-for", "198.51.100.7"),
+                ("x-forwarded-for", "192.0.2.9"),
+            ],
+            vec![("x-forwarded-for", "10.0.0.3, 10.0.0.4")],
+        ] {
+            let mut headers = vec![("x-forwarded-proto", "https")];
+            headers.extend(forwarded);
+            headers.push(("x-real-ip", "203.0.113.250"));
+            let req = apply_test_ingress(
+                "/api/1/companion/access-sessions",
+                &headers,
+                Some("10.0.0.2:443"),
+                Some(&ingress),
+            );
+            assert_eq!(
+                header_value(&req, COMPANION_SOURCE_HEADER),
+                Some("10.0.0.2"),
+            );
+        }
+
+        let req = apply_test_ingress(
+            "/api/1/companion/access-sessions",
+            &[
+                ("x-forwarded-proto", "https"),
+                ("x-forwarded-for", "198.51.100.7, 10.0.0.3"),
+            ],
+            Some("10.0.0.2:443"),
+            Some(&ingress),
+        );
+        assert_eq!(
+            header_value(&req, COMPANION_SOURCE_HEADER),
+            Some("198.51.100.7"),
+        );
+    }
 
     /// Build a request carrying `inbound` as `X-Forwarded-Proto` (when `Some`),
     /// sanitize it as if it arrived from `peer`, and return what the backends
@@ -1059,6 +1680,7 @@ mod tests {
                     .collect(),
                 ..Default::default()
             },
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1224,6 +1846,7 @@ mod tests {
             frontend_dir: None,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1288,6 +1911,144 @@ mod tests {
         port
     }
 
+    /// Echo the original target, private Companion pair, and sanitized scheme so
+    /// the real proxy path, rather than only pure helpers, proves the boundary.
+    async fn spawn_companion_report_upstream() -> u16 {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = Router::new().fallback(any(|req: Request| async move {
+            format!(
+                "{}|{}|{}|{}",
+                path_and_query(&req),
+                req.headers()
+                    .get(COMPANION_ORIGIN_HEADER)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("<absent>"),
+                req.headers()
+                    .get(COMPANION_SOURCE_HEADER)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("<absent>"),
+                req.headers()
+                    .get("x-forwarded-proto")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("<absent>"),
+            )
+        }));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn real_core_proxy_injects_only_the_trusted_pair_and_preserves_the_uri() {
+        let port = spawn_companion_report_upstream().await;
+        let app = router(&ProxyConfig {
+            port: 0,
+            core_port: port,
+            colibri_port: port,
+            mcp_port: port,
+            mcp_enabled: true,
+            frontend_dir: None,
+            max_body_bytes: 50 * 1024 * 1024,
+            access_log: access_log::AccessLog {
+                trusted_proxies: vec![access_log::Cidr::parse("198.51.100.0/24").unwrap()],
+                ..Default::default()
+            },
+            companion_ingress: Some(companion_ingress(&["198.51.100.0/24"])),
+            health: None,
+            control: None,
+        });
+        let mut companion = request_with_headers(
+            "/api/1/companion/challenges?seeded-query=must-still-reach-core",
+            &[
+                ("host", "attacker.example"),
+                ("x-forwarded-host", "attacker.example"),
+                ("x-forwarded-proto", "https"),
+                ("x-forwarded-for", "203.0.113.9"),
+                (COMPANION_ORIGIN_HEADER, "https://forged.example"),
+                (COMPANION_SOURCE_HEADER, "192.0.2.99"),
+            ],
+        );
+        companion.extensions_mut().insert(ConnectInfo(
+            "198.51.100.7:443".parse::<SocketAddr>().unwrap(),
+        ));
+        let response = app.clone().oneshot(companion).await.unwrap();
+        assert_eq!(
+            body_string(response).await,
+            concat!(
+                "/api/1/companion/challenges?seeded-query=must-still-reach-core|",
+                "https://rotki.example|203.0.113.9|https",
+            ),
+        );
+
+        let mut ordinary = request_with_headers(
+            "/api/1/ping?ordinary=query",
+            &[
+                ("x-forwarded-proto", "https"),
+                (COMPANION_ORIGIN_HEADER, "https://forged.example"),
+                (COMPANION_SOURCE_HEADER, "192.0.2.99"),
+            ],
+        );
+        ordinary.extensions_mut().insert(ConnectInfo(
+            "198.51.100.7:443".parse::<SocketAddr>().unwrap(),
+        ));
+        let response = app.oneshot(ordinary).await.unwrap();
+        assert_eq!(
+            body_string(response).await,
+            "/api/1/ping?ordinary=query|<absent>|<absent>|https",
+        );
+    }
+
+    #[tokio::test]
+    async fn connection_nominated_forwarding_headers_are_consumed_before_companion_trust() {
+        let port = spawn_companion_report_upstream().await;
+        let app = router(&ProxyConfig {
+            port: 0,
+            core_port: port,
+            colibri_port: port,
+            mcp_port: port,
+            mcp_enabled: true,
+            frontend_dir: None,
+            max_body_bytes: 50 * 1024 * 1024,
+            access_log: access_log::AccessLog {
+                trusted_proxies: vec![access_log::Cidr::parse("198.51.100.0/24").unwrap()],
+                ..Default::default()
+            },
+            companion_ingress: Some(companion_ingress(&["198.51.100.0/24"])),
+            health: None,
+            control: None,
+        });
+        let mut request = request_with_headers(
+            "/api/1/companion/challenges",
+            &[
+                (
+                    "connection",
+                    concat!(
+                        "x-forwarded-proto, x-forwarded-for, ",
+                        "x-rotki-companion-origin, x-rotki-companion-source",
+                    ),
+                ),
+                ("x-forwarded-proto", "https"),
+                ("x-forwarded-for", "203.0.113.9"),
+                (COMPANION_ORIGIN_HEADER, "https://forged.example"),
+                (COMPANION_SOURCE_HEADER, "192.0.2.99"),
+            ],
+        );
+        request.extensions_mut().insert(ConnectInfo(
+            "198.51.100.7:443".parse::<SocketAddr>().unwrap(),
+        ));
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            body_string(response).await,
+            "/api/1/companion/challenges|<absent>|<absent>|http",
+        );
+    }
+
     fn unique_temp_dir() -> PathBuf {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -1310,6 +2071,7 @@ mod tests {
             frontend_dir,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: health.map(|health| HealthProbe::new(move || health)),
             control: None,
         })
@@ -1456,6 +2218,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1484,6 +2247,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1540,6 +2304,7 @@ mod tests {
             frontend_dir: None,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1576,11 +2341,13 @@ mod tests {
             frontend_dir: None,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
 
         let response = app
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/mcp")
@@ -1593,6 +2360,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let nominated = app
+            .oneshot(
+                Request::builder()
+                    .uri("/mcp")
+                    .header(header::HOST, "rotki.example")
+                    .header(header::ORIGIN, "https://attacker.example")
+                    .header(header::CONNECTION, "origin, host")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(nominated.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -1606,6 +2387,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1636,6 +2418,7 @@ mod tests {
             frontend_dir: Some(dir.clone()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1711,6 +2494,7 @@ mod tests {
             frontend_dir: Some(dir.clone()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1743,6 +2527,7 @@ mod tests {
             frontend_dir: None,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1778,6 +2563,7 @@ mod tests {
             frontend_dir: Some(dir.clone()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1812,6 +2598,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 16,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1841,6 +2628,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
@@ -1910,6 +2698,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         };
@@ -1951,6 +2740,7 @@ mod tests {
             frontend_dir: Some(unique_temp_dir()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         };
@@ -2035,6 +2825,7 @@ mod tests {
             frontend_dir: None,
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control,
         })
@@ -2097,6 +2888,7 @@ mod tests {
             frontend_dir: Some(dir.clone()),
             max_body_bytes: 50 * 1024 * 1024,
             access_log: Default::default(),
+            companion_ingress: None,
             health: None,
             control: None,
         });
