@@ -160,10 +160,14 @@ mobile/
 │   ├── security-api/        # KMP ports; no platform implementation
 │   └── testing/             # reusable test fixtures, never a production dependency
 ├── feature/
-│   └── pairing/
-│       ├── domain/          # secret-free contracts and opaque capabilities
-│       ├── data/            # QR and registration boundary; internal Ktor implementation
-│       └── presentation/    # pure UDF state/action/reducer
+│   ├── pairing/
+│   │   ├── domain/          # secret-free contracts and opaque capabilities
+│   │   ├── data/            # QR and registration boundary; internal Ktor implementation
+│   │   └── presentation/    # pure UDF state/action/reducer
+│   └── authorization/       # planned client-only challenge/proof/Access Session vertical
+│       ├── domain/          # Ktor-free redacted contracts and outcomes
+│       ├── application/     # process authority, single-flight acquisition, renewal, lifecycle
+│       └── data/            # strict Auth DTOs/transcript and internal Ktor implementation
 ├── android/
 │   ├── designsystem/        # Material 3 theme and Atomic Design components
 │   ├── navigation/          # typed Navigation Compose contracts and root graphs
@@ -199,6 +203,13 @@ flowchart LR
     Shared --> Data
     Shared --> Protocol
     Shared --> Network
+    AndroidApp --> AuthorizationApplication["authorization application"]
+    Shared --> AuthorizationApplication
+    AuthorizationApplication --> AuthorizationDomain["authorization domain"]
+    AuthorizationData["authorization data"] --> AuthorizationDomain
+    AuthorizationData --> Network
+    AndroidApp --> AuthorizationData
+    Shared --> AuthorizationData
 ```
 
 Rules:
@@ -227,6 +238,11 @@ Rules:
   artifacts forbidden, with exact test-bucket exceptions for AndroidX Test and JUnit.
 - Cross-feature dependencies use the other feature's public domain/API contract. Importing another
   feature's data, DI, ViewModel, or internal UI package is forbidden.
+- `:feature:authorization` is separate from one-time Pairing. Its domain is Ktor-free, its
+  application module is the sole process owner of Access authority, and its data module owns the
+  challenge/proof wire boundary. It has no presentation module because Authorization maps into the
+  existing root state rather than owning a screen. The accepted execution order and gates live in
+  [`authorization-client-plan.md`](./authorization-client-plan.md).
 - `:shared` is an aggregation/export boundary for Swift. New unrelated implementations must not be
   placed there merely because both platforms need them. A project dependency is never implicitly
   exported: every stable native surface requires an explicit umbrella export, and no leaf creates

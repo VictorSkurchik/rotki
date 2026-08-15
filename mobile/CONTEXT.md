@@ -67,6 +67,10 @@ _Avoid_: API key, access token, public-key fingerprint
 A non-exportable signing key created by a Client installation and registered with an Engine during Pairing to prove that installation's identity.
 _Avoid_: API key, Profile password
 
+**Device Proof**:
+A single-use, challenge-bound signature through which a Client proves possession of its registered Device Key before requesting an Access Session.
+_Avoid_: Login, Pairing, reusable signature
+
 **Access Session**:
 A short-lived API authorization minted after a Client proves possession of its Device Key.
 _Avoid_: Device Session, refresh token

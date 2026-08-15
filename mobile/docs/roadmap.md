@@ -1079,6 +1079,10 @@ permission and trusts system or user-installed HTTPS roots without allowing clea
 Shared/JVM and Android host checks, lint, and managed-device tests pass on API 28 and API 36.
 Challenge, proof, Access Session acquisition, restart re-authentication, and the real
 Docker/Starling host flow remain unimplemented; therefore A4.1 and Gate G4 are not complete.
+The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
+sequence, and pre-live acceptance gates are specified in
+[`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates
+does not by itself complete A4.1 or Gate G4.
 
 ### A4.2 — Minimal Overview and secure offline reopen
 

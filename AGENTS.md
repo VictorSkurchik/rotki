@@ -972,7 +972,7 @@ cohesive change.
 ## KMP and Native Mobile Architecture
 
 All new production code under `mobile/` follows
-[`mobile/docs/architecture.md`](mobile/docs/architecture.md) and ADRs 0090–0092. Treat these as
+[`mobile/docs/architecture.md`](mobile/docs/architecture.md) and ADRs 0090–0093. Treat these as
 review requirements, not optional style guidance.
 
 - Use feature-first Clean Architecture modules. Dependencies point inward:
