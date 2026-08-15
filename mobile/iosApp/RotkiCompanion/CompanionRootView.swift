@@ -20,18 +20,33 @@ struct CompanionRootView: View {
                 CompanionTabShell()
             }
         }
-        .onChange(of: scenePhase) { _, phase in
-            switch phase {
-            case .active:
-                model.sceneBecameActive()
-            case .inactive:
-                model.sceneBecameInactive()
-            case .background:
-                model.sceneEnteredBackground()
-            @unknown default:
-                model.sceneEnteredBackground()
-            }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            dispatchCompanionScenePhase(
+                phase,
+                onActive: { _ = model.sceneBecameActive() },
+                onInactive: model.sceneBecameInactive,
+                onBackground: model.sceneEnteredBackground
+            )
         }
+    }
+}
+
+@MainActor
+func dispatchCompanionScenePhase(
+    _ phase: ScenePhase,
+    onActive: () -> Void,
+    onInactive: () -> Void,
+    onBackground: () -> Void
+) {
+    switch phase {
+    case .active:
+        onActive()
+    case .inactive:
+        onInactive()
+    case .background:
+        onBackground()
+    @unknown default:
+        onBackground()
     }
 }
 

@@ -120,6 +120,30 @@ class CompanionPairingSessionAdapterTest {
     }
 
     @Test
+    fun `recovered barrier cannot bind after a replacement Pairing commits`() {
+        val facade = CompanionFacade()
+        val adapter = CompanionPairingSessionAdapter(facade)
+        var replacementCommitted = false
+
+        val recoveredCleanup =
+            facade.claimRecoveredPairingCleanup {
+                assertIs<CompanionTransitionOutcome.Applied>(
+                    facade.acceptPairing(parsedQr(FIRST_EXPIRY)),
+                )
+                val replacement = assertNotNull(adapter.takePending())
+                assertNotNull(adapter.markCleanupRequired(replacement))
+                assertTrue(adapter.markDurable(replacement))
+                replacementCommitted = adapter.commit(replacement)
+            }
+
+        assertTrue(replacementCommitted)
+        assertNull(recoveredCleanup)
+        assertFalse(adapter.hasPendingCleanup())
+        assertNull(adapter.takePending())
+        assertEquals(CompanionRootState.Connecting, facade.status.value.rootState)
+    }
+
+    @Test
     fun `adapter capabilities and secret material stay redacted`() {
         val facade = CompanionFacade()
         val adapter = CompanionPairingSessionAdapter(facade)

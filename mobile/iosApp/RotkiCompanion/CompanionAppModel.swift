@@ -47,16 +47,22 @@ final class CompanionAppModel: ObservableObject {
     private let facade: CompanionFacade
     private let pairingFlow: PairingFlow
     private let securityComposition: IOSSecurityComposition?
+    private var sceneRevision: UInt64 = 0
 
     init(
         launchMode: CompanionLaunchMode = .sharedState,
-        facade: CompanionFacade? = nil
+        facade: CompanionFacade? = nil,
+        securityComposition: IOSSecurityComposition? = nil
     ) {
-        let securityComposition = facade == nil ? IOSSecurityComposition() : nil
-        let resolvedFacade = facade ?? securityComposition!.facade
+        let resolvedSecurityComposition =
+            securityComposition ?? (facade == nil ? IOSSecurityComposition() : nil)
+        if let facade, let resolvedSecurityComposition {
+            precondition(facade === resolvedSecurityComposition.facade)
+        }
+        let resolvedFacade = facade ?? resolvedSecurityComposition!.facade
         self.launchMode = launchMode
         self.facade = resolvedFacade
-        self.securityComposition = securityComposition
+        self.securityComposition = resolvedSecurityComposition
         self.pairingFlow = resolvedFacade.pairingFlow()
         self.route = launchMode == .tabShell ? .tabShell : .unpaired
         refreshFromShared()
@@ -74,23 +80,29 @@ final class CompanionAppModel: ObservableObject {
         refreshFromShared()
     }
 
-    func sceneBecameActive() {
+    @discardableResult
+    func sceneBecameActive() -> Task<Void, Never>? {
+        sceneRevision &+= 1
+        let admittedRevision = sceneRevision
         guard let securityComposition else {
             refreshFromShared()
-            return
+            return nil
         }
-        Task { @MainActor [weak self] in
+        return Task { @MainActor [weak self] in
+            guard let self, self.sceneRevision == admittedRevision else { return }
             await securityComposition.sceneBecameActive()
-            self?.refreshFromShared()
+            self.refreshFromShared()
         }
     }
 
     func sceneBecameInactive() {
+        sceneRevision &+= 1
         securityComposition?.sceneBecameInactive()
         refreshFromShared()
     }
 
     func sceneEnteredBackground() {
+        sceneRevision &+= 1
         securityComposition?.sceneEnteredBackground()
         refreshFromShared()
     }

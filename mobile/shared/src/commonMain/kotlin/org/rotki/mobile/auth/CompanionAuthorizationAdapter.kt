@@ -24,6 +24,7 @@ import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.state.CompanionRootState
+import org.rotki.mobile.core.state.CompanionTransitionEvent
 import org.rotki.mobile.core.state.CompanionTransitionOutcome
 import org.rotki.mobile.feature.authorization.application.AuthorizationAuthorityUseOutcome
 import org.rotki.mobile.feature.authorization.application.AuthorizationCoordinatorEvent
@@ -251,12 +252,21 @@ internal class CompanionAuthorizationAdapter(
         return recover(CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION)
     }
 
-    internal suspend fun onBackgroundOrSystemLock(): CompanionTransitionOutcome =
+    internal suspend fun onBackgroundOrSystemLock(
+        transitionAlreadyApplied: Boolean = false,
+    ): CompanionTransitionOutcome? =
         withContext(NonCancellable) {
             ensureNotExternalCallbackReentry()
             val (transition, teardown) =
                 lifecycleMutex.withLock {
-                    val transition = facade.lock()
+                    val transition =
+                        if (transitionAlreadyApplied) {
+                            null
+                        } else {
+                            facade.transitionAuthorizationEvent(
+                                CompanionTransitionEvent.BACKGROUND_OR_SYSTEM_LOCK,
+                            )
+                        }
                     val (invalidated, expectedGeneration) =
                         stateMutex.withLock {
                             teardownInProgress = true
@@ -292,6 +302,14 @@ internal class CompanionAuthorizationAdapter(
         return recover(CompanionAuthorizationRecoveryTrigger.EXPLICIT_FOREGROUND_RETRY)
     }
 
+    internal suspend fun onExplicitForegroundRetryAfterTransition(): CompanionAuthorizationStatus {
+        ensureNotExternalCallbackReentry()
+        return recover(
+            trigger = CompanionAuthorizationRecoveryTrigger.EXPLICIT_FOREGROUND_RETRY,
+            transitionAlreadyApplied = true,
+        )
+    }
+
     internal suspend fun onAccessSessionUnavailable(): CompanionAuthorizationStatus {
         ensureNotExternalCallbackReentry()
         return recover(CompanionAuthorizationRecoveryTrigger.ACCESS_SESSION_UNAVAILABLE)
@@ -302,12 +320,77 @@ internal class CompanionAuthorizationAdapter(
         return recover(CompanionAuthorizationRecoveryTrigger.WEBSOCKET_1008)
     }
 
+    internal suspend fun onAccessAuthorityUnavailableAfterTransition(): CompanionAuthorizationStatus {
+        ensureNotExternalCallbackReentry()
+        val clearedStatus =
+            withContext(NonCancellable) {
+                val teardown =
+                    lifecycleMutex.withLock {
+                        val (invalidated, expectedGeneration) =
+                            stateMutex.withLock {
+                                teardownInProgress = true
+                                invalidateRecoveryLocked() to generation
+                            }
+                        CompanionAuthorizationTeardown(
+                            recoveryJob = invalidated.recoveryJob,
+                            expectedGeneration = expectedGeneration,
+                            authorityInvalidation = coordinator.beginClearAccessSession(),
+                            sessionWorkInvalidation =
+                                beginCloseSessionWork(
+                                    reason = CompanionAuthenticatedSessionWorkCloseReason.AUTHORITY_LOST,
+                                    sessionRevision = invalidated.sessionRevision,
+                                ),
+                        )
+                    }
+                teardown.recoveryJob?.cancel()
+                awaitSessionWorkClose(teardown.sessionWorkInvalidation)
+                teardown.authorityInvalidation.awaitCompletion()
+                teardown.recoveryJob?.join()
+                completeTeardownIfCurrent(
+                    teardown.expectedGeneration,
+                    CompanionAuthorizationStatus(CompanionAuthorizationResult.SESSION_EXPIRED),
+                )
+                status.value
+            }
+        return if (applicationVisibility.state.value == ApplicationVisibilityState.ACTIVE_FOREGROUND &&
+            facade.status.value.rootState == CompanionRootState.Connecting
+        ) {
+            recover(
+                trigger = CompanionAuthorizationRecoveryTrigger.SESSION_EXPIRED,
+                transitionAlreadyApplied = true,
+            )
+        } else {
+            clearedStatus
+        }
+    }
+
     internal suspend fun onLocalUnpair(): CompanionAuthorizationStatus =
+        onLocalUnpair(
+            transitionAlreadyApplied = false,
+            claimedCleanup = null,
+        )
+
+    internal suspend fun onLocalUnpairAfterTransition(
+        claimedCleanup: PairingCleanupHandle,
+    ): CompanionAuthorizationStatus =
+        onLocalUnpair(
+            transitionAlreadyApplied = true,
+            claimedCleanup = claimedCleanup,
+        )
+
+    private suspend fun onLocalUnpair(
+        transitionAlreadyApplied: Boolean,
+        claimedCleanup: PairingCleanupHandle?,
+    ): CompanionAuthorizationStatus =
         withContext(NonCancellable) {
             ensureNotExternalCallbackReentry()
             val (cleanupLease, teardown) =
                 lifecycleMutex.withLock {
-                    val claimed = facade.claimLocalUnpairCleanup()
+                    val claimed =
+                        claimedCleanup
+                            ?: facade.claimLocalUnpairCleanup(
+                                transitionToUnpaired = !transitionAlreadyApplied,
+                            )
                     val (lease, invalidated, expectedGeneration) =
                         stateMutex.withLock {
                             teardownInProgress = true
@@ -449,7 +532,10 @@ internal class CompanionAuthorizationAdapter(
 
     override fun toString(): String = "CompanionAuthorizationAdapter(redacted)"
 
-    private suspend fun recover(trigger: CompanionAuthorizationRecoveryTrigger): CompanionAuthorizationStatus {
+    private suspend fun recover(
+        trigger: CompanionAuthorizationRecoveryTrigger,
+        transitionAlreadyApplied: Boolean = false,
+    ): CompanionAuthorizationStatus {
         val admission =
             lifecycleMutex.withLock {
                 stateMutex.withLock {
@@ -464,10 +550,14 @@ internal class CompanionAuthorizationAdapter(
                         trigger.priority > current.trigger.priority
                     ) {
                         val invalidated = invalidateRecoveryLocked()
-                        startRecoveryLocked(trigger, invalidated.recoveryJob)
+                        startRecoveryLocked(
+                            trigger = trigger,
+                            transitionAlreadyApplied = transitionAlreadyApplied,
+                            cancelledJob = invalidated.recoveryJob,
+                        )
                     } else {
                         current?.let(CompanionAuthorizationRecoveryAdmission::join)
-                            ?: startRecoveryLocked(trigger)
+                            ?: startRecoveryLocked(trigger, transitionAlreadyApplied)
                     }
                 }
             }
@@ -480,9 +570,15 @@ internal class CompanionAuthorizationAdapter(
 
     private fun startRecoveryLocked(
         trigger: CompanionAuthorizationRecoveryTrigger,
+        transitionAlreadyApplied: Boolean,
         cancelledJob: Job? = null,
     ): CompanionAuthorizationRecoveryAdmission {
-        val flight = CompanionAuthorizationRecoveryFlight(generation, trigger)
+        val flight =
+            CompanionAuthorizationRecoveryFlight(
+                generation = generation,
+                trigger = trigger,
+                transitionAlreadyApplied = transitionAlreadyApplied,
+            )
         val job =
             adapterScope.launch(start = CoroutineStart.LAZY) {
                 runRecovery(flight)
@@ -525,7 +621,9 @@ internal class CompanionAuthorizationAdapter(
         val prepared =
             lifecycleMutex.withLock {
                 if (!isCurrentActiveRecovery(flight)) return@withLock false
-                if (flight.trigger == CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION) {
+                if (flight.trigger == CompanionAuthorizationRecoveryTrigger.FOREGROUND_AUTHORIZATION ||
+                    flight.transitionAlreadyApplied
+                ) {
                     facade.status.value.rootState == CompanionRootState.Connecting
                 } else {
                     val transition = applyRecoveryTransition(flight.trigger)
@@ -594,22 +692,28 @@ internal class CompanionAuthorizationAdapter(
             }
 
             CompanionAuthorizationRecoveryTrigger.ACCESS_SESSION_UNAVAILABLE -> {
-                facade.accessSessionUnavailable()
+                facade.transitionAuthorizationEvent(
+                    CompanionTransitionEvent.ACCESS_SESSION_UNAVAILABLE,
+                )
             }
 
             CompanionAuthorizationRecoveryTrigger.SESSION_EXPIRED -> {
-                facade.accessSessionUnavailable()
+                facade.transitionAuthorizationEvent(
+                    CompanionTransitionEvent.ACCESS_SESSION_UNAVAILABLE,
+                )
             }
 
             CompanionAuthorizationRecoveryTrigger.WEBSOCKET_1008 -> {
-                facade.webSocketPolicyClosed()
+                facade.transitionAuthorizationEvent(CompanionTransitionEvent.WEBSOCKET_CLOSE_1008)
             }
 
             CompanionAuthorizationRecoveryTrigger.EXPLICIT_FOREGROUND_RETRY -> {
                 if (facade.status.value.rootState == CompanionRootState.Unreachable) {
-                    facade.transportRestored()
+                    facade.transitionAuthorizationEvent(CompanionTransitionEvent.TRANSPORT_RESTORED)
                 } else {
-                    facade.retryResolvedEngineState()
+                    facade.transitionAuthorizationEvent(
+                        CompanionTransitionEvent.EXPLICIT_FOREGROUND_RETRY,
+                    )
                 }
             }
         }
@@ -898,8 +1002,10 @@ internal class CompanionAuthorizationAdapter(
             AuthorizationCoordinatorOutcome.PairingRequired -> {
                 val sessionRevision = fencedSessionRevision ?: activeSessionRevision
                 activeSessionRevision = null
-                val barrier = facade.claimRecoveredPairingCleanup()
-                if (barrier != null) facade.unpair()
+                val barrier = facade.claimRecoveredPairingCleanup(forAuthorization = true)
+                if (barrier != null) {
+                    facade.transitionAuthorizationEvent(CompanionTransitionEvent.LOCAL_UNPAIR)
+                }
                 updateStatus(
                     if (barrier == null) {
                         CompanionAuthorizationResult.CLEANUP_INCOMPLETE
@@ -988,7 +1094,7 @@ internal class CompanionAuthorizationAdapter(
             AuthorizationRemoteFailure.NOT_AUTHORIZED -> {
                 val sessionRevision = fencedSessionRevision ?: activeSessionRevision
                 activeSessionRevision = null
-                val barrier = facade.claimRecoveredPairingCleanup()
+                val barrier = facade.claimRecoveredPairingCleanup(forAuthorization = true)
                 if (barrier != null) facade.notAuthorized()
                 updateStatus(
                     if (barrier == null) {
@@ -1106,14 +1212,16 @@ internal class CompanionAuthorizationAdapter(
 
     private fun restoreConnectingAfterReachableResponse() {
         if (facade.status.value.rootState == CompanionRootState.Unreachable) {
-            facade.transportRestored()
+            facade.transitionAuthorizationEvent(CompanionTransitionEvent.TRANSPORT_RESTORED)
         }
     }
 
     private suspend fun destroyLocalAuthority(): Boolean =
         withContext(NonCancellable + companionAuthorizationExternalCallbackContext) {
             try {
-                localAuthorityCleaner.destroyAll()
+                facade.withPairingConnectionOwnership {
+                    localAuthorityCleaner.destroyAll()
+                }
             } catch (_: Exception) {
                 false
             }
@@ -1480,6 +1588,7 @@ private enum class CompanionAuthorizationRecoveryTrigger(
 private class CompanionAuthorizationRecoveryFlight(
     val generation: Long,
     val trigger: CompanionAuthorizationRecoveryTrigger,
+    val transitionAlreadyApplied: Boolean,
     val result: CompletableDeferred<CompanionAuthorizationStatus> = CompletableDeferred(),
 ) {
     lateinit var job: Job

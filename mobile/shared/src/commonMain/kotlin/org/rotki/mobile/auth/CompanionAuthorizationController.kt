@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.rotki.mobile.CompanionFacade
+import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.Clock
 import org.rotki.mobile.core.ports.DeviceProofSigner
@@ -53,10 +54,35 @@ public class CompanionAuthorizationController internal constructor(
             adapter.onExplicitForegroundRetry()
         }
 
+    internal fun onExplicitForegroundRetryAfterTransition(): Unit =
+        launchCommand {
+            adapter.onExplicitForegroundRetryAfterTransition()
+        }
+
+    internal fun onAccessSessionUnavailableAfterTransition(): Unit =
+        launchCommand {
+            adapter.onAccessAuthorityUnavailableAfterTransition()
+        }
+
+    internal fun onWebSocketPolicyClosedAfterTransition(): Unit =
+        launchCommand {
+            adapter.onAccessAuthorityUnavailableAfterTransition()
+        }
+
     @HiddenFromObjC
     public fun onBackgroundOrSystemLock(): Unit =
         launchCommand {
             adapter.onBackgroundOrSystemLock()
+        }
+
+    internal fun onBackgroundOrSystemLockAfterTransition(): Unit =
+        launchCommand {
+            adapter.onBackgroundOrSystemLock(transitionAlreadyApplied = true)
+        }
+
+    internal fun onLocalUnpairAfterTransition(cleanup: PairingCleanupHandle): Unit =
+        launchCommand {
+            adapter.onLocalUnpairAfterTransition(cleanup)
         }
 
     @HiddenFromObjC

@@ -22,6 +22,7 @@ import org.rotki.mobile.core.ports.ApplicationVisibility
 import org.rotki.mobile.core.ports.ApplicationVisibilityState
 import org.rotki.mobile.core.protocol.testing.ProtocolFixtureData
 import org.rotki.mobile.core.state.CompanionRootState
+import org.rotki.mobile.core.state.CompanionTransitionOutcome
 import org.rotki.mobile.core.state.SnapshotCoverage
 import org.rotki.mobile.feature.authorization.application.AuthorizationAuthorityUseOutcome
 import org.rotki.mobile.feature.authorization.application.AuthorizationCoordinatorEvent
@@ -184,6 +185,39 @@ class CompanionAuthorizationAdapterTest {
                     harness.sessionWork.reasons,
                 )
             }
+        }
+
+    @Test
+    fun `after-transition authority loss clears while inactive and proves only after active`() =
+        runTest {
+            val harness = harness(CompanionRootState.Online)
+            harness.visibility.value = ApplicationVisibilityState.INACTIVE
+            assertIs<CompanionTransitionOutcome.Applied>(
+                harness.facade.accessSessionUnavailable(),
+            )
+
+            val inactive = harness.adapter.onAccessAuthorityUnavailableAfterTransition()
+
+            assertEquals(listOf("clear"), harness.authority.calls)
+            assertFalse(harness.authority.activeSession)
+            assertEquals(0, harness.authority.authorizeCalls)
+            assertEquals(0, harness.discovery.calls)
+            assertEquals(CompanionAuthorizationResult.SESSION_EXPIRED, inactive.result)
+            assertEquals(
+                listOf(CompanionAuthenticatedSessionWorkCloseReason.AUTHORITY_LOST),
+                harness.sessionWork.reasons,
+            )
+
+            harness.visibility.value = ApplicationVisibilityState.ACTIVE_FOREGROUND
+            harness.discovery.outcomes += CompanionAuthorizationDiscoveryOutcome.Compatible(1)
+            harness.authority.outcomes +=
+                AuthorizationCoordinatorOutcome.Authorized(1_900, sessionRevision = 1)
+
+            val active = harness.adapter.onActiveForegroundAuthorization()
+
+            assertEquals(1, harness.discovery.calls)
+            assertEquals(1, harness.authority.authorizeCalls)
+            assertEquals(CompanionAuthorizationResult.AUTHORITY_READY, active.result)
         }
 
     @Test
@@ -814,6 +848,34 @@ class CompanionAuthorizationAdapterRaceTest {
             clearRelease.complete(Unit)
             assertEquals(CompanionAuthorizationResult.PAIRING_REQUIRED, unpair.await().result)
             assertEquals(PairingAdmission.ACCEPTED, pairing.admit(testPairingQr(expiresAt = TEST_NOW + 200)))
+        }
+
+    @Test
+    fun `terminal authority deletion waits for Pairing cleanup ownership`() =
+        runTest {
+            val harness = harness(CompanionRootState.Online)
+            val pairingOwnershipStarted = CompletableDeferred<Unit>()
+            val pairingOwnershipRelease = CompletableDeferred<Unit>()
+            val pairingOwner =
+                async {
+                    harness.facade.withPairingConnectionOwnership {
+                        pairingOwnershipStarted.complete(Unit)
+                        pairingOwnershipRelease.await()
+                    }
+                }
+            pairingOwnershipStarted.await()
+            val cleanerStarted = CompletableDeferred<Unit>()
+            harness.cleaner.started = cleanerStarted
+
+            val unpair = async { harness.adapter.onLocalUnpair() }
+            runCurrent()
+
+            assertFalse(cleanerStarted.isCompleted)
+            pairingOwnershipRelease.complete(Unit)
+            pairingOwner.await()
+            cleanerStarted.await()
+            assertEquals(CompanionAuthorizationResult.PAIRING_REQUIRED, unpair.await().result)
+            assertEquals(1, harness.cleaner.calls)
         }
 
     @Test

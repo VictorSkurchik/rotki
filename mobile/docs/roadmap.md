@@ -14,7 +14,7 @@ changed. It does not authorize widening Companion Scope.
 | 2 | Isolated KMP build and shared foundation | **in progress** |
 | 3 | Coherent Engine data plane | **not started** |
 | 4 | Real Android tracer bullet | **native authorization composition — live tracer blocked** |
-| 5 | Equivalent iOS/SKIE tracer bullet | **native security composition — tracer not started** |
+| 5 | Equivalent iOS/SKIE tracer bullet | **native Authorization composition — tracer not started** |
 | 6 | Four complete native destinations | **not started** |
 | 7 | Full design system, hardening, and handoff | **not started** |
 
@@ -43,12 +43,11 @@ flowchart LR
 ```
 
 Phase 1 and Phase 2 may proceed in parallel after the automated Phase 0 contracts and
-spikes pass. The deferred physical-iPhone portion of P0.3 remains a hard gate before
-production iOS security or tracer work; it is not a blocker for Engine, shared KMP, or a
-non-data-bearing SwiftUI build/interop shell. The real Android tracer remains a hard gate:
-no iOS Pairing implementation, secure storage, Portfolio data, or remaining destination
-work starts before it passes. The iOS tracer then proves that shared behavior is genuinely
-multiplatform before feature expansion.
+spikes pass. The deferred physical-iPhone portion of P0.3 remains a hard acceptance gate for
+physical-device security and tracer evidence; it is not a blocker for Engine, shared KMP, or the
+client-only SwiftUI Pairing/security composition. The real Android tracer remains a hard gate for
+the iOS live tracer and data-plane expansion, but not for that pre-live client composition. The iOS
+tracer then proves that shared behavior is genuinely multiplatform before feature expansion.
 
 ## Working rules
 
@@ -593,8 +592,11 @@ authorization stays `Connecting` until Snapshot reconciliation. Only automatic `
 missing local Pairing reaches the one composite cleanup port. Android C4 now constructs the retained
 coordinator with the real gateway, Device Key, Pairing store, visibility, clock, and journaled
 composite cleaner and delivers post-Pairing, biometric restart, background/system-lock, and explicit
-retry callbacks. Consolidated native verification, iOS composition, authenticated requests, and
-real session-work/WebSocket wiring remain open as of 2026-08-15.
+retry callbacks. iOS now installs that same shared policy through an internal facade-scoped handoff
+from the existing Pairing configuration: fresh proof starts only after durable `REGISTERED`, restart
+reproof starts only after native device authentication, and no Swift API is added. Consolidated
+native verification is green. Authenticated requests and real session-work/WebSocket wiring remain
+open as of 2026-08-15.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
@@ -1139,9 +1141,11 @@ As of 2026-08-15, Android native C4 construction and lifecycle delivery use the 
 Key, Pairing record, strict gateway, and composite cleaner. The final cross-phase run passes fixture
 generation, JVM/Android-host tests, API 28/API 36 managed-device suites, quality and module-graph
 checks, all Android release variants and AAR boundaries, Apple KMP tests and links, Xcode host tests,
-security/redaction review, and the byte-identical Swift ABI baseline. Real authenticated requests,
-session-work/WebSocket ownership, Swift Authorization-controller wiring, and the Docker/Starling
-host flow remain unimplemented. Therefore A4.1 and Gate G4 are not complete.
+security/redaction review, and the byte-identical Swift ABI baseline. iOS Authorization proof and
+restart reproof are now wired without exporting the Objective-C-hidden controller: the existing
+Pairing connection call installs a hidden, facade-scoped handoff over the same native security ports.
+Real authenticated requests, session-work/WebSocket ownership, and the Docker/Starling host flow
+remain unimplemented. Therefore A4.1 and Gate G4 are not complete.
 
 C6 inventory confirms that no dedicated production-Ktor live Gradle task, golden Engine/Starling
 HTTPS harness, trusted test-CA orchestration, or real-host Android instrumentation driver exists in
@@ -1209,11 +1213,16 @@ the same shared use cases and snapshot as Android.
 Implementation status (2026-08-15): production `iosApp` now contains the non-exportable Secure
 Enclave P-256 Device Key adapter, `ThisDeviceOnly` Keychain Pairing record/cleanup persistence,
 secure idempotency generation, paired startup restoration, and Swift-owned scene/device-auth lock
-handling. AES-GCM Snapshot storage, camera Pairing UI, the Authorization-controller interop seam,
-and tracer behavior remain open. Apple KMP tests and links, the dual-framework ABI checks, and all
-15 Xcode Simulator host tests pass; physical-iPhone evidence remains open. The interop seam cannot
-be made Swift-callable while also keeping the pre-C5 framework header byte-identical; no credential,
-DTO, Ktor, or coordinator implementation type has been exported to work around it.
+handling. The existing `pairingConnection(configuration:)` call now installs an iOS-only internal
+Authorization handoff that reuses the same signer, Pairing store, cleanup journal, visibility, and
+clock. Pairing returns after durable registration and only then starts a separate proof; restored
+material reproofs after successful device authentication without another Pairing. Inactive retains
+authority, while background/system lock and terminal authority loss enter the same bearer/session
+teardown policy as Android. The Objective-C-hidden controller stays hidden: no credential, DTO,
+Ktor type, facade selector, or extra framework was exported. Apple KMP tests and links, all 18 Xcode
+unit tests plus two UI tests, and dual-framework ABI checks pass at the pre-C5 header/modulemap
+hashes. AES-GCM Snapshot storage, camera Pairing UI, the real tracer, and physical-iPhone evidence
+remain open; Gate G5 is not complete.
 
 Gate G5: the real online-to-offline tracer passes in simulator UI tests, Swift task
 cancellation reaches Kotlin, and one physical iPhone completes Pairing, offline biometric

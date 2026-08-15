@@ -140,9 +140,11 @@ invokes its one composite local-authority cleanup port. Authority readiness deli
 root in `Connecting` until Snapshot reconciliation performs the later root-state transition. Native
 Android C4 constructs one retained coordinator/adapter with its real gateway, Device Key, Pairing
 store, visibility, clock, and journaled composite cleaner. Post-Pairing, biometric restart,
-background/system-lock, and explicit-retry callbacks enter this Kotlin-only controller. The
-consolidated native gate, iOS composition, authenticated requests, and real session-work/WebSocket
-delivery remain open as of 2026-08-15. Rename/revoke DTOs remain in
+background/system-lock, and explicit-retry callbacks enter this Kotlin-only controller. On iOS, an
+internal platform installer attaches the same controller to the existing facade-scoped Pairing
+configuration without exporting it to Objective-C. The consolidated native gate and iOS
+Authorization composition are green as of 2026-08-15; authenticated requests and real
+session-work/WebSocket delivery remain open. Rename/revoke DTOs remain in
 `:shared` for a separate Device Session-management slice. All three Authorization modules are
 implementation-only and non-exported. The public `DeviceLabelValidator` remains a stable shared
 wrapper over data-owned validation. Raw `Json` is
@@ -174,9 +176,16 @@ The iOS host now owns its native composition in Swift: one `ApplicationVisibilit
 Keychain-backed Pairing record and cleanup marker, secure idempotency generator, and a persistent
 non-exportable Secure Enclave P-256 Device Key feed the unchanged Pairing configuration surface.
 `scenePhase` delivers inactive/background state and device authentication before unlocking the
-restored facade. The KMP Authorization controller remains Objective-C-hidden to preserve the exact
-Swift facade/header, so iOS proof/reproof wiring, Snapshot storage, and data-plane session work are
-still follow-up work rather than an exported implementation shortcut.
+restored facade. Calling the existing `pairingConnection(configuration:)` selector is also the
+ABI-neutral installation seam: an iOS-only internal factory retains one Authorization handoff per
+facade and reuses the configuration's signer, record store, cleanup journal, visibility, and clock.
+The Pairing transaction releases its ownership after durable registration before notifying that
+handoff. Fresh Pairing therefore starts proof only after `REGISTERED`, while restart reproof starts
+only after device authentication changes the restored root to `Connecting`. Inactive preserves
+authority; background/system lock, terminal authority loss, and local Unpair synchronously enter
+the shared teardown/cleanup fences. The KMP controller stays Objective-C-hidden, and the generated
+device/Simulator header and modulemap remain byte-identical. Snapshot storage and real data-plane
+session work remain follow-up slices.
 
 The physical `:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four
 typed, argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative
@@ -528,10 +537,11 @@ Do not perform a big-bang package move. Use this order:
    opaque attempt and cleanup capabilities can move without reversing the dependency graph. The
    C1-C3 Authorization domain/application/data boundaries, coordinator-owned renewal and expiry,
    opaque request authority with a fixed trusted executor, secret-free owner events, and the
-   internal facade adapter are in place. Android now supplies the retained native coordinator,
-   lifecycle entry points, and concrete composite cleaner. Consolidated native verification, iOS
-   composition, authenticated requests, and real session-work/WebSocket wiring remain incremental
-   work.
+   internal facade adapter are in place. Android supplies the retained native coordinator,
+   lifecycle entry points, and concrete composite cleaner; iOS installs the same shared policy
+   internally from its existing Pairing configuration without changing the Swift ABI. Consolidated
+   native verification is green. Authenticated requests and real session-work/WebSocket wiring
+   remain incremental work.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
    process-scoped platform/Pairing composition remains in `:androidApp`; `:android:platform` now owns
    the lifecycle bridge, durable Pairing record/journal adapters, Android Keystore Device proof, and

@@ -10,6 +10,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.selects.select
@@ -99,16 +100,34 @@ public class PairingConnection internal constructor(
     private val protocolClient: PairingRegistrationRemoteGateway,
     private val retryPolicy: RetryPolicy,
     private val retryDelay: PairingRetryDelay,
+    private val authorizationHandoffLease: CompanionAuthorizationHandoffLease? = null,
 ) {
-    public suspend fun connectPendingPairing(): PairingConnectionOutcome =
-        attempts.withConnectionOwnership(::connectSerialized)
+    private val closed: MutableStateFlow<Boolean> = MutableStateFlow(false)
+
+    public suspend fun connectPendingPairing(): PairingConnectionOutcome {
+        val outcome = attempts.withConnectionOwnership(::connectSerialized)
+        if (outcome == PairingConnectionOutcome.REGISTERED) {
+            try {
+                authorizationHandoffLease?.onPairingRegistered()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Authorization is a separate handoff and cannot change a durable Pairing result.
+            }
+        }
+        return outcome
+    }
 
     /** Retries an incomplete fail-closed cleanup without starting any network request. */
     public suspend fun retryIncompleteCleanup(): PairingConnectionOutcome =
         attempts.withConnectionOwnership {
             val cleanup =
                 attempts.claimRecoveredCleanup()
-                    ?: return@withConnectionOwnership PairingConnectionOutcome.NO_PENDING_PAIRING
+                    ?: return@withConnectionOwnership if (attempts.hasPendingCleanup()) {
+                        PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE
+                    } else {
+                        PairingConnectionOutcome.NO_PENDING_PAIRING
+                    }
             val journal = readCleanupJournal()
             when (journal) {
                 PairingCleanupJournalReadOutcome.Clear -> {
@@ -137,7 +156,14 @@ public class PairingConnection internal constructor(
             }
         }
 
-    public fun close(): Unit = protocolClient.close()
+    public fun close() {
+        if (!closed.compareAndSet(expect = false, update = true)) return
+        try {
+            protocolClient.close()
+        } finally {
+            authorizationHandoffLease?.close()
+        }
+    }
 
     override fun toString(): String = "PairingConnection(redacted)"
 
@@ -752,6 +778,7 @@ public class PairingConnection internal constructor(
         internal fun create(
             attempts: PairingAttemptPort<PendingPairingLease, PairingCleanupHandle>,
             configuration: PairingConnectionConfiguration,
+            authorizationHandoffLease: CompanionAuthorizationHandoffLease? = null,
         ): PairingConnection =
             PairingConnection(
                 attempts = attempts,
@@ -759,6 +786,7 @@ public class PairingConnection internal constructor(
                 protocolClient = createPlatformPairingRegistrationRemoteGateway(),
                 retryPolicy = RetryPolicy(),
                 retryDelay = DefaultPairingRetryDelay,
+                authorizationHandoffLease = authorizationHandoffLease,
             )
     }
 }

@@ -1,6 +1,7 @@
 package org.rotki.mobile.auth
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
@@ -11,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.rotki.mobile.CompanionFacade
+import org.rotki.mobile.PairingCleanupHandle
 import org.rotki.mobile.auth.protocol.DeviceLabel
 import org.rotki.mobile.auth.protocol.PairingQr
 import org.rotki.mobile.core.network.RetryPolicy
@@ -84,6 +86,41 @@ class PairingConnectionTest {
         }
 
     @Test
+    fun `authorization handoff runs once after durable registration commits`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val authorizationLease = RecordingAuthorizationHandoffLease(fixture.events)
+            val connection = fixture.connection(authorizationHandoffLease = authorizationLease)
+            try {
+                assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
+                assertEquals(
+                    listOf(
+                        "read",
+                        "discovery",
+                        "mark_cleanup",
+                        "create_key",
+                        "registration",
+                        "write",
+                        "clear_cleanup",
+                        "authorization_handoff",
+                    ),
+                    fixture.events,
+                )
+                assertNotNull(fixture.store.record)
+                assertFalse(fixture.cleanupJournal.cleanupRequired)
+                assertEquals(1, authorizationLease.pairingRegisteredCalls)
+
+                assertEquals(
+                    PairingConnectionOutcome.NO_PENDING_PAIRING,
+                    connection.connectPendingPairing(),
+                )
+                assertEquals(1, authorizationLease.pairingRegisteredCalls)
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
     fun `concurrent connections serialize one Pairing registration`(): Unit =
         runTest {
             val fixture = Fixture()
@@ -94,8 +131,12 @@ class PairingConnectionTest {
                 releasePost.await()
                 successfulRegistration()
             }
-            val ownerConnection = fixture.connection()
-            val waiterConnection = fixture.connection()
+            val ownerAuthorizationLease = RecordingAuthorizationHandoffLease()
+            val waiterAuthorizationLease = RecordingAuthorizationHandoffLease()
+            val ownerConnection =
+                fixture.connection(authorizationHandoffLease = ownerAuthorizationLease)
+            val waiterConnection =
+                fixture.connection(authorizationHandoffLease = waiterAuthorizationLease)
             try {
                 val owner = async { ownerConnection.connectPendingPairing() }
                 postStarted.await()
@@ -114,11 +155,70 @@ class PairingConnectionTest {
                 assertEquals(1, fixture.remote.registrationCalls)
                 assertEquals(1, fixture.signer.createCalls)
                 assertEquals(1, fixture.events.count { event -> event == "write" })
+                assertEquals(1, ownerAuthorizationLease.pairingRegisteredCalls)
+                assertEquals(0, waiterAuthorizationLease.pairingRegisteredCalls)
             } finally {
                 ownerConnection.close()
                 waiterConnection.close()
             }
         }
+
+    @Test
+    fun `authorization handoff runs outside facade Pairing ownership`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val testScope = this
+            var secondOwnershipCompletedSynchronously: Boolean? = null
+            val authorizationLease =
+                RecordingAuthorizationHandoffLease {
+                    val secondOwnership =
+                        testScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            fixture.facade.withPairingConnectionOwnership { }
+                        }
+                    secondOwnershipCompletedSynchronously = secondOwnership.isCompleted
+                }
+            val connection = fixture.connection(authorizationHandoffLease = authorizationLease)
+            try {
+                assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
+                assertEquals(true, secondOwnershipCompletedSynchronously)
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
+    fun `authorization handoff failure cannot change durable registration`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val authorizationLease =
+                RecordingAuthorizationHandoffLease(fixture.events) {
+                    error("Seeded Authorization handoff failure")
+                }
+            val connection = fixture.connection(authorizationHandoffLease = authorizationLease)
+            try {
+                assertEquals(PairingConnectionOutcome.REGISTERED, connection.connectPendingPairing())
+                assertEquals(1, authorizationLease.pairingRegisteredCalls)
+                assertNotNull(fixture.store.record)
+                assertFalse(fixture.cleanupJournal.cleanupRequired)
+                assertEquals(0, fixture.signer.deleteCalls)
+                assertEquals(0, fixture.store.deleteCalls)
+                assertEquals("authorization_handoff", fixture.events.last())
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
+    fun `connection closes authorization handoff lease idempotently`() {
+        val fixture = Fixture()
+        val authorizationLease = RecordingAuthorizationHandoffLease()
+        val connection = fixture.connection(authorizationHandoffLease = authorizationLease)
+
+        connection.close()
+        connection.close()
+
+        assertEquals(1, authorizationLease.closeCalls)
+    }
 
     @Test
     fun `cancelling a connection waiter does not affect its owner`(): Unit =
@@ -512,6 +612,46 @@ class PairingConnectionTest {
         }
 
     @Test
+    fun `stale clear retry cannot release a terminal cleanup takeover`(): Unit =
+        runTest {
+            val fixture = Fixture()
+            val pairing = CompanionPairingSessionAdapter(fixture.facade)
+            val lease = assertNotNull(pairing.takePending())
+            val staleCleanup = assertNotNull(pairing.markCleanupRequired(lease))
+            var terminalCleanup: PairingCleanupHandle? = null
+            fixture.cleanupJournal.beforeRead = {
+                fixture.cleanupJournal.beforeRead = {}
+                terminalCleanup = fixture.facade.claimLocalUnpairCleanup()
+            }
+            val connection = fixture.connectionWithoutRemote()
+            try {
+                assertEquals(
+                    PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
+                    connection.retryIncompleteCleanup(),
+                )
+                assertFalse(fixture.facade.abandonPendingPairingCleanup(staleCleanup))
+                assertTrue(fixture.facade.hasPendingPairingCleanup())
+                assertEquals(
+                    PairingConnectionOutcome.LOCAL_CLEANUP_INCOMPLETE,
+                    connection.retryIncompleteCleanup(),
+                )
+
+                val fresh = fixture.facade.pairingFlow(fixture.clock)
+                fresh.startScanning()
+                fresh.submitQr(validQr())
+                assertEquals(PairingUiState.SCANNING, fresh.presentation.value.state)
+
+                assertTrue(
+                    fixture.facade.completeAuthorizationCleanup(assertNotNull(terminalCleanup)),
+                )
+                fresh.submitQr(validQr())
+                assertEquals(PairingUiState.CONNECTING, fresh.presentation.value.state)
+            } finally {
+                connection.close()
+            }
+        }
+
+    @Test
     fun `cancellation during journal preflight aborts the claimed attempt`(): Unit =
         runTest {
             val fixture = Fixture()
@@ -786,6 +926,7 @@ class PairingConnectionTest {
         fun connection(
             remote: PairingRegistrationRemoteGateway = this.remote,
             facade: CompanionFacade = this.facade,
+            authorizationHandoffLease: CompanionAuthorizationHandoffLease? = null,
         ): PairingConnection =
             PairingConnection(
                 attempts = CompanionPairingSessionAdapter(facade),
@@ -793,6 +934,7 @@ class PairingConnectionTest {
                 protocolClient = remote,
                 retryPolicy = RetryPolicy { 0L },
                 retryDelay = retryDelay,
+                authorizationHandoffLease = authorizationHandoffLease,
             )
 
         fun connectionWithoutRemote(facade: CompanionFacade = this.facade): PairingConnection =
@@ -815,6 +957,26 @@ class PairingConnectionTest {
         var now: Long,
     ) : Clock {
         override fun nowEpochSeconds(): Long = now
+    }
+
+    private class RecordingAuthorizationHandoffLease(
+        private val events: MutableList<String>? = null,
+        private val onPairingRegistered: () -> Unit = {},
+    ) : CompanionAuthorizationHandoffLease {
+        var pairingRegisteredCalls: Int = 0
+            private set
+        var closeCalls: Int = 0
+            private set
+
+        override fun onPairingRegistered() {
+            pairingRegisteredCalls += 1
+            events?.add("authorization_handoff")
+            onPairingRegistered.invoke()
+        }
+
+        override fun close() {
+            closeCalls += 1
+        }
     }
 
     private class ScriptedPairingRemoteGateway(

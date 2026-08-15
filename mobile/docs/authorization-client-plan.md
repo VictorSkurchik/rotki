@@ -49,9 +49,10 @@ the live Engine and Starling gates as separate end-to-end evidence.
    failures never infer revocation.
 9. **Platform parity is explicit, not simulated.** Android wires the coordinator into its existing
    process Koin composition, `ApplicationVisibilityController`, durable Pairing store, and real
-   Keystore signer without widening the Android AAR or Swift framework. After Gate G4, iOS adds a
-   native Device Key signer and manual composition root, then consumes the same coordinator through
-   the stable facade/SKIE boundary; simulator tests do not claim Secure Enclave evidence.
+   Keystore signer without widening the Android AAR or Swift framework. The client-only iOS
+   composition likewise supplies its native Device Key signer and consumes the same coordinator
+   through an internal facade handoff while the live G4/G5 tracer gates remain open; simulator tests
+   do not claim Secure Enclave evidence.
 10. **Every layer has a hard acceptance gate.** Contract fixtures and golden transcript bytes run on
     JVM, Android host, and iOS Simulator; coordinator tests use fake clocks and lifecycle state;
     Android managed devices prove process restart and real signer reuse; Apple headers/modulemaps
@@ -234,12 +235,28 @@ Implementation status (2026-08-15): the Swift host now owns a manual composition
 non-exportable Secure Enclave P-256 Device Key, strict X9.63/P1363 conversion through the existing
 KMP value types, `ThisDeviceOnly` Keychain Pairing record and cleanup marker, secure idempotency
 generation, paired-process restoration, and `scenePhase`-driven inactive/background/device-auth
-handling. The pre-C5 `RotkiShared` header remains unchanged. That requirement also exposes the
-remaining blocker: the shared Authorization controller is correctly hidden from Objective-C, so
-Swift cannot invoke it without either a new secret-free interop selector (which would change the
-header) or a later internal auto-install design. Apple KMP tests, device links, dual-framework ABI
-checks, and all 15 Xcode Simulator host tests pass. Camera Pairing UI, Authorization proof/restart
-reproof, the real tracer, and physical-iPhone evidence remain open; C5 and G5 are not complete.
+handling. The existing Swift call to `CompanionFacade.pairingConnection(configuration:)` now also
+installs one iOS-only, facade-scoped Authorization handoff internally. It reuses the exact
+`DeviceProofSigner`, `PairingRecordStore`, `PairingCleanupJournal`, `ApplicationVisibility`, and
+`Clock` instances already carried by `PairingConnectionConfiguration`; no controller, credential,
+DTO, Ktor type, selector, or second framework is exported. Pairing still returns immediately after
+durable Device Session registration, and its ownership lock is released before the separate
+Authorization callback is delivered. A fresh Pairing arms proof only after `REGISTERED`; restored
+Pairing material arms reproof only after native device authentication moves the facade from
+`DeviceLocked` to `Connecting`.
+
+Inactive state retains current authority, while background/system lock synchronously enters the
+bearer and session-work teardown fence before native lifecycle control returns. Late
+LocalAuthentication results
+are generation-fenced; an accepted result received while inactive is deferred to the next active
+phase, whereas background and process close cancel and invalidate it. Access-session loss and
+WebSocket `1008` clear authority even while inactive, and automatic `not_authorized` uses the
+journaled composite Pairing-record/Device-Key cleanup. The final fixture, JVM, Android-host,
+managed-device, Apple KMP, Xcode, module/AAR, quality, redaction, and ABI matrix is green. Device and
+Simulator frameworks are byte-identical at the pre-C5 header/modulemap hashes, and the Xcode suite
+now passes 18 unit plus two UI tests. This completes the ABI-neutral Authorization handoff requested
+by C5. Camera Pairing UI, Snapshot/Refresh/WebSocket data plane, the real HTTPS tracer, and
+physical-iPhone evidence remain open; A4.1, G4, and G5 are not complete.
 
 ### C6 — Run live client evidence without expanding this scope
 
