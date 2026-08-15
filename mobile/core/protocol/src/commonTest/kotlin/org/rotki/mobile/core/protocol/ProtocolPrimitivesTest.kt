@@ -6,8 +6,10 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class ProtocolPrimitivesTest {
     @Test
@@ -110,6 +112,26 @@ class ProtocolPrimitivesTest {
                 IdempotencyKey.parse(key.encoded),
             ).value,
         )
+    }
+
+    @Test
+    fun `access credential writes its encoded value only into the supplied target`() {
+        val encoded = encodedBytes(size = 32)
+        val credential =
+            assertIs<ProtocolValueParseOutcome.Accepted<AccessSessionCredential>>(
+                AccessSessionCredential.parse(encoded),
+            ).value
+        var appliedCredential: String? = null
+
+        credential.applyTo(
+            AccessSessionAuthorizationTarget { scopedValue ->
+                appliedCredential = scopedValue
+            },
+        )
+
+        assertEquals(encoded, appliedCredential)
+        assertEquals("AccessSessionCredential(redacted)", credential.toString())
+        assertFalse(encoded in credential.toString())
     }
 }
 

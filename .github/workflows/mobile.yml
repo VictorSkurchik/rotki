@@ -526,6 +526,22 @@ jobs:
           simulator_modulemap='shared/build/bin/iosSimulatorArm64/debugFramework/RotkiShared.framework/Modules/module.modulemap'
           cmp "$device_header" "$simulator_header"
           cmp "$device_modulemap" "$simulator_modulemap"
+          expected_header_sha256='d6ef9d86ba7f36a178109c21632e0e8ab444fcc4dab0c3bf1beeebf4d198441e'
+          expected_modulemap_sha256='d2d9be438a256071743468961f9969ee07683f00a07acf28b9565db6aa03b861'
+          for header in "$device_header" "$simulator_header"; do
+            actual_sha256="$(shasum -a 256 "$header" | awk '{print $1}')"
+            if [ "$actual_sha256" != "$expected_header_sha256" ]; then
+              echo "::error::Swift header ABI changed: $header"
+              exit 1
+            fi
+          done
+          for modulemap in "$device_modulemap" "$simulator_modulemap"; do
+            actual_sha256="$(shasum -a 256 "$modulemap" | awk '{print $1}')"
+            if [ "$actual_sha256" != "$expected_modulemap_sha256" ]; then
+              echo "::error::Swift modulemap ABI changed: $modulemap"
+              exit 1
+            fi
+          done
           forbidden_pattern='CompanionJsonCodec|DuplicateJsonMember|hasValidJsonSyntax|isCanonicalFixedBase64Url|bytesCopy|StrictJson|GeneratedProtocolVocabulary|Protocol(ClientInputLimits|Headers|LifetimesSeconds|EncodedLengths|RetryPolicy|Capability|AuthRealm|Authority|ErrorAction|RootState)|DeviceSessionState|HttpErrorCode|OperationErrorCode|CompanionPlatform|SourceErrorCode|WebSocketEventType|PairingId|PairingCredential|ChallengeId|ChallengeNonce|AccessSessionCredential|PROTOCOL_VOCABULARY_SCHEMA_VERSION|SUPPORTED_PROTOCOL_VERSIONS|WEBSOCKET_CLOSE_CODES|DEVICE_PROOF_ALGORITHM'
           forbidden_pattern+='|CompanionEnvelopeDecoder|CompanionEnvelopeDecodeOutcome|CompanionEnvelopeShape|CompanionErrorDto|CompanionFailureEnvelopeDto|CompanionFailureLocalEffect|CompanionFailure'
           forbidden_pattern+='|ProtocolDiscoveryEnvelopeDto|ProtocolDiscoveryResultDto|ProtocolNegotiationOutcome|decodeSuccess|decodeFailure|negotiate|toDomain'
@@ -539,6 +555,7 @@ jobs:
           forbidden_pattern+='|PairingQr(Parser|ParseOutcome|Rejection|Dto)?|createPairingSubmissionGateway|PairingProtocolClient|createPairingProtocolClient|PairingRegistrationRequest|createPairingRegistrationRequest|PairingDiscoveryOutcome|PairingRegistrationRemote(Gateway|Outcome)|createPlatformPairingRegistrationRemoteGateway|PairingRegisteredSession|PairingProtocolRoutes?|CompanionJsonContent'
           forbidden_pattern+='|RegisterDeviceSessionRequestDto|DeviceSession(Result|Envelope)?Dto|DeviceLabelParseOutcome|AuthContractOutcome|encodeCompanionJson|matchesRegistration|isValidDeviceLabel|parse(DeviceLabel|PairingDeviceLabel)'
           forbidden_pattern+='|Authorization(Challenge|Coordinator|CoordinatorOutcome|DeadlineWaiter|SessionDecision|SessionPolicy|RemoteFailure|RemoteGateway|RemoteOutcome|ProtocolClient|ProtocolRoutes?|ProtocolRoute|JsonContent)|DeviceProofTranscriptEncoder|create(DeviceProofTranscriptEncoder|PlatformAuthorizationRemoteGateway)|encodeDeviceProofTranscript'
+          forbidden_pattern+='|AuthorizationRequest|AuthorizationRequestCredential|AuthorizationRequestExecutor|AuthorizationRequestAuthority|AuthorizationProcessControl|AuthorizationInvalidation|Authorization(AuthorityUseOutcome|ExchangeKind|CoordinatorEvent|CoordinatorEventSink)|AccessSessionAuthorizationTarget|CompanionAuthorization(Adapter|Status|Result|Discovery|EventBridge|LocalAuthorityCleaner)|CompanionAuthenticatedSessionWork(Controller|CloseReason|Invalidation)?'
           forbidden_pattern+='|Challenge(Request|Result|Envelope)Dto|AccessSession(Request|Result|Envelope)Dto'
           forbidden_pattern+='|org_koin|io_insert_koin|Koin(Component|Application|Module|Scope|ViewModel)?|startKoin|koinViewModel|RotkiCompanionApplication|AndroidSecurityComposition|androidAppModule|viewModelOf|singleOf'
           forbidden_pattern+='|androidx_navigation|org_rotki_mobile_android_navigation|AndroidNavigation|Nav(Host(Controller)?|Controller|BackStackEntry)|OverviewRoute|PortfolioRoute|HistoryRoute|SourcesRoute|HomeDestination|HomeNavHost|CompanionHome|HomeConnectionBanner(State)?'

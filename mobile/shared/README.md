@@ -41,15 +41,41 @@ Challenge/proof and Access Session DTOs, envelopes, mapping, and transcript byte
 `:feature:authorization:data`; their Ktor-free contracts live in
 `:feature:authorization:domain`, and `:feature:authorization:application` owns process-memory Access
 authority, caller-independent acquisition/renewal single-flight, exact expiry, atomic replacement,
-bounded fresh-exchange recovery, and the shared visibility policy. `:shared` consumes all three as
-implementation dependencies for later facade composition and exports none of them. Request-authority
-delegation is not implemented. Native Android Device Key, idempotency-key, and Pairing-record
-implementations remain in `:androidApp`, and the Authorization client is not yet wired into either
-native host. `:shared` also consumes the security contracts from `:core:security-api`, Pairing data
-as an implementation dependency, and generic request-replay/transport-retry policy from
-`:core:network`. The data modules have no edge back to `:shared`; every integration seam is hidden
-from Objective-C and Swift. Raw `Json` stays sealed behind the Kotlin-only protocol codec, while
-sensitive request bytes retain a constant redacted diagnostic representation.
+bounded fresh-exchange recovery, the shared visibility policy, secret-free owner events, and a
+Ktor-free authority for opaque `AuthorizationRequest` values. The coordinator invokes one trusted
+data-owned executor fixed at construction. Its credential capability is write-only, one-shot,
+revision-fenced, and rooted to each request's captured expiry. Executor/finalizer re-entry into
+process control is forbidden; feedback returns as the request result or is queued after unwinding.
+A successful renewal still replaces the bearer atomically. Process invalidation is two-phase:
+bearer use is fenced before a secret-free completion handle is returned, allowing the facade to
+start authenticated session-work closure and committed durable cleanup before cancelled request
+finalizers finish. The adapter's teardown epoch blocks authorization, recovery, request, and
+coordinator-event admission through authority and session-work drain completion. Session-work
+`beginClose` synchronously and idempotently detaches only the matching Access Session revision at
+entry and returns a completion handle. External discovery, cleaner, and session-work callbacks
+cannot re-enter the adapter or process control; feedback is queued only after they unwind. Its
+Pairing cleanup barrier is released only after local deletion, revision-scoped session close, and
+the authority/request-finalizer drain all complete.
+
+As of 2026-08-15, `:shared` consumes all three Authorization modules as implementation dependencies
+and exports none of them. Its non-exported, facade-scoped adapter maps owner-flight outcomes into the
+existing state machine and accepts only opaque requests through the Ktor-free authority. Explicit
+retry performs fresh discovery, coordinator protocol reselection, an explicit authority clear, and
+a fresh challenge/proof exchange. The authenticated session-work controller is the transport-free,
+revision-scoped detach-and-drain contract described above.
+
+Automatic Authorization handling invokes one composite local-authority cleanup port only for
+`not_authorized` or missing local Pairing. Successful authorization reports authority readiness but
+leaves the root `Connecting` until Snapshot reconciliation performs the later root-state transition.
+Native coordinator construction, lifecycle delivery, the concrete composite cleaner, and real
+session-work/WebSocket wiring remain C4 work; the Authorization client is not yet wired into either
+native host.
+
+`:shared` also consumes the security contracts from `:core:security-api`, Pairing data as an
+implementation dependency, and generic request-replay/transport-retry policy from `:core:network`.
+The data modules have no edge back to `:shared`; every integration seam is hidden from Objective-C
+and Swift. Raw `Json` stays sealed behind the Kotlin-only protocol codec, while sensitive request
+bytes retain a constant redacted diagnostic representation.
 
 Until each slice moves, the implemented source tree remains organized under `org.rotki.mobile`,
 currently around `core` and `auth`. `overview`, `portfolio`, `history`, and `sources` are planned

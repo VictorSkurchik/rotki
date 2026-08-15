@@ -26,8 +26,11 @@ the live Engine and Starling gates as separate end-to-end evidence.
 5. **One owner for Access authority.** The application coordinator is the sole owner of the current
    bearer. It keeps it only in process memory, never places it in `CompanionStatus`, persistence,
    native APIs, diagnostics, or exception text, and exposes no raw long-lived getter. Later data
-   features receive only a Kotlin-only, Objective-C-hidden, scoped request-authority capability
-   whose contract forbids retention and logging.
+   features submit Kotlin-only, Objective-C-hidden opaque `AuthorizationRequest` values. The
+   coordinator invokes one trusted data-owned `AuthorizationRequestExecutor` fixed at construction
+   and gives it only a write-only, one-shot, revision-fenced credential capability rooted to that
+   request's captured expiry. The executor and its finalizers must not re-enter process control;
+   feedback returns as the request result or is queued only after executor unwinding.
 6. **Challenge and proof form one single-flight exchange.** Concurrent acquisition and renewal
    requests join one coordinator operation. `POST /challenges` and `POST /access-sessions` use
    `RequestReplayPolicy.NEVER`; neither request is retransmitted. A lost challenge response starts
@@ -35,9 +38,9 @@ the live Engine and Starling gates as separate end-to-end evidence.
    challenge may already be consumed.
 7. **Lifecycle and renewal are shared policy.** Network use is allowed only in active foreground.
    Transient inactivity suspends use without destroying a valid bearer. Background or system lock
-   cancels in-flight authorization, closes authenticated work, and drops the bearer immediately.
-   One proactive renewal starts at five minutes remaining; the old bearer remains usable until a
-   replacement is atomically installed or the old expiry is reached.
+   cancels in-flight authorization, signals the authenticated session-work control contract, and
+   drops the bearer immediately. One proactive renewal starts at five minutes remaining; the old
+   bearer remains usable until a replacement is atomically installed or the old expiry is reached.
 8. **Remote failures have exact local effects.** `locked_engine` and `profile_mismatch` keep the
    durable Device Session and encrypted Snapshot but remove online authority. `challenge_unavailable`
    starts a fresh exchange. `access_session_unavailable` reproves the Device Key. Only
@@ -142,8 +145,8 @@ transport shutdown. Cancellation of the caller invoking close cannot skip teardo
 The obsolete network renewal gate and policy are removed; generic replay and transport retry remain
 in `:core:network`.
 
-Request-authority delegation is not implemented. Facade/root-state mapping, authenticated-work and
-WebSocket handling remain C3; native lifecycle delivery and composition remain C4. This KMP policy
+At the C2 boundary, request-authority delegation, facade/root-state mapping, and authenticated-work
+handling remained for C3; native lifecycle delivery and composition remained C4. This KMP policy
 evidence does not complete A4.1 or Gate G4.
 
 ### C3 — Integrate the stable shared facade
@@ -154,6 +157,44 @@ evidence does not complete A4.1 or Gate G4.
 - Connect background/system-lock, explicit foreground retry, access-unavailable, WebSocket `1008`,
   locked Engine, Profile Mismatch, incompatible, and revoked transitions to coordinator operations.
 - Keep current public Swift names, selectors, enum cases, ordering, and descriptions byte-stable.
+
+Implementation status (2026-08-15): the C3 KMP/shared integration is implemented behind the
+unchanged public facade. A non-exported, facade-scoped adapter consumes secret-free coordinator
+owner events once per owner flight and maps coarse outcomes into the existing root-state machine.
+Internal consumers submit opaque `AuthorizationRequest` values through a Ktor-free request
+authority. The coordinator alone invokes its trusted data-owned `AuthorizationRequestExecutor`,
+fixed at construction, and lends that executor only a write-only credential application capability.
+The capability is one-shot and revision-fenced, and every admitted request has its own root tied to
+the captured Access Session expiry. The executor and request finalizers must not re-enter
+`AuthorizationProcessControl`; feedback returns through the request result or is queued only after
+the executor unwinds. Successful renewal still replaces the bearer atomically.
+Process invalidation is two-phase: each `begin*` operation atomically fences bearer use (and closes
+the gateway for process close) before returning a secret-free completion handle. The adapter starts
+authenticated session-work closure and committed durable cleanup before awaiting cancelled request
+finalizers. Its teardown epoch rejects authorization, recovery, request, and coordinator-event
+admission until the authority and session-work drains complete. Session-work `beginClose`
+synchronously and idempotently detaches only work matching the captured Access Session revision at
+entry, then returns a completion handle for its close drain. External discovery, cleaner, and
+session-work callbacks cannot re-enter the adapter or process control; feedback is queued only after
+they unwind. The Pairing cleanup barrier is released only after local deletion, revision-scoped
+session close, and the authority/request-finalizer drain all complete.
+
+Explicit foreground retry performs fresh discovery through a Ktor-free delegate, reselects the
+coordinator protocol version, explicitly clears prior authority, and then starts a fresh
+challenge/proof exchange even when the selected version did not change. Internal entry points also
+cover access-session unavailability and WebSocket `1008`. The authenticated session-work controller
+is a transport-free control contract only; C3 does not claim a real WebSocket or native event
+source. Among automatic Authorization outcomes, only `not_authorized` or missing local Pairing
+invokes the single composite local-authority cleanup port; recoverable, locked, Profile-Mismatch,
+incompatible, contract, and transport failures do not infer destructive cleanup. Successful
+authorization reports authority readiness but intentionally leaves
+`CompanionRootState.Connecting` in place until Snapshot reconciliation can perform the later
+root-state transition.
+
+C4 remains open for native coordinator construction, delivery of real lifecycle callbacks, a real
+composite cleaner, and real session-work/WebSocket connection and event wiring. Device Key reuse
+through that native composition and the live Engine/Starling path also remain unproved, so C3 does
+not complete A4.1 or Gate G4.
 
 ### C4 — Wire and prove Android
 

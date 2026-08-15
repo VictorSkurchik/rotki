@@ -38,7 +38,14 @@ The production build currently contains:
   caller-independent single flight for acquisition and renewal, exact Engine expiry, automatic
   renewal at 300 seconds remaining, atomic bearer replacement, one fixture-frozen recoverable
   renewal retry, one fresh-challenge recovery, and the inactive-retain/background-purge lifecycle
-  policy. Request-authority delegation and native/facade composition remain later slices;
+  policy. Its secret-free owner events accompany Ktor-free authority for opaque
+  `AuthorizationRequest` values. One trusted data-owned executor is fixed at coordinator
+  construction; its credential capability is write-only, one-shot, revision-fenced, and rooted to
+  each request's captured expiry. Executor/finalizer re-entry into process control is forbidden;
+  feedback returns as the request result or is queued after unwinding. Process invalidation is
+  two-phase: bearer use is fenced before a secret-free completion handle is returned, so facade
+  cleanup and authenticated session-work closure can start before cancelled request finalizers
+  finish;
 - `feature:authorization:data`: the strict challenge/proof DTO, envelope, mapping, transcript, route,
   and internal Ktor boundary. It reuses bounded Companion response handling, requires `no-store` on
   successful responses, creates no framework, and exposes no wire type to Swift;
@@ -51,14 +58,28 @@ The production build currently contains:
 - `feature:pairing:presentation`: the pure synchronous Pairing UDF state/action/reducer layer,
   depending only on Pairing domain contracts;
 - `shared`: the single Swift-facing `RotkiShared` framework umbrella and migration home for
-  facade-scoped Pairing ownership, lifecycle, durable registration, and cleanup. Device Session
-  rename/revoke DTOs and the stable `DeviceLabelValidator` also remain here for their separate
-  management slice. `PairingFlow` and `PairingConnection` stay ABI-compatible adapters over the
-  extracted Pairing feature. `shared` consumes `core:network`, Pairing data, and all three
-  Authorization modules as implementation dependencies, while exporting only the stable public
-  surfaces of `core:common`, `core:model`, `core:protocol`, and `core:security-api` through the one
-  framework. Protocol credentials, Authorization implementation/DTO types, data/network seams,
-  codec mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift;
+  facade-scoped Pairing ownership, lifecycle, durable registration, and cleanup plus the internal
+  C3 Authorization facade adapter. Device Session rename/revoke DTOs and the stable
+  `DeviceLabelValidator` also remain here for their separate management slice. `PairingFlow` and
+  `PairingConnection` stay ABI-compatible adapters over the extracted Pairing feature. The
+  Authorization adapter consumes secret-free owner events and accepts only opaque requests through
+  the Ktor-free authority. Explicit retry performs fresh discovery, coordinator protocol
+  reselection, an explicit authority clear, and a fresh challenge/proof exchange. Its teardown epoch
+  blocks authorization, recovery, request, and event admission through authority and session-work
+  drain completion. The transport-free session-work controller synchronously detaches only the
+  matching revision at `beginClose` entry and returns a completion handle. External discovery,
+  cleaner, and session-work callbacks cannot re-enter the adapter or process control. The Pairing
+  cleanup barrier remains claimed through local deletion, revision-scoped session close, and
+  authority drain. Among automatic Authorization outcomes, only `not_authorized` or missing local
+  Pairing reaches its single composite cleanup
+  port. Authority readiness leaves the root `Connecting` until Snapshot reconciliation. `shared`
+  consumes `core:network`, Pairing data, and
+  all three Authorization modules as implementation dependencies, while exporting only the stable
+  public surfaces of `core:common`, `core:model`, `core:protocol`, and `core:security-api` through the
+  one framework. Protocol credentials, Authorization implementation/DTO types, data/network seams,
+  codec mechanics, and wire vocabulary remain Kotlin-only and hidden from Objective-C and Swift.
+  Native coordinator construction, lifecycle delivery, the concrete composite cleaner, and real
+  session-work/WebSocket wiring remain C4 work as of 2026-08-15;
 - `android:platform`: the Android lifecycle, durable Pairing-storage, Device-proof, and idempotency
   leaf. Its public factories expose only the lifecycle boundary plus `core:security-api` ports.
   Private atomic, Android Keystore, P-256/DER, and secure-random adapters preserve the established

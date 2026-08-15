@@ -562,7 +562,7 @@ admission cannot be mistaken for stale material and silently removed. Domain and
 store QR material; Pairing data handles it only as ephemeral authority. None of the feature modules
 creates an Apple framework.
 
-The C1-C2 Authorization boundary is now physical without changing the native API.
+The C1-C3 Authorization boundary is now physical without changing the native API.
 `:feature:authorization:domain` owns Ktor-free redacted contracts,
 `:feature:authorization:data` owns the strict challenge/proof DTO, envelope, mapping, transcript,
 route, and internal Ktor boundary, and `:feature:authorization:application` owns process-memory
@@ -573,9 +573,26 @@ one fresh whole-exchange retry. The visibility observer cancels network while re
 through transient inactivity and purges authority on background or system lock; explicit clear and
 close fence late completion, and process-scope cancellation start (or normal completion) commits
 purge plus transport shutdown. The three modules create no Apple framework, are not exported from
-`RotkiShared`, and are guarded against Ktor/DTO/credential leakage. Request-authority delegation,
-facade/root-state mapping, authenticated-work/WebSocket handling, and native composition remain
-later slices.
+`RotkiShared`, and are guarded against Ktor/DTO/credential leakage. The application now owns
+secret-free owner events and Ktor-free authority for opaque `AuthorizationRequest` values. The
+coordinator invokes one trusted data-owned executor fixed at construction; its write-only credential
+capability is one-shot and revision-fenced, and every admitted request has its own captured-expiry
+root. Executor/finalizer re-entry into process control is forbidden; feedback returns as the request
+result or is queued after unwinding. Process invalidation fences bearer use before returning a
+secret-free completion handle, allowing session-work closure and committed durable cleanup to start
+before cancelled request finalizers drain. The shared adapter's teardown epoch blocks authorization,
+recovery, request, and event admission through the authority and session-work drains. Session-work
+`beginClose` synchronously detaches only the matching Access Session revision at entry and returns
+its own completion handle. External discovery, cleaner, and session-work callbacks cannot re-enter
+the adapter or process control. The Pairing cleanup barrier is released only after local deletion,
+revision-scoped session close, and the authority/request-finalizer drain complete. The non-exported
+shared adapter maps owner events into the existing root state. Explicit retry performs fresh
+discovery, protocol reselection, an explicit authority clear, and a fresh challenge/proof exchange.
+Its authenticated session-work controller is
+only a transport-free control contract, and successful authorization stays `Connecting` until
+Snapshot reconciliation. Only automatic `not_authorized` or missing local Pairing reaches the one
+composite cleanup port. Native coordinator construction, lifecycle delivery, the concrete cleaner,
+and real session-work/WebSocket wiring remain C4 work as of 2026-08-15.
 
 The Android application starts one Koin process composition, preserving one facade/security graph
 while its biometric broker explicitly binds and releases the current Activity. The physical
@@ -1099,10 +1116,27 @@ permission and trusts system or user-installed HTTPS roots without allowing clea
 Shared/JVM and Android host checks, lint, and managed-device tests pass on API 28 and API 36.
 Fixture-backed KMP now proves the strict challenge/proof exchange plus coordinator-owned exact
 expiry, proactive renewal, waiter-independent flight ownership, explicit invalidation, and lifecycle
-retention/purge policy. Request-authority delegation, native facade/platform wiring and lifecycle
-delivery, real Device Key
-reuse after process restart, and the real Docker/Starling host flow remain unimplemented; therefore
-A4.1 and Gate G4 are not complete.
+retention/purge policy. C3 additionally provides an internal shared-facade adapter driven by
+secret-free owner-flight events and Ktor-free authority for opaque `AuthorizationRequest` values.
+The coordinator's fixed trusted data-owned executor receives a write-only, one-shot,
+revision-fenced credential capability under a per-request captured-expiry root. Its executor and
+finalizers may not re-enter process control; feedback returns as the result or is queued after
+unwinding. Renewal replacement remains atomic. The shared teardown epoch blocks new admission until
+authority and revision-scoped session-work drains finish; session work detaches synchronously at
+`beginClose` entry and exposes only a completion handle. Discovery, cleaner, and session-work
+callbacks cannot re-enter the adapter or process control, and the Pairing cleanup barrier remains
+claimed through local deletion, session close, and authority drain. Explicit foreground retry
+performs fresh discovery, protocol reselection, an explicit authority clear, and a fresh
+challenge/proof exchange. Among automatic Authorization outcomes, only `not_authorized` or missing
+local Pairing invokes the single
+composite cleanup port, and successful authorization deliberately remains `Connecting` until later
+Snapshot reconciliation performs the root-state transition. The authenticated session-work
+controller is a KMP control contract; real WebSocket/native wiring is not part of C3.
+
+As of 2026-08-15, native C4 construction, real lifecycle delivery, the concrete composite cleaner,
+real session-work/WebSocket wiring, Device Key reuse after process restart through that composition,
+and the real Docker/Starling host flow remain unimplemented. Therefore A4.1 and Gate G4 are not
+complete.
 The accepted Client-only implementation order, module ownership, lifecycle policy, Android/iOS
 sequence, and pre-live acceptance gates are specified in
 [`authorization-client-plan.md`](./authorization-client-plan.md). Passing its fixture-backed gates

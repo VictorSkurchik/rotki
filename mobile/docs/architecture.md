@@ -116,11 +116,33 @@ now live in `:feature:authorization:data`; coarse Ktor-free contracts live in
 `:feature:authorization:domain`; and `:feature:authorization:application` owns process-memory Access
 authority, caller-independent acquisition/renewal single-flight, exact Engine expiry, automatic
 renewal at 300 seconds remaining, atomic replacement, bounded fresh-exchange recovery, and the
-inactive-retain/background-purge lifecycle policy. Request-authority delegation, facade/root-state
-mapping, and native lifecycle delivery remain outside C2. Rename/revoke DTOs remain in `:shared` for
-a separate Device Session-management slice. All three Authorization modules are implementation-only
-and non-exported. The public `DeviceLabelValidator` remains a stable shared wrapper over data-owned
-validation. Raw `Json` is
+inactive-retain/background-purge lifecycle policy. It now also exposes secret-free owner events and
+a Ktor-free request authority for opaque `AuthorizationRequest` values. The coordinator invokes one
+trusted data-owned `AuthorizationRequestExecutor` fixed at construction. That executor receives
+only a write-only, one-shot, revision-fenced credential capability, and each admitted request has a
+root tied to its captured Access Session expiry. The executor and request finalizers must not
+re-enter process control; feedback returns as the request result or is queued after unwinding.
+Process invalidation is two-phase: it fences bearer use before returning a secret-free completion
+handle, so the facade can start session-work closure and committed cleanup without waiting for
+cancelled request finalizers. The shared adapter's teardown epoch blocks authorization, recovery,
+request, and coordinator-event admission from fence entry through the authority and session-work
+drains. Session work is detached synchronously and idempotently at `beginClose` entry for only the
+matching Access Session revision, which returns its own completion handle. External discovery,
+cleaner, and session-work callbacks cannot re-enter the adapter or process control; feedback is
+queued only after they unwind. The Pairing cleanup barrier remains claimed until local deletion,
+revision-scoped session close, and the authority/request-finalizer drain all complete. A non-exported,
+facade-scoped adapter in `:shared` maps each owner-flight outcome into the existing state machine.
+Its explicit-retry path performs fresh discovery through a Ktor-free delegate,
+reselects the coordinator protocol version, explicitly clears prior authority, and starts a fresh
+challenge/proof exchange. Its authenticated session-work controller is a transport-free control
+contract. Among automatic Authorization outcomes, only `not_authorized` or missing local Pairing
+invokes its one composite local-authority cleanup port. Authority readiness deliberately leaves the
+root in `Connecting` until Snapshot reconciliation performs the later root-state transition. Native
+coordinator construction, lifecycle delivery, a concrete composite cleaner, and real
+session-work/WebSocket delivery remain C4 work as of 2026-08-15. Rename/revoke DTOs remain in
+`:shared` for a separate Device Session-management slice. All three Authorization modules are
+implementation-only and non-exported. The public `DeviceLabelValidator` remains a stable shared
+wrapper over data-owned validation. Raw `Json` is
 sealed behind the Kotlin-only codec in `:core:protocol`, hidden from Objective-C and Swift. The Ktor
 transport wraps its sensitive encoded bytes in `OutgoingContent` with a constant, redacted
 diagnostic representation and does not install `ContentNegotiation`.
@@ -493,9 +515,11 @@ Do not perform a big-bang package move. Use this order:
    facade-scoped port adapter, including the recovered cleanup barrier; data has no dependency on
    `:shared`. Keep the facade-owned connection transaction in the stable shared wrapper until its
    opaque attempt and cleanup capabilities can move without reversing the dependency graph. The
-   C1-C2 Authorization domain/application/data boundaries plus coordinator-owned renewal, expiry,
-   and visibility policy are in place; request-authority delegation, facade/native composition, and
-   delivery of native lifecycle events remain incremental follow-up work.
+   C1-C3 Authorization domain/application/data boundaries, coordinator-owned renewal and expiry,
+   opaque request authority with a fixed trusted executor, secret-free owner events, and the
+   internal facade adapter are in place. Native coordinator construction, lifecycle-event delivery,
+   the concrete composite cleaner, and real session-work/WebSocket wiring remain incremental C4
+   work.
 3. Introduce Android Koin modules and replace the manual composition root slice by slice. The
    process-scoped platform/Pairing composition remains in `:androidApp`; `:android:platform` now owns
    the lifecycle bridge, durable Pairing record/journal adapters, Android Keystore Device proof, and

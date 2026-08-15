@@ -225,10 +225,23 @@ public class ChallengeNonce private constructor(
 }
 
 @HiddenFromObjC
+public fun interface AccessSessionAuthorizationTarget {
+    /**
+     * Applies the bearer to one in-progress request without making it readable again.
+     * Implementations must dispatch without retaining, returning, logging, or throwing the value.
+     */
+    public fun setBearerCredential(encodedCredential: String): Unit
+}
+
+@HiddenFromObjC
 public class AccessSessionCredential private constructor(
     internal val encoded: String,
 ) {
     override fun toString(): String = "AccessSessionCredential(redacted)"
+
+    /** Writes the bearer into one request target; no readable credential getter is exposed. */
+    @HiddenFromObjC
+    public fun applyTo(target: AccessSessionAuthorizationTarget): Unit = target.setBearerCredential(encoded)
 
     public companion object {
         public fun parse(candidate: String): ProtocolValueParseOutcome<AccessSessionCredential> =

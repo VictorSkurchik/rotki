@@ -200,6 +200,26 @@ public class CompanionFacade internal constructor(
         return clearPairingCleanup(handle.token)
     }
 
+    /** Releases a facade-scoped destructive-cleanup barrier without changing terminal root state. */
+    internal fun completeAuthorizationCleanup(handle: PairingCleanupHandle): Boolean = clearPairingCleanup(handle.token)
+
+    /** Claims the cleanup barrier before an explicit unpair clears any pending attempt. */
+    internal fun claimLocalUnpairCleanup(): PairingCleanupHandle {
+        while (true) {
+            pendingPairingCleanup.value?.let { token ->
+                clearPendingPairing()
+                coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+                return PairingCleanupHandle(token)
+            }
+            val token = Any()
+            if (pendingPairingCleanup.compareAndSet(expect = null, update = token)) {
+                clearPendingPairing()
+                coordinator.transition(CompanionTransitionEvent.LOCAL_UNPAIR)
+                return PairingCleanupHandle(token)
+            }
+        }
+    }
+
     /**
      * Establishes a non-destructive cleanup barrier before recovery state is inspected.
      *

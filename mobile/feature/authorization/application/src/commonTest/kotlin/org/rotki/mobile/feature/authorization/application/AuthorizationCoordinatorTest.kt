@@ -1344,6 +1344,7 @@ class AuthorizationCoordinatorTest {
         clock: Clock = Clock { TestValues.NOW },
         deadlineWaiter: AuthorizationDeadlineWaiter? = null,
         processScope: CoroutineScope = backgroundScope,
+        eventSink: AuthorizationCoordinatorEventSink = AuthorizationCoordinatorEventSink { },
     ): AuthorizationCoordinator {
         val arguments =
             AuthorizationCoordinatorArguments(
@@ -1353,6 +1354,7 @@ class AuthorizationCoordinatorTest {
                 visibility = visibility,
                 store = store,
                 clock = clock,
+                eventSink = eventSink,
             )
         return if (deadlineWaiter == null) {
             arguments.create(processScope)
@@ -1362,13 +1364,15 @@ class AuthorizationCoordinatorTest {
     }
 }
 
-private data class AuthorizationCoordinatorArguments(
+internal data class AuthorizationCoordinatorArguments(
     val gateway: AuthorizationRemoteGateway,
     val signer: DeviceProofSigner,
     val encoder: DeviceProofTranscriptEncoder,
     val visibility: ApplicationVisibility,
     val store: PairingRecordStore,
     val clock: Clock,
+    val eventSink: AuthorizationCoordinatorEventSink,
+    val requestExecutor: AuthorizationRequestExecutor? = null,
 ) {
     fun create(
         processScope: CoroutineScope,
@@ -1384,6 +1388,8 @@ private data class AuthorizationCoordinatorArguments(
                 clock = clock,
                 selectedProtocolVersion = 1,
                 processScope = processScope,
+                eventSink = eventSink,
+                requestExecutor = requestExecutor,
             )
         } else {
             AuthorizationCoordinator(
@@ -1396,24 +1402,34 @@ private data class AuthorizationCoordinatorArguments(
                 selectedProtocolVersion = 1,
                 processScope = processScope,
                 deadlineWaiter = deadlineWaiter,
+                eventSink = eventSink,
+                requestExecutor = requestExecutor,
             )
         }
 }
 
-private class MutableClock(
+internal class MutableClock(
     var now: Long = TestValues.NOW,
 ) : Clock {
     override fun nowEpochSeconds(): Long = now
 }
 
-private class ManualDeadlineWaiter : AuthorizationDeadlineWaiter {
+internal class ManualDeadlineWaiter(
+    private val nonCooperativeDeadlines: Set<Long> = emptySet(),
+) : AuthorizationDeadlineWaiter {
     private val requests: MutableList<DeadlineRequest> = mutableListOf()
 
     override suspend fun waitUntil(deadlineEpochSeconds: Long) {
         val request = DeadlineRequest(deadlineEpochSeconds)
         requests += request
         try {
-            request.release.await()
+            if (deadlineEpochSeconds in nonCooperativeDeadlines) {
+                withContext(NonCancellable) {
+                    request.release.await()
+                }
+            } else {
+                request.release.await()
+            }
         } finally {
             request.active = false
         }
@@ -1439,18 +1455,21 @@ private class ManualDeadlineWaiter : AuthorizationDeadlineWaiter {
     )
 }
 
-private class FakeAuthorizationGateway(
+internal class FakeAuthorizationGateway(
     private val challengeOperation: suspend () -> AuthorizationRemoteOutcome<AuthorizationChallenge> = {
         AuthorizationRemoteOutcome.Success(TestValues.challenge())
     },
     private val proofOperation: suspend () -> AuthorizationRemoteOutcome<AccessSession> = {
         AuthorizationRemoteOutcome.Success(TestValues.session())
     },
+    private val expectedProtocolVersion: Int? = 1,
 ) : AuthorizationRemoteGateway {
     var challengeCalls: Int = 0
     var proofCalls: Int = 0
     var closeCalls: Int = 0
     var closed: Boolean = false
+    val challengeProtocolVersions: MutableList<Int> = mutableListOf()
+    val proofProtocolVersions: MutableList<Int> = mutableListOf()
 
     override suspend fun requestChallenge(
         engineOrigin: EngineOrigin,
@@ -1458,9 +1477,10 @@ private class FakeAuthorizationGateway(
         selectedProtocolVersion: Int,
     ): AuthorizationRemoteOutcome<AuthorizationChallenge> {
         challengeCalls += 1
+        challengeProtocolVersions += selectedProtocolVersion
         assertEquals(TestValues.ORIGIN, engineOrigin.canonical)
         assertEquals(TestValues.DEVICE_SESSION_ID, deviceSessionId.encoded)
-        assertEquals(1, selectedProtocolVersion)
+        expectedProtocolVersion?.let { expected -> assertEquals(expected, selectedProtocolVersion) }
         return challengeOperation()
     }
 
@@ -1472,11 +1492,12 @@ private class FakeAuthorizationGateway(
         selectedProtocolVersion: Int,
     ): AuthorizationRemoteOutcome<AccessSession> {
         proofCalls += 1
+        proofProtocolVersions += selectedProtocolVersion
         assertEquals(TestValues.ORIGIN, engineOrigin.canonical)
         assertEquals(TestValues.DEVICE_SESSION_ID, deviceSessionId.encoded)
         assertEquals(TestValues.CHALLENGE_ID, challengeId.encoded)
         assertEquals(TestValues.SIGNATURE, signature.encoded)
-        assertEquals(1, selectedProtocolVersion)
+        expectedProtocolVersion?.let { expected -> assertEquals(expected, selectedProtocolVersion) }
         return proofOperation()
     }
 
@@ -1486,7 +1507,7 @@ private class FakeAuthorizationGateway(
     }
 }
 
-private class FakeDeviceProofSigner(
+internal class FakeDeviceProofSigner(
     private val currentKeyOutcome: DeviceProofPublicKeyOutcome =
         DeviceProofPublicKeyOutcome.PublicKey(TestValues.publicKey()),
 ) : DeviceProofSigner {
@@ -1515,7 +1536,7 @@ private class FakeDeviceProofSigner(
     override suspend fun deleteKey(): DeviceProofKeyDeleteOutcome = DeviceProofKeyDeleteOutcome.Deleted
 }
 
-private class FakePairingRecordStore(
+internal class FakePairingRecordStore(
     private val readOperation: suspend () -> PairingRecordReadOutcome = {
         PairingRecordReadOutcome.Present(
             PairingRecord(TestValues.origin(), TestValues.deviceSessionId()),
@@ -1534,14 +1555,14 @@ private class FakePairingRecordStore(
     }
 }
 
-private class FakeVisibility(
+internal class FakeVisibility(
     initialState: ApplicationVisibilityState,
 ) : ApplicationVisibility {
     val mutableState: MutableStateFlow<ApplicationVisibilityState> = MutableStateFlow(initialState)
     override val state: StateFlow<ApplicationVisibilityState> = mutableState
 }
 
-private object TestValues {
+internal object TestValues {
     const val ORIGIN: String = "https://rotki.example"
     const val DEVICE_SESSION_ID: String = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
     const val CHALLENGE_ID: String = "ICEiIyQlJicoKSorLC0uLw"
@@ -1551,6 +1572,7 @@ private object TestValues {
     const val PUBLIC_KEY: String =
         "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
     const val ACCESS_CREDENTIAL: String = "UFFSU1RVVldYWVpbXF1eX2BhYmNkZWZnaGlqa2xtbm8"
+    const val ALTERNATE_ACCESS_CREDENTIAL: String = DEVICE_SESSION_ID
     const val NOW: Long = 1_786_550_400
     const val ACCESS_EXPIRY: Long = 1_786_551_300
 
@@ -1568,10 +1590,18 @@ private object TestValues {
 
     fun credential(): AccessSessionCredential = accepted(AccessSessionCredential.parse(ACCESS_CREDENTIAL))
 
+    fun alternateCredential(): AccessSessionCredential =
+        accepted(AccessSessionCredential.parse(ALTERNATE_ACCESS_CREDENTIAL))
+
     fun challenge(): AuthorizationChallenge = AuthorizationChallenge(challengeId(), nonce(), NOW + 60)
 
     fun session(expiresAtEpochSeconds: Long = ACCESS_EXPIRY): AccessSession =
         AccessSession(credential(), expiresAtEpochSeconds)
+
+    fun session(
+        credential: AccessSessionCredential,
+        expiresAtEpochSeconds: Long,
+    ): AccessSession = AccessSession(credential, expiresAtEpochSeconds)
 
     private fun <T> accepted(outcome: ProtocolValueParseOutcome<T>): T =
         assertIs<ProtocolValueParseOutcome.Accepted<T>>(outcome).value
