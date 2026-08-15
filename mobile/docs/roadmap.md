@@ -1195,6 +1195,14 @@ Implement the signing key, Secure Enclave key envelope, AES-GCM document storage
 `scenePhase`-driven memory purge. Build native Pairing and minimal Overview views using
 the same shared use cases and snapshot as Android.
 
+Implementation status (2026-08-15): production `iosApp` now contains the non-exportable Secure
+Enclave P-256 Device Key adapter, `ThisDeviceOnly` Keychain Pairing record/cleanup persistence,
+secure idempotency generation, paired startup restoration, and Swift-owned scene/device-auth lock
+handling. AES-GCM Snapshot storage, camera Pairing UI, the Authorization-controller interop seam,
+tracer behavior, consolidated tests, and physical-iPhone evidence remain open. The interop seam
+cannot be made Swift-callable while also keeping the pre-C5 framework header byte-identical; no
+credential, DTO, Ktor, or coordinator implementation type has been exported to work around it.
+
 Gate G5: the real online-to-offline tracer passes in simulator UI tests, Swift task
 cancellation reaches Kotlin, and one physical iPhone completes Pairing, offline biometric
 unlock, background privacy lock, Unpair, and reinstall/re-Pairing acceptance. Simulator

@@ -70,7 +70,9 @@ leaves the root `Connecting` until Snapshot reconciliation performs the later ro
 The Android host now consumes a Kotlin-only, Objective-C-hidden construction controller that owns
 one retained coordinator and adapter. It supplies the real platform gateway, Device Key, Pairing
 store, lifecycle visibility, and journaled composite cleaner; post-Pairing, biometric restart,
-background/system-lock, and explicit-retry callbacks enter that controller. iOS composition,
+background/system-lock, and explicit-retry callbacks enter that controller. The Swift host now owns
+its Secure Enclave/Keychain/lifecycle composition, but the Objective-C-hidden Authorization
+controller cannot be invoked from Swift without changing the frozen header. iOS proof/reproof,
 authenticated requests, real session-work/WebSocket ownership, and the consolidated native gate
 remain open.
 

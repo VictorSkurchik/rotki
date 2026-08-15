@@ -105,9 +105,11 @@ The production build currently contains:
   after authenticated authority is present, and supplies the process callbacks delegated to the
   platform lifecycle bridge. Room and the complete Atomic Design-based Rotki design system remain
   deliberately deferred;
-- `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared` and exercises the
-  unpaired flow plus the four-destination shell on iOS Simulator. Camera, transport,
-  persistence, and native iOS security remain deliberately disabled until their gates.
+- `iosApp`: a checked-in native SwiftUI host that imports `RotkiShared`, owns a manual native
+  security composition, persists Pairing state in `ThisDeviceOnly` Keychain items, and implements a
+  non-exportable Secure Enclave P-256 Device Key plus scene-driven device authentication and lock.
+  Camera Pairing UI, Snapshot/data-plane transport, and the Swift-callable Authorization-controller
+  seam remain deliberately deferred; a physical iPhone is still required for the security gate.
 
 Run the host-side KMP and Android checks from this directory:
 

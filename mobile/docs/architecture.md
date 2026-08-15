@@ -170,6 +170,14 @@ retains one storage pair, Device-proof signer, and idempotency generator for the
 supplies process-safe lock, authentication-cancellation, and plaintext-discard callbacks to the
 lifecycle bridge.
 
+The iOS host now owns its native composition in Swift: one `ApplicationVisibilityController`,
+Keychain-backed Pairing record and cleanup marker, secure idempotency generator, and a persistent
+non-exportable Secure Enclave P-256 Device Key feed the unchanged Pairing configuration surface.
+`scenePhase` delivers inactive/background state and device authentication before unlocking the
+restored facade. The KMP Authorization controller remains Objective-C-hidden to preserve the exact
+Swift facade/header, so iOS proof/reproof wiring, Snapshot storage, and data-plane session work are
+still follow-up work rather than an exported implementation shortcut.
+
 The physical `:android:navigation` leaf now owns the authenticated placeholder `NavHost` and its four
 typed, argument-free destinations. It has no project dependencies: `:androidApp` maps authoritative
 shared status to a narrow `HomeConnectionBannerState` before entering the host. Privacy plus root Pairing,

@@ -21,8 +21,15 @@ struct CompanionRootView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            switch phase {
+            case .active:
                 model.sceneBecameActive()
+            case .inactive:
+                model.sceneBecameInactive()
+            case .background:
+                model.sceneEnteredBackground()
+            @unknown default:
+                model.sceneEnteredBackground()
             }
         }
     }

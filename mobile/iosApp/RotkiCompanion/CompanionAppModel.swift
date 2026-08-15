@@ -46,14 +46,18 @@ final class CompanionAppModel: ObservableObject {
     private let launchMode: CompanionLaunchMode
     private let facade: CompanionFacade
     private let pairingFlow: PairingFlow
+    private let securityComposition: IOSSecurityComposition?
 
     init(
         launchMode: CompanionLaunchMode = .sharedState,
-        facade: CompanionFacade = CompanionFacade()
+        facade: CompanionFacade? = nil
     ) {
+        let securityComposition = facade == nil ? IOSSecurityComposition() : nil
+        let resolvedFacade = facade ?? securityComposition!.facade
         self.launchMode = launchMode
-        self.facade = facade
-        self.pairingFlow = facade.pairingFlow()
+        self.facade = resolvedFacade
+        self.securityComposition = securityComposition
+        self.pairingFlow = resolvedFacade.pairingFlow()
         self.route = launchMode == .tabShell ? .tabShell : .unpaired
         refreshFromShared()
     }
@@ -71,6 +75,23 @@ final class CompanionAppModel: ObservableObject {
     }
 
     func sceneBecameActive() {
+        guard let securityComposition else {
+            refreshFromShared()
+            return
+        }
+        Task { @MainActor [weak self] in
+            await securityComposition.sceneBecameActive()
+            self?.refreshFromShared()
+        }
+    }
+
+    func sceneBecameInactive() {
+        securityComposition?.sceneBecameInactive()
+        refreshFromShared()
+    }
+
+    func sceneEnteredBackground() {
+        securityComposition?.sceneEnteredBackground()
         refreshFromShared()
     }
 

@@ -48,7 +48,10 @@ reconciliation. Its authenticated session-work controller is a transport-free KM
 Android now constructs this coordinator through an Objective-C-hidden shared controller and supplies
 the real gateway, Device Key, Pairing store, lifecycle visibility, clock, and journaled composite
 cleaner. Post-Pairing, biometric restart, background/system-lock, and explicit-retry callbacks are
-wired. Consolidated native verification, iOS composition, authenticated requests, and real
-session-work/WebSocket ownership remain open. A4.1 and Gate G4 remain open. The module has no Ktor,
+wired. The iOS host now supplies its Secure Enclave/Keychain/lifecycle composition, while this
+module's controller remains correctly hidden from Objective-C; calling it from Swift without
+changing the frozen header remains unresolved. Consolidated native verification, iOS proof/reproof,
+authenticated requests, and real session-work/WebSocket ownership remain open. A4.1 and Gate G4
+remain open. The module has no Ktor,
 serialization, Android, Koin, or Apple framework dependency, and every integration type is hidden
 from Objective-C and Swift.

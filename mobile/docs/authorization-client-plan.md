@@ -228,6 +228,16 @@ ownership remain later data-plane work, so A4.1 and Gate G4 remain open.
 - Require exact framework/header/modulemap comparison throughout development. G5 still requires one
   physical iPhone; Simulator success proves behavior and interop only.
 
+Implementation status (2026-08-15): the Swift host now owns a manual composition with a persistent,
+non-exportable Secure Enclave P-256 Device Key, strict X9.63/P1363 conversion through the existing
+KMP value types, `ThisDeviceOnly` Keychain Pairing record and cleanup marker, secure idempotency
+generation, paired-process restoration, and `scenePhase`-driven inactive/background/device-auth
+handling. The pre-C5 `RotkiShared` header remains unchanged. That requirement also exposes the
+remaining blocker: the shared Authorization controller is correctly hidden from Objective-C, so
+Swift cannot invoke it without either a new secret-free interop selector (which would change the
+header) or a later internal auto-install design. Camera Pairing UI, Authorization proof/restart
+reproof, tests, and physical-iPhone evidence therefore remain open; C5 and G5 are not complete.
+
 ### C6 — Run live client evidence without expanding this scope
 
 - Point the production KMP implementation at the real HTTPS Engine/Starling harness once its routes
